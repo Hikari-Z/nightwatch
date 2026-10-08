@@ -408,6 +408,12 @@
         else {
           for (const sel of ['.nw-head [data-part="schedule"]', '.nw-head .nw-glyph', '.nw-app > .nw-alarms',
             '.nw-app > .nw-lanes', '.nw-app > .nw-controls [data-part="display"]', '.nw-app > .nw-controls [data-part="transport"]', '.nw-app > .nw-timeline', '.nw-app > .nw-log']) swap(sel);
+          // The settings dialog shows armed state, schedules and fold targets
+          // that change outside the app (Ra, 10/8: a lane disarmed from the
+          // terminal still showed armed, and saving that stale form would
+          // have re-armed it). Re-render it while it's closed; an open dialog
+          // is left alone so nobody's edit is swapped out under them.
+          if ($('.nw-app > .nw-settings')?.dataset.open !== 'true') swap('.nw-app > .nw-settings');
         }
         root.dataset.stale = 'false';
         reapply();
