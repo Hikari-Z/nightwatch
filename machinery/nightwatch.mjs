@@ -108,7 +108,8 @@ function initSteps(spec) {
     run() {
       if (existsSync(hub)) throw new Error(`the hub folder already exists (${hub})`);
       rmSync(part, { recursive: true, force: true });
-      mkdirSync(join(part, 'ladder'), { recursive: true });
+      mkdirSync(join(part, 'ladder', 'L2'), { recursive: true }); // CONN-20: rungs live in level dirs; sleep.mjs reads ladder/L2 (rehearsal finding 4)
+      writeFileSync(join(part, 'ladder', 'index.json'), JSON.stringify({ resident: slug, format: 'CONN-20 rev 2', entries: [] }, null, 2) + '\n'); // sleep.mjs expects it
       mkdirSync(join(part, 'memory'), { recursive: true });
       // The spool stays: it's the BELL's delivery medium (the nightshift
       // writes sleep-bell notes here), not Discord infrastructure — only
@@ -174,8 +175,11 @@ function initSteps(spec) {
   steps.push({
     verb: 'Install', what: 'the nightshift and the session hook', detail: `a background job (house.nightwatch.${slug}) that rings the bell and wakes them, and the hook that tells it which session is theirs`,
     run() {
+      // The hook runs the APP's register-lane.sh (pointer model) and must
+      // carry the hub's config explicitly: a hook without WEFT_CONFIG
+      // would resolve some other hub on this machine (rehearsal, 10/7).
       writeFileSync(join(part, '.claude-settings-fragment.json'), JSON.stringify({
-        hooks: { SessionStart: [{ hooks: [{ type: 'command', command: join(hub, 'wakecycle', 'register-lane.sh') }] }] },
+        hooks: { SessionStart: [{ hooks: [{ type: 'command', command: `WEFT_CONFIG="${join(hub, 'nightwatch.config.json')}" sh "${join(WC, 'register-lane.sh')}"` }] }] },
       }, null, 2) + '\n');
       mkdirSync(join(part, '.claude'), { recursive: true });
       renameSync(join(part, '.claude-settings-fragment.json'), join(part, '.claude', 'settings.json'));

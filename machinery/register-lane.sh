@@ -11,7 +11,16 @@ set -u
 # directory, which is where the registry has always lived — a hook that
 # fails to resolve config must still register the lane, not exit silently.
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
-REG="$(node "$SELF_DIR/config.mjs" get paths.wakecycle 2>/dev/null || echo "$SELF_DIR")"
+# The registry entry goes in the HUB's state dir. WEFT_CONFIG names the hub;
+# without it we use this script's own folder (the sealed layout) and NEVER
+# config.mjs's fallback chain — that chain can resolve to a DIFFERENT hub's
+# config on this machine, and a session must never register into another
+# hub's registry (rehearsal finding, 10/7).
+if [ -n "${WEFT_CONFIG:-}" ]; then
+  REG="$(node "$SELF_DIR/config.mjs" get paths.wakecycle 2>/dev/null || echo "$SELF_DIR")"
+else
+  REG="$SELF_DIR"
+fi
 # Prune stale entries so the registry never grows unboundedly.
 find "$REG" -maxdepth 1 -name 'lane.*' -mtime +7 -delete 2>/dev/null
 [ -z "${WEFT_LANE:-}" ] && exit 0

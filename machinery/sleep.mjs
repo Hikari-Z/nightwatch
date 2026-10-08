@@ -19,6 +19,11 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { loadConfig, laneConfig } from './config.mjs';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+// Code finds code beside ITSELF (the machinery dir), never in the hub's
+// state dir — the pointer-model split (rehearsal finding 5, 10/7).
+const MACHINERY_DIR = dirname(fileURLToPath(import.meta.url));
 
 // Paths come from the one config (item E). The 10/5 wake failure — a decoy
 // checkpoint at a second plausible path, archived by a 2am session — is why
@@ -191,7 +196,7 @@ try {
   trimOut = JSON.parse(
     // process.execPath, not 'node': when this runs as the daemon's orphan
     // fold, the parent is launchd-spawned and PATH has no node (E review).
-    execFileSync(process.execPath, [join(WEFT, 'wakecycle', 'trim.mjs'), sessionId, '--target-tokens', String(target)], { encoding: 'utf8' }),
+    execFileSync(process.execPath, [join(MACHINERY_DIR, 'trim.mjs'), sessionId, '--target-tokens', String(target)], { encoding: 'utf8' }),
   );
 } catch (e) {
   console.error(`trim failed for session ${sessionId}: ${e.stderr?.toString().trim() || e.message}`);
