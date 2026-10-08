@@ -425,14 +425,17 @@
     // arrives unpressed, and a refresh re-renders the deck.
     const a = app();
     if (a) for (const v of ['timeline', 'log']) $$(`.nw-app > .nw-controls [data-action="toggle-${v}"]`).forEach((b) => b.setAttribute('aria-pressed', a.dataset[VIEW_ATTR[v]] === 'true' ? 'true' : 'false'));
+    // The viewer's "Got it"s first: a refresh re-renders every alert un-acked,
+    // and an alert this viewer dismissed must not force its lane open again
+    // (Ra, 10/7: the lane kept springing open every 30s).
+    for (const id of state.acked ?? []) {
+      for (const al of $$(`.nw-app > .nw-lanes .nw-alert[data-ack-id="${CSS.escape(id)}"], .nw-app > .nw-alarms > .nw-alarm[data-ack-id="${CSS.escape(id)}"]`)) al.dataset.acked = 'true';
+    }
     for (const lane of $$('.nw-app > .nw-lanes .nw-lane[data-lane]')) {
       // An un-acked alarm always opens its lane (contract v0.4): trouble never
       // hides behind a closed card, whatever the viewer last chose.
       if (hasLiveAlarm(lane)) setLaneOpen(lane, true, false);
       else if (state.lanes && lane.dataset.lane in state.lanes) setLaneOpen(lane, state.lanes[lane.dataset.lane], false);
-    }
-    for (const id of state.acked ?? []) {
-      for (const al of $$(`.nw-app > .nw-lanes .nw-alert[data-ack-id="${CSS.escape(id)}"], .nw-app > .nw-alarms > .nw-alarm[data-ack-id="${CSS.escape(id)}"]`)) al.dataset.acked = 'true';
     }
     for (const g of $$('.nw-app > .nw-lanes > .nw-persona')) {
       if ($$(':scope > .nw-lane[data-lane]', g).some(hasLiveAlarm)) setPersonaOpen(g, true, false);

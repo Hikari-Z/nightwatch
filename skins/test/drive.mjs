@@ -29,6 +29,9 @@ const ev = async (expr) => {
 await send('Page.enable'); await send('Runtime.enable');
 await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__errs=[];addEventListener('error',e=>__errs.push(e.message+' @'+e.lineno));addEventListener('unhandledrejection',e=>__errs.push('rej '+e.reason))` });
 const go = async (url) => { await send('Page.navigate', { url }); await sleep(1500); };
+// The live page carries whatever alerts the house has right now (a spiral on a working evening), and an un-acked
+// alert keeps its lane and persona open by design. Sections that fold things press "Got it" on them first.
+const ackLive = async () => { await ev(`document.querySelectorAll('.nw-app .nw-alert[data-acked="false"] [data-action="ack"]').forEach((b) => b.click())`); await sleep(200); };
 
 let pass = 0, fail = 0;
 const check = async (name, expr, want) => {
@@ -63,6 +66,7 @@ await check('desk forced off when served', `document.documentElement.dataset.des
 await ev(`(()=>{const d=document.createElement('div');d.className='nw-alarm';d.setAttribute('role','alert');d.dataset.kind='daemon-down';d.dataset.acked='false';d.dataset.ackId='daemon-down:2026-10-06T10:00:00Z';d.innerHTML='<p data-part="title">The nightshift isn\\'t running</p><button type="button" data-action="ack" data-part="ack">Got it</button>';document.querySelector('.nw-app > .nw-alarms').append(d)})()`);
 await ev(`document.querySelector('.nw-app > .nw-alarms > .nw-alarm [data-action="ack"]').click()`);
 await check('app alarm acks', `document.querySelector('.nw-app > .nw-alarms > .nw-alarm').dataset.acked`, 'true');
+await check('...and is gone from view, not left dimmed (Ra, 10/7)', `!document.querySelector('.nw-app > .nw-alarms > .nw-alarm').getClientRects().length`, true);
 await check('alarm ack remembered by episode', `JSON.parse(localStorage.getItem('nightwatch.view.v1')).acked.includes('daemon-down:2026-10-06T10:00:00Z')`, true);
 await ev(`document.querySelector('.nw-app > .nw-alarms > .nw-alarm').remove()`);
 
@@ -147,6 +151,7 @@ await check('range survives the timeline swap', `document.querySelector('.nw-tim
 await click('.nw-timeline [data-range="8h"]'); await sleep(800);
 
 // refresh keeps view state
+await ackLive();
 await click(`${lane} > header`);
 const openNow = await ev(`document.querySelector('${lane}').dataset.open`);
 await click('.nw-log [data-part="filters"] label[data-kind="launch"] input');
@@ -290,6 +295,7 @@ await ev('localStorage.clear()');
 
 // ---- 10/7: the persona card's caret folds its own body; the eye hides its agents; both stick
 await go(BASE + '?skin=minimal'); await ev('localStorage.clear()'); await go(BASE + '?skin=minimal'); await sleep(400);
+await ackLive();
 const P = `document.querySelector('.nw-app > .nw-lanes .nw-persona')`;
 // Horizontal's spine has no caret (round 6), and its tray shows even when the card was folded in another layout.
 await check('Horizontal: the spine has no caret', `!${P}.querySelector('[data-part="persona-toggle"]').getClientRects().length`, true);

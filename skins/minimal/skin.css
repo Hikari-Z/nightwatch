@@ -200,7 +200,9 @@ button { cursor: pointer; }
 [data-part="fix"] { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--nw-seam); background: var(--nw-surface); font-size: 12px; }
 [data-part="fix"]:first-child { background: var(--nw-failed-fill, var(--nw-failed)); border-color: var(--nw-failed-fill, var(--nw-failed)); color: #fff; font-weight: 600; }
 .nw-alert [data-part="ack"] { grid-column: 1 / -1; justify-self: end; display: inline-flex; gap: 4px; align-items: center; border: 0; background: none; color: var(--nw-ink-2); padding: 2px 0; font-size: 12px; }
-.nw-alert[data-acked="true"] { opacity: .5; }
+/* "Got it" hides it on this screen (the runtime's promise; Ra, 10/7: it only dimmed, and looked stuck). The house
+   still knows: the log keeps the event, and a new episode shows again. */
+.nw-alert[data-acked="true"] { display: none; }
 
 /* actions slot */
 .nw-lane [data-part="actions"] { display: flex; gap: 2px; padding: 4px 6px; }
@@ -395,7 +397,7 @@ html[data-gallery="1"] .nw-gallery { grid-area: gallery; display: grid; grid-tem
 .nw-glyphs { display: flex; gap: 14px; align-items: center; padding: 12px; }
 
 /* v0.9.1: an acked app alarm dims like an acked lane alert (this screen only) */
-.nw-alarm[data-acked="true"] { opacity: .5; }
+.nw-alarm[data-acked="true"] { display: none; }
 
 /* The Remove gate (Ra, 10/6) reads as a sentence, like the armed row, not a short field label. */
 .nw-lane [data-part="settings"] [data-part="confirm-remove"] > span { width: auto; flex: 1; }

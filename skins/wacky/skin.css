@@ -208,7 +208,7 @@ button { cursor: pointer; }
   background: radial-gradient(circle at 35% 30%, #a6ffb5, #2f8f5b 60%, #14532d); box-shadow: 0 3px 0 #0b3b1f; color: #fff; font-size: 0; }
 .nw-alert [data-part="ack"] .nw-icon { display: none; }
 .nw-alert [data-part="ack"][data-short]::after { content: attr(data-short); font: 700 14px var(--mw-font); }
-.nw-alert[data-acked="true"] { rotate: 3deg; opacity: .55; }
+.nw-alert[data-acked="true"] { display: none; } /* "Got it" hides it (10/7) */
 
 /* brass buttons */
 .nw-lane [data-part="actions"] { display: flex; justify-content: center; gap: 5px; }
@@ -439,7 +439,7 @@ html[data-gallery="1"] .nw-gallery { grid-area: gallery; display: grid; grid-tem
   left: calc(7px + min(var(--target, 1), 1) * (100% - 14px) - 1px); background: #fffa; }
 
 /* v0.9.1: an acked app alarm dims like an acked lane alert (this screen only) */
-.nw-alarm[data-acked="true"] { rotate: -2deg; opacity: .55; }
+.nw-alarm[data-acked="true"] { display: none; }
 
 /* The Remove gate (Ra, 10/6) reads as a sentence, like the armed row, not a short field label. */
 .nw-lane [data-part="settings"] [data-part="confirm-remove"] > span { width: auto; flex: 1; }
