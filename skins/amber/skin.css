@@ -829,6 +829,12 @@ input[type="checkbox"] { accent-color: #8a8272; }
 .nw-controls [data-part="primary"]:hover { --am-hover: #ff5a3c; color: var(--am-hover) !important;
   box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--am-hover), 0 8px 18px -8px var(--am-hover) !important; }
 .nw-controls[data-setup="true"] [data-part="primary"] { color: #fff2d6 !important; }
+/* Stop is the primary's danger twin (Ra, 10/7): at rest a red icon over a diffuse red glow, as Wake/Sleep all wears
+   amber; hovered, the red intensifies, as the primary's does. The gloss stays under both. */
+.nw-controls [data-part="transport"] button[data-danger="true"] { color: var(--nw-failed);
+  box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--nw-failed), 0 8px 16px -10px var(--nw-failed); }
+.nw-controls [data-part="transport"] button[data-danger="true"]:hover { --red-hot: #ff2a14; color: var(--red-hot); background: var(--ob-gloss);
+  box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--red-hot), 0 8px 18px -8px var(--red-hot); }
 .nw-controls :is([data-part="toggles"], [data-part="transport"]) button[aria-pressed="true"] { color: var(--am-hi); background: transparent; box-shadow: inset 0 -2px 0 -1px var(--am); }
 
 /* timeline: hour ticks under a hairline; nodes are outlined diamonds */
