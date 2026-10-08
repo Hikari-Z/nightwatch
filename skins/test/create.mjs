@@ -121,6 +121,11 @@ await click(`${A} [data-action="plan-lane"]`); await tick();
 await check('spec: own times, adopted session', `(l=>[l.schedule, l.firstSession])(${lastCall('plan')}.lane)`, [{ sleep: '03:00', wake: '09:30' }, { kind: 'adopt', sessionId: 'abcdef1234567890' }]);
 await click(`${A} [data-action="create-lane"]`); await tick();
 await check('Add and wake applies, closes the slot', `[${lastCall('apply')}.lane.id, document.querySelector('${A}').dataset.open, document.querySelector('${A}').dataset.step]`, ['lark', 'false', 'form']);
+// The floating + (Add persona) opens Set up: a new persona is a new hub (Ra, 10/7).
+await go(new URL('../fixture.html?skin=minimal', import.meta.url).href);
+await ev(`document.querySelector('.nw-app > .nw-lanes > .nw-add-persona').click()`); await sleep(300);
+await check('the floating + opens Set up on "who"', `(d=>[d.dataset.open, d.dataset.step])(document.querySelector('.nw-app > .nw-setup'))`, ['true', 'who']);
+await ev(`document.querySelector('.nw-app > .nw-setup [data-action="close-setup"]').click()`);
 await check('no errors along the way', 'window.__errs', []);
 
 console.log(`\n${pass} passed, ${fail} failed`);

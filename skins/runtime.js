@@ -38,12 +38,12 @@
     'restart-daemon', 'run-doctor', 'confirm', 'hide-window']);
   // Lane creation (10/6): flow buttons, each needing one host capability.
   // plan = the machinery's dry run, apply = the build (nightwatch.mjs).
-  const NEEDS = { setup: 'plan', 'setup-next': 'plan', 'plan-lane': 'plan', 'check-import': 'inspect-import',
+  const NEEDS = { setup: 'plan', 'add-persona': 'plan', 'setup-next': 'plan', 'plan-lane': 'plan', 'check-import': 'inspect-import',
     'create-persona': 'apply', 'create-lane': 'apply' };
   const host = () => window.NW_HOST && typeof window.NW_HOST.act === 'function' ? window.NW_HOST : null;
   // App-level settings has no panel in the phase-1 page yet; it reads as
   // not-yet rather than broken.
-  const NOT_YET = new Set(['add-persona']); // settings are per persona now (10/7); Add persona waits for its flow
+  const NOT_YET = new Set([]); // everything has its flow now: per-persona settings and Add persona (10/7)
 
   // A host wires actions one at a time (NW_HOST.can); everything it can't do
   // yet, or everything at all in a plain browser tab, stays read-only. A
@@ -731,7 +731,8 @@
     const slot = btn.closest('.nw-add');
     try {
       switch (a) {
-        case 'setup':
+        // The floating + (Add persona) is Set up: a new persona is a new hub (Ra, 10/7).
+        case 'setup': case 'add-persona':
           if (!dlg) return;
           setupState.import = null; setStep(dlg, 'who'); dlg.dataset.open = 'true';
           field(dlg, 'about')?.focus(); return;
@@ -800,7 +801,7 @@
       if (where) showError(where, text); else toast(text, true);
     }
   }
-  const FLOW = new Set(['setup', 'close-setup', 'setup-import', 'setup-back', 'check-import', 'setup-next',
+  const FLOW = new Set(['setup', 'add-persona', 'close-setup', 'setup-import', 'setup-back', 'check-import', 'setup-next',
     'create-persona', 'plan-lane', 'plan-back', 'create-lane']);
 
   // The adopt picker: live Claude Code sessions no lane has claimed.
