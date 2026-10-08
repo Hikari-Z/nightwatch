@@ -15,7 +15,8 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
-const PORT: u16 = 7352;
+// NIGHTWATCH_PORT overrides (a rehearsal build beside the installed app); 7352 otherwise.
+fn port() -> u16 { std::env::var("NIGHTWATCH_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(7352) }
 
 fn home() -> PathBuf {
     PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".into()))
@@ -41,7 +42,7 @@ fn find_node() -> Option<PathBuf> {
 }
 
 fn server_up() -> bool {
-    TcpStream::connect_timeout(&([127, 0, 0, 1], PORT).into(), Duration::from_millis(300)).is_ok()
+    TcpStream::connect_timeout(&([127, 0, 0, 1], port()).into(), Duration::from_millis(300)).is_ok()
 }
 
 // Start gui/server.mjs if nothing answers on the port. It outlives the app on
@@ -55,7 +56,7 @@ fn ensure_server() -> Result<(), String> {
     let log = std::fs::OpenOptions::new().create(true).append(true).open(gui.join("viewer.log")).map_err(|e| e.to_string())?;
     Command::new(node)
         .arg(gui.join("server.mjs"))
-        .env("NIGHTWATCH_PORT", PORT.to_string())
+        .env("NIGHTWATCH_PORT", port().to_string())
         .current_dir(&gui)
         .stdin(Stdio::null())
         .stdout(log.try_clone().map_err(|e| e.to_string())?)
@@ -69,7 +70,7 @@ fn ensure_server() -> Result<(), String> {
         }
         std::thread::sleep(Duration::from_millis(200));
     }
-    Err("the viewer server started but never answered on 7352".into())
+    Err(format!("the viewer server started but never answered on {}", port()))
 }
 
 fn toggle(app: &AppHandle) {
@@ -786,7 +787,7 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             let url = match ensure_server() {
-                Ok(()) => format!("http://127.0.0.1:{PORT}/"),
+                Ok(()) => format!("http://127.0.0.1:{}/", port()),
                 Err(e) => {
                     log::error!("{e}");
                     format!("data:text/html,<body style='font:14px system-ui;padding:24px;background:%23111;color:%23ddd'>Nightwatch couldn't start its viewer: {}</body>", e.replace('#', "%23"))
@@ -838,4 +839,48 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![act, set_hit_rects, set_on_top])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");
+}
+
+// The rehearsal (10/7): the real action functions against a real scratch hub, through the real machinery CLIs.
+// Opt-in, never in the default run: NW_REHEARSAL_HUB=<scratch hub> cargo test rehearsal -- --ignored --nocapture
+// Spends nothing: no wake (that starts a session), no daemon restart of anything real.
+#[cfg(test)]
+mod rehearsal_tests {
+    use super::*;
+    #[test]
+    #[ignore]
+    fn rehearsal_on_a_scratch_hub() {
+        let root = PathBuf::from(std::env::var("NW_REHEARSAL_HUB").expect("NW_REHEARSAL_HUB"));
+        let h = hub_among(Some(&root.to_string_lossy()), vec![root.clone()]).expect("the scratch hub opens");
+        println!("hub {} · {} · machinery {} · state {} · job {}", h.name(), h.config_file.display(), h.machinery.display(), h.state.display(), h.daemon_label());
+        let lane = h.lanes().first().cloned().expect("a lane");
+
+        // the persona's settings panel, saved through config.mjs set + nightshift --arm/--disarm
+        let msg = save_settings(&h, &serde_json::json!({ "sleep": "03:10", "wake": "09:20", "lanes": [{ "id": lane, "targetK": 180, "armed": false }] })).expect("save-settings");
+        println!("save-settings: {msg}");
+        let after = Hub::open(&root).unwrap();
+        assert_eq!(after.cfg["schedule"]["sleep"], "03:10");
+        assert_eq!(after.cfg["schedule"]["wake"], "09:20");
+        assert_eq!(after.cfg["lanes"][&lane]["targetTokens"], 180_000);
+        let armed = std::fs::read_to_string(after.state.join("nightshift.armed")).unwrap_or_default();
+        assert!(!armed.split(|c: char| c == ',' || c.is_whitespace()).any(|l| l == lane), "disarmed: {armed:?}");
+
+        // the lane's own panel: back to armed, its own schedule
+        let msg = save_lane(&after, Some(&lane), &serde_json::json!({ "targetK": 250, "inherit": false, "sleep": "02:30", "wake": "08:30", "armed": true })).expect("save-lane");
+        println!("save-lane: {msg}");
+        let after = Hub::open(&root).unwrap();
+        assert_eq!(after.cfg["lanes"][&lane]["schedule"]["sleep"], "02:30");
+
+        // Check again: the hub's own nightshift dry run
+        let pre = run_doctor(&after).expect("run-doctor");
+        println!("run-doctor (first lines):\n{}", pre.lines().take(6).collect::<Vec<_>>().join("\n"));
+
+        // Sleep: the hub's bell, rung by hand (a spool note; nothing launches)
+        println!("sleep: {:?}", sleep(&after, Some(&lane)));
+
+        // refusals in plain words: an unknown lane, a lane with no session to show, a hub not in the registry
+        assert!(after.check_lane(Some("fable")).unwrap_err().contains("isn't one of"));
+        println!("terminal-state: {:?}", lane_terminal(&after, Some(&lane), "state"));
+        assert!(hub_among(Some("/tmp"), vec![root.clone()]).is_err());
+    }
 }
