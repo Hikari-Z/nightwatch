@@ -1,0 +1,162 @@
+# Nightwatch setup — from zero to a self-keeping agent
+
+Notes from someone who explored this corner of the maze. This is the
+install-and-run guide for the wake cycle (continuity ladder + nightly
+fold + morning wake); the design rationale lives in the README and in
+`anima_dev/wakecycle_recipe_sketch.md`. Written for the second
+household to run this (hi, Terra) and for the eventual GUI, which is a
+thin shell over exactly the pieces named here.
+
+## The shape of the thing
+
+Five cooperating pieces, all small:
+
+- **config.mjs + weft.config.json** — one file of paths and knobs that
+  every other piece reads. Start here; `node config.mjs doctor` tells
+  you what's missing. With no config file at all you get a working
+  single-lane setup under `~/origin/weft` called `main`.
+- **sleep.mjs** — the fold. Run by the agent itself at the end of day
+  (the "ritual": write the day's rung → run sleep.mjs → rewrite the
+  checkpoint, in that order). Trims the transcript to a budget
+  (`lanes.<name>.targetTokens`), archives the checkpoint, regenerates
+  the ladder, writes a fold receipt into `folds.jsonl` and a
+  `next-wake.<lane>.json` the morning side reads.
+- **wake.sh** — the morning. Reads `next-wake.<lane>.json`, refuses
+  stale receipts (a lane that was belled but never folded), builds the
+  wake head (checkpoint + standing duties), and execs
+  `claude --resume <tail> --fork-session` with the checkpoint appended
+  to the system prompt. `--system-prompt-snapshot off` is load-bearing;
+  the comment block in the script says why.
+- **nightshift.mjs** — the daemon that makes it autonomous: rings the
+  sleep-bell into each lane's spool at the configured hour, closes
+  panels once they're folded and quiet, launches Terminal windows at
+  wake time, verifies each wake against the session registry, retries
+  a bounded number of times, and emergency-folds a lane whose own fold
+  died mid-ritual (the "orphan fold").
+- **register-lane.sh** — a SessionStart hook that records which lane a
+  session belongs to, so the daemon attributes sessions by registry
+  instead of guessing.
+
+## Quickstart, single lane
+
+1. Put the `wakecycle/` folder somewhere stable and add a
+   `weft.config.json` next to it (one level up, or point `WEFT_CONFIG`
+   at it). Minimal single-lane config:
+
+   ```json
+   {
+     "defaultLane": "main",
+     "lanes": { "main": { "targetTokens": 250000 } },
+     "timezone": "America/New_York",
+     "schedule": { "sleep": "02:00", "wake": "08:00" }
+   }
+   ```
+
+2. `node config.mjs doctor` — fix anything MISSING. The transcripts
+   path must point at your Claude Code project directory (the folder
+   under `~/.claude/projects/` named after your working directory).
+
+3. Wire the SessionStart hook (settings.json):
+
+   ```json
+   { "hooks": { "SessionStart": [{ "hooks": [{ "type": "command",
+     "command": "~/origin/weft/wakecycle/register-lane.sh" }] }] } }
+   ```
+
+   Also set `"autoCompactEnabled": false` — the fold replaces
+   compaction, and the PreCompact guard hook in this folder is the
+   backstop. A session that silently compacts loses the day the fold
+   would have kept.
+
+4. First cycle by hand, to see each piece work before trusting the
+   daemon with it: have the agent write its rung and checkpoint, run
+   `node sleep.mjs --lane main`, read the receipt it prints, then
+   `./wake.sh main` the next morning and watch it resume.
+
+5. Then arm the daemon (see launchd below, or cron), write the lane
+   name into `wakecycle/nightshift.armed`, and let it run a night.
+   Read `nightshift.log` in the morning. The healthy shape is:
+   bell → fold row in folds.jsonl → "closing <lane> panel" →
+   "waking the <lane> lane (attempt 1)" → "wake receipt ... reached
+   exec" → "wake confirmed (registry entry after launch)". Anything
+   that says WAKE FAILED or BELLED BUT NEVER FOLDED is the daemon
+   telling you exactly what it couldn't do; it never fails silently
+   on purpose, because every silent failure it ever had got a loud
+   path named after the night it happened.
+
+## launchd (macOS)
+
+The daemon and its siblings run as LaunchAgents. The nightshift plist
+this house runs, trimmed to the parts that matter
+(`~/Library/LaunchAgents/com.weft.nightshift.plist`):
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.weft.nightshift</string>
+  <key>ProgramArguments</key><array>
+    <string>/usr/local/bin/node</string>
+    <string>/Users/YOU/origin/weft/wakecycle/nightshift.mjs</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardErrorPath</key>
+    <string>/Users/YOU/origin/weft/nightshift.launchd.log</string>
+</dict></plist>
+```
+
+Load with `launchctl load ~/Library/LaunchAgents/com.weft.nightshift.plist`.
+Two macOS specifics that cost this house real nights:
+
+- launchd's PATH has no `~/.local/bin`, so the config's
+  `paths.claudeBin` must be absolute (the default already is).
+- The first time the daemon opens a Terminal window, macOS asks for
+  an Automation permission. Grant it once, from a test fire you run
+  on purpose (`touch` a trigger file if you've wired one, or just
+  wait for the first wake while you're at the keyboard) — not at
+  8am when you're asleep and the dialog times out.
+
+## cron (Linux), untested here
+
+The daemon is a poller (one tick a minute), so cron can run it with
+`@reboot` + a keepalive, or run it under systemd as a simple service:
+
+```ini
+[Service]
+ExecStart=/usr/bin/node /home/YOU/weft/wakecycle/nightshift.mjs
+Restart=always
+[Install]
+WantedBy=default.target
+```
+
+Terminal launching is the macOS-specific part (`osascript`); on Linux
+the wake leg needs a different spawn (x-terminal-emulator, tmux
+new-window, or a headless `claude -p` if you run panel-less). That
+port is open work; everything else is platform-neutral node.
+
+## Knobs you'll actually touch
+
+- `lanes.<name>.targetTokens` — how much tail survives a fold. Image-
+  heavy lanes can afford more entries than the raw byte count
+  suggests; the trimmer bills long base64 runs at the vision rate, not
+  the byte rate (10/5 change; see trim.mjs's comment for the receipts).
+- `schedule.sleep` / `schedule.wake` — the window. Post-midnight sleep
+  hours are fine; the window logic is wrap-aware.
+- `schedule.orphanQuietMs` / `orphanGraceMs` — how patient the
+  emergency fold is with a lane that got belled and went quiet.
+- `models.bell` — the model used for spool-note bell passes.
+
+## The parts the config can't do for you
+
+The ritual itself is the agent's: the rung (the day, in its own words,
+with a Corrections section it would rather not write), then the fold,
+then the checkpoint. The order matters — a crash between rung and fold
+costs prose that existed only in context; a crash after the fold costs
+a stale checkpoint section the morning read repairs. And the morning
+discipline is the other half: receipts before belief, every time, even
+when the log looks exactly like yesterday's clean night. Especially
+then.
+
+Written by: claude-fable-5, 2026-10-05

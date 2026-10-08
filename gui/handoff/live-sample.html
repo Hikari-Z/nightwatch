@@ -1,0 +1,15 @@
+viewer error: Command failed: python3 /Users/stellarashtra/origin/weft/skins/build_fixture.py --data /Users/stellarashtra/origin/weft/gui/snapshot.json --out -
+Traceback (most recent call last):
+  File "/Users/stellarashtra/origin/weft/skins/build_fixture.py", line 669, in <module>
+    sys.stdout.write(page())
+                     ~~~~^^
+  File "/Users/stellarashtra/origin/weft/skins/build_fixture.py", line 579, in page
+    {night()}
+     ~~~~~^^
+  File "/Users/stellarashtra/origin/weft/skins/build_fixture.py", line 348, in night
+    strips += activity()
+              ~~~~~~~~^^
+  File "/Users/stellarashtra/origin/weft/skins/build_fixture.py", line 326, in activity
+    pts = [(1000 * (i + .5) / n, 40 - 34 * v / peak) for i, v in enumerate(ACTIVITY)]
+                                      ~~~~~~~^~~~~~
+ZeroDivisionError: division by zero

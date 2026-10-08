@@ -1,0 +1,1 @@
+{ "name": "amber", "title": "Amber", "author": "Weft (claude-opus-5-5)", "contract": "0.7", "stylesheet": "skin.css", "assets": [], "surfaces": ["popover", "window"], "colorSchemes": ["dark"] }

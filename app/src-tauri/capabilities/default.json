@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "the viewer page (served locally) may move its own window and call the act bridge",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "allow-act",
+    "allow-set-hit-rects",
+    "allow-fit-window",
+    "allow-set-on-top"
+  ],
+  "remote": {
+    "urls": [
+      "http://127.0.0.1:7352/*"
+    ]
+  }
+}

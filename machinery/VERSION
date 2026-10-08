@@ -1,0 +1,4 @@
+staged 2026-10-07 from ~/origin/weft/wakecycle (pre-repo; first commit pending Ra)
+excluded on purpose: watch-spiral.mjs + seam.sh (Weft-hub infra, not 1.0 product —
+the product's alert path is the spiral-alarm event contract + the app's own
+notifications; the producer is pluggable per hub), doorbell/ (same ruling).

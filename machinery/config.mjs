@@ -1,0 +1,383 @@
+#!/usr/bin/env node
+/**
+ * Nightwatch config — one file, one truth (item E).
+ *
+ * Every piece of the wake machinery (nightshift.mjs, sleep.mjs, trim.mjs,
+ * wake.sh, register-lane.sh) reads its paths and knobs from here instead of
+ * carrying its own copy. The 10/5 wake failure is the reason this file
+ * exists: two files both plausibly named "the checkpoint" lived at two
+ * plausible paths, a 2am session archived the live one, and both lanes
+ * burned every launch attempt. A path that two scripts must agree on
+ * belongs in one place with one name.
+ *
+ * Resolution order, least to most specific:
+ *   1. DEFAULTS below (a fresh single-lane install; works with no file),
+ *   2. the config file — $WEFT_CONFIG, or <weftRoot>/weft.config.json,
+ *   3. environment variables (the pre-E spellings keep working),
+ *   4. explicit CLI flags on the individual tools (--lane, --target-tokens).
+ *
+ * Shell consumers use the CLI:
+ *   node config.mjs get paths.checkpoint     → one value, one line
+ *   node config.mjs get lanes.fable.targetTokens
+ *   node config.mjs show                     → full resolved config (JSON)
+ *   node config.mjs doctor                   → path existence report, exit 1 on a miss
+ */
+import { readFileSync, writeFileSync, renameSync, existsSync, realpathSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, isAbsolute, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HOME = homedir();
+
+/** A fresh install: one lane, everything under ~/origin/weft, the same
+ *  schedule this house proved across its first clean cycles. */
+export const DEFAULTS = {
+  weftRoot: join(HOME, 'origin', 'weft'),
+  timezone: 'America/Los_Angeles',
+  schedule: {
+    sleep: '02:00',
+    wake: '08:00',
+    quietMs: 2 * 60_000,
+    pollMs: 60_000,
+    wakeRetries: 3,
+    wakeConfirmMs: 5 * 60_000,
+    orphanQuietMs: 20 * 60_000,
+    orphanGraceMs: 45 * 60_000,
+    windowGapMs: 16 * 3600_000,
+  },
+  models: {
+    bell: 'claude-haiku-4-5-20251001',
+  },
+  defaultLane: 'main',
+  lanes: {
+    main: { targetTokens: 250_000, switchboard: true },
+  },
+  viewer: {
+    // The GUI's HTTP port. 7350 is the code default's history; 7352 is ours
+    // because 7350 is squatted by a long-lived local service (bun, 9/2).
+    // NIGHTWATCH_PORT still overrides for one-off runs.
+    port: 7352,
+  },
+  paths: {
+    // Relative entries resolve against weftRoot; absolute entries stand.
+    checkpoint: 'checkpoint.md', // THE canonical checkpoint. The only one.
+    ladder: 'ladder',
+    folds: 'ladder/folds.jsonl',
+    wakecycle: 'wakecycle',
+    nightshiftLog: 'nightshift.log',
+    events: 'events.jsonl', // machine-readable twin of the log; the GUI's API
+    armedFile: 'wakecycle/nightshift.armed',
+    stateFile: 'wakecycle/nightshift.state.json',
+    spool: 'doorbell/spool',
+    transcripts: join(HOME, '.claude', 'projects', '-Users-stellarashtra-origin'),
+    claudeBin: join(HOME, '.local', 'bin', 'claude'),
+    // The directory sessions launch in (their project dir). Our hub works
+    // from ~/origin; a fresh Nightwatch hub works from the hub itself.
+    workdir: join(HOME, 'origin'),
+    // Where the machinery CODE lives. 'wakecycle' (relative to weftRoot) is
+    // the sealed layout — code beside state, our legacy hub. Set up points
+    // new hubs at the installed app's machinery/ (absolute), one version
+    // for every hub (multi-persona plan, 10/7).
+    machinery: 'wakecycle',
+    sockDir: '/tmp/cc-socks',
+    bridgeSockDir: join(HOME, '.claude', 'mcpl-bridge'),
+  },
+};
+
+function deepMerge(base, over) {
+  if (over === null || typeof over !== 'object' || Array.isArray(over)) return over ?? base;
+  const out = { ...base };
+  for (const [k, v] of Object.entries(over)) {
+    out[k] = k in base ? deepMerge(base[k], v) : v;
+  }
+  return out;
+}
+
+/** Env overrides keep their pre-E spellings so an existing launchd plist or
+ *  shell profile keeps working unchanged. */
+function applyEnv(cfg) {
+  const env = process.env;
+  if (env.WEFT_NIGHT_SLEEP) cfg.schedule.sleep = env.WEFT_NIGHT_SLEEP;
+  if (env.WEFT_NIGHT_WAKE) cfg.schedule.wake = env.WEFT_NIGHT_WAKE;
+  if (env.WEFT_NIGHT_QUIET_MS) cfg.schedule.quietMs = Number(env.WEFT_NIGHT_QUIET_MS);
+  if (env.WEFT_ORPHAN_QUIET_MS) cfg.schedule.orphanQuietMs = Number(env.WEFT_ORPHAN_QUIET_MS);
+  if (env.WEFT_ORPHAN_GRACE_MS) cfg.schedule.orphanGraceMs = Number(env.WEFT_ORPHAN_GRACE_MS);
+  if (env.WEFT_NIGHT_BELL_MODEL) cfg.models.bell = env.WEFT_NIGHT_BELL_MODEL;
+  if (env.WEFT_CLAUDE_BIN) cfg.paths.claudeBin = env.WEFT_CLAUDE_BIN;
+  return cfg;
+}
+
+let cached = null;
+/** Bust the cache and re-read — the daemon's hot reload (10/6): the app
+ *  writes weft.config.json and a boot-frozen schedule would ignore it
+ *  until the next crash-restart. */
+export function reloadConfig() {
+  cached = null;
+  return loadConfig();
+}
+export function loadConfig() {
+  if (cached) return cached;
+  let cfg = structuredClone(DEFAULTS);
+  // WEFT_CONFIG set but unusable is an ERROR, never a fallback: the silent
+  // DEFAULTS fallback meant a typo'd path quietly acted on OUR hub, and on a
+  // fresh machine pointed at nothing (opus's lane-creation read, 10/7).
+  // '' counts as unset (an empty env assignment is how "no config" looks in
+  // shell), but a non-empty path must exist.
+  const envFile = process.env.WEFT_CONFIG;
+  if (envFile !== undefined && envFile !== '' && !existsSync(envFile)) {
+    throw new Error(`WEFT_CONFIG points at a missing file: ${envFile}`);
+  }
+  // Resolution order: WEFT_CONFIG → the hub's own file beside weftRoot
+  // (either spelling: weft.config.json is ours, nightwatch.config.json is
+  // what Set up writes) → the machine's hub pointer (written by Set up) →
+  // DEFAULTS alone.
+  let file = envFile || null;
+  if (!file) {
+    for (const name of ['weft.config.json', 'nightwatch.config.json']) {
+      const cand = join(cfg.weftRoot, name);
+      if (existsSync(cand)) { file = cand; break; }
+    }
+  }
+  if (!file) {
+    const pointer = join(HOME, 'Library', 'Application Support', 'house.weft.nightwatch', 'hub.json');
+    if (existsSync(pointer)) {
+      try {
+        const hub = JSON.parse(readFileSync(pointer, 'utf8'));
+        for (const name of ['nightwatch.config.json', 'weft.config.json']) {
+          if (hub.hub && existsSync(join(hub.hub, name))) { file = join(hub.hub, name); break; }
+        }
+      } catch { /* an unreadable pointer falls through to DEFAULTS */ }
+    }
+  }
+  if (file && existsSync(file)) {
+    cfg = loadConfigFrom(file);
+  } else {
+    cfg.__configFile = null; // running on single-lane defaults
+    applyEnv(cfg);
+    for (const [k, v] of Object.entries(cfg.paths)) {
+      if (typeof v === 'string' && !isAbsolute(v)) cfg.paths[k] = join(cfg.weftRoot, v);
+    }
+  }
+  cached = cfg;
+  return cfg;
+}
+
+/**
+ * Resolve EXACTLY this config file: no cache, no env override, no fallback
+ * chain. The multiplexer loads N hubs in one process through this (opus,
+ * 10/7); loadConfig() delegates here so there is one resolver. Relative
+ * paths resolve against the file's weftRoot — or, when the file names no
+ * weftRoot, against the file's own folder (a hub's config sits in its hub).
+ */
+export function loadConfigFrom(file) {
+  let cfg = structuredClone(DEFAULTS);
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (e) {
+    // A torn config must fail LOUDLY, not fall back silently: the machinery
+    // would otherwise run a night on defaults that disagree with the house.
+    throw new Error(`weft config at ${file} is not valid JSON: ${e.message}`);
+  }
+  // A config's lane list REPLACES the default single lane — merging would
+  // leave a phantom "main" lane beside the real ones, and a phantom lane
+  // name is exactly the class of ambiguity this file exists to kill.
+  if (parsed.lanes) cfg.lanes = {};
+  cfg = deepMerge(cfg, parsed);
+  if (!parsed.weftRoot) cfg.weftRoot = dirname(realpathSync(file));
+  cfg.__configFile = file;
+  applyEnv(cfg);
+  // Resolve relative paths against weftRoot, exactly once, here.
+  for (const [k, v] of Object.entries(cfg.paths)) {
+    if (typeof v === 'string' && !isAbsolute(v)) cfg.paths[k] = join(cfg.weftRoot, v);
+  }
+  return cfg;
+}
+
+// The switchboard lane is the one whose session routes bells and DMs for
+// the house (lanes[].switchboard: true). Falls back to defaultLane so a
+// config without the flag still has a single answer. One truth, asked of
+// the config — never a lane name spelled in a daemon (E-polish, 10/6).
+export function switchboardLane(cfg) {
+  for (const [name, lc] of Object.entries(cfg.lanes)) if (lc && lc.switchboard) return name;
+  return cfg.defaultLane;
+}
+
+export function laneConfig(cfg, lane) {
+  const lc = cfg.lanes[lane];
+  if (!lc) {
+    const known = Object.keys(cfg.lanes).join(', ');
+    throw new Error(`lane "${lane}" is not in the config (known: ${known}). ` +
+      `Add it to ${cfg.__configFile ?? 'weft.config.json'} or pass a known lane.`);
+  }
+  return { targetTokens: 250_000, switchboard: false, ...lc };
+}
+
+// ------------------------------------------------------------- set / unset
+// The app's save buttons call these (Nightwatch write side, 10/6): edits go
+// to the CONFIG FILE (the overrides), never the resolved config. Atomic
+// (tmp + rename), whitelisted key paths, per-key type checks, and the
+// loader's own consistency rules re-checked on the RESULT before a byte
+// lands — a config this machinery can't boot from must be unwritable.
+const LANE_KEYS = {
+  targetTokens: 'number', emergencyTargetTokens: 'number', contextWindow: 'number',
+  switchboard: 'boolean', cwdMarker: 'string', runtime: 'string', modelName: 'string',
+  // The pinned model id (exact, e.g. claude-opus-5-5): every wake passes it,
+  // so the model never changes out from under the agent (Ra's ruling 2,
+  // 10/6). modelName above stays the human-facing display label.
+  model: 'string',
+  schedule: { sleep: 'time', wake: 'time' },
+};
+const ALLOWED = {
+  weftRoot: 'string', timezone: 'string', defaultLane: 'string',
+  persona: { name: 'string' },
+  schedule: Object.fromEntries(Object.keys(DEFAULTS.schedule).map((k) => [k, k === 'sleep' || k === 'wake' ? 'time' : 'number'])),
+  models: { bell: 'string' },
+  viewer: { port: 'number' },
+  paths: Object.fromEntries(Object.keys(DEFAULTS.paths).map((k) => [k, 'string'])),
+  lanes: { '*': LANE_KEYS },
+};
+
+function keySpec(parts) {
+  let node = ALLOWED;
+  for (const p of parts) {
+    if (typeof node !== 'object' || node === null) return null; // deeper than the schema goes
+    node = node[p] ?? node['*'];
+    if (node === undefined) return null;
+  }
+  return node; // a type string, or an object (settable wholesale for lanes)
+}
+
+function typeCheck(spec, value, path) {
+  if (typeof spec === 'object') {
+    // An object key (a whole lane, a lane's schedule): validate each member.
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error(`${path} takes an object`);
+    }
+    for (const [k, v] of Object.entries(value)) {
+      const sub = spec[k] ?? spec['*'];
+      if (sub === undefined) throw new Error(`unknown key ${path}.${k}`);
+      typeCheck(sub, v, `${path}.${k}`);
+    }
+    return;
+  }
+  if (spec === 'time') {
+    if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+      throw new Error(`${path} takes "HH:MM" (24h), got ${JSON.stringify(value)}`);
+    }
+  } else if (typeof value !== spec) {
+    throw new Error(`${path} takes a ${spec}, got ${JSON.stringify(value)}`);
+  }
+}
+
+/** The consistency rules a written file must satisfy — the same ones doctor
+ *  shouts about, enforced BEFORE the write instead of at 2am. */
+function assertConsistent(raw) {
+  const lanes = raw.lanes ?? DEFAULTS.lanes;
+  const names = Object.keys(lanes);
+  if (names.length === 0) throw new Error('refusing: the config would declare no lanes');
+  const dl = raw.defaultLane ?? DEFAULTS.defaultLane;
+  if (!names.includes(dl)) throw new Error(`refusing: defaultLane "${dl}" would not be a configured lane (${names.join(', ')})`);
+}
+
+export function configEdit(op, keyPath, value) {
+  const file = process.env.WEFT_CONFIG ?? join(DEFAULTS.weftRoot, 'weft.config.json');
+  const raw = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
+  const parts = keyPath.split('.');
+  if (op === 'set') {
+    const spec = keySpec(parts);
+    if (spec === null || spec === undefined) throw new Error(`unknown key: ${keyPath}`);
+    typeCheck(spec, value, keyPath);
+    let node = raw;
+    for (const p of parts.slice(0, -1)) node = node[p] ??= {};
+    node[parts[parts.length - 1]] = value;
+  } else { // unset
+    if (keySpec(parts) === null) throw new Error(`unknown key: ${keyPath}`);
+    let node = raw;
+    const walk = [];
+    for (const p of parts.slice(0, -1)) {
+      if (node?.[p] === undefined) return file; // nothing to unset
+      walk.push([node, p]);
+      node = node[p];
+    }
+    delete node[parts[parts.length - 1]];
+    // Prune now-empty parents so "unset lanes.x.schedule" leaves no husk.
+    for (let i = walk.length - 1; i >= 0; i--) {
+      const [parent, key] = walk[i];
+      if (typeof parent[key] === 'object' && parent[key] !== null && Object.keys(parent[key]).length === 0) delete parent[key];
+    }
+  }
+  assertConsistent(raw);
+  const tmp = join(dirname(file), `.weft.config.${process.pid}.tmp`);
+  writeFileSync(tmp, JSON.stringify(raw, null, 2) + '\n');
+  renameSync(tmp, file);
+  return file;
+}
+
+// ---------------------------------------------------------------- CLI mode
+// Real-path identity, not a basename suffix match: a suffix match runs the
+// CLI inside any importer that happens to be named config.mjs, and — worse —
+// goes silent when invoked through a differently-named symlink, which hands
+// wake.sh an empty value under set -e (E review, finding 5).
+let invokedDirectly = false;
+try {
+  invokedDirectly = Boolean(process.argv[1]) &&
+    realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+} catch { /* argv[1] unresolvable — a module import, not a CLI call */ }
+if (invokedDirectly) {
+  const [cmd, arg] = process.argv.slice(2);
+  const cfg = loadConfig();
+  if (cmd === 'get' && arg) {
+    const val = arg.split('.').reduce((o, k) => (o ?? {})[k], cfg);
+    if (val === undefined) {
+      console.error(`no such key: ${arg}`);
+      process.exit(1);
+    }
+    console.log(typeof val === 'object' ? JSON.stringify(val) : String(val));
+  } else if (cmd === 'show') {
+    console.log(JSON.stringify(cfg, null, 2));
+  } else if (cmd === 'doctor') {
+    let bad = 0;
+    for (const [k, p] of Object.entries(cfg.paths)) {
+      if (k === 'sockDir' || k === 'bridgeSockDir' || k === 'events') continue; // runtime-created
+      const ok = existsSync(p);
+      console.log(`${ok ? 'ok     ' : 'MISSING'} paths.${k} = ${p}`);
+      if (!ok) bad++;
+    }
+    // Lane-consistency asserts (E review, finding 6): each of these turns a
+    // 2am throw inside the ritual into a config-time one-liner.
+    const laneNames = Object.keys(cfg.lanes);
+    if (laneNames.length === 0) { console.log('BAD     lanes: config declares no lanes'); bad++; }
+    if (!laneNames.includes(cfg.defaultLane)) {
+      console.log(`BAD     defaultLane "${cfg.defaultLane}" is not a configured lane (${laneNames.join(', ') || 'none'})`);
+      bad++;
+    }
+    try {
+      const armed = readFileSync(cfg.paths.armedFile, 'utf8').split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+      for (const a of armed) {
+        if (!laneNames.includes(a)) { console.log(`BAD     armed lane "${a}" is not in the config — its 02:00 fold would throw`); bad++; }
+      }
+    } catch { /* nothing armed — fine */ }
+    console.log(`config file: ${cfg.__configFile ?? '(none — single-lane defaults)'}`);
+    console.log(`lanes: ${laneNames.join(', ')} (default: ${cfg.defaultLane})`);
+    process.exit(bad ? 1 : 0);
+  } else if ((cmd === 'set' || cmd === 'unset') && arg) {
+    // set <key> <json-or-string> | unset <key> — the app's save buttons.
+    try {
+      let value;
+      if (cmd === 'set') {
+        const rawVal = process.argv[4];
+        if (rawVal === undefined) { console.error('set needs a value'); process.exit(2); }
+        try { value = JSON.parse(rawVal); } catch { value = rawVal; } // bare strings welcome
+      }
+      const file = configEdit(cmd, arg, value);
+      console.log(`${cmd} ${arg} → ${file}`);
+    } catch (e) {
+      console.error(`refused: ${e.message}`);
+      process.exit(1);
+    }
+  } else {
+    console.error('usage: config.mjs get <dot.path> | show | doctor | set <key> <value> | unset <key>');
+    process.exit(2);
+  }
+}

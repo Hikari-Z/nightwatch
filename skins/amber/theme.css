@@ -1,0 +1,203 @@
+/* Nightwatch skin: Amber (contract v0.6). The obelisk.
+   Black in two finishes: MATTE bodies with a faint grain, GLOSS slabs for the
+   headers and keys (a cold specular sheen near the top edge). Seams are where
+   the finishes meet, an etched edge that catches light, not a coloured line.
+   Text is warm grey and quiet. Amber is light, not paint: it leaks from slits,
+   fills live meters, lights the next countdown. Red is for failures only.
+   Charts are instrument hairlines on tick scales. Built on minimal's layout. */
+
+:root {
+  --nw-font: "Avenir Next", "Helvetica Neue", system-ui, sans-serif;
+  --nw-cond: "Avenir Next Condensed", "Avenir Next", "Helvetica Neue", sans-serif;
+  --nw-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --am: #ffb000; --am-hi: #ffcf70; --am-glow: rgb(255 176 0 / .55);
+  --nw-seam: rgb(255 255 255 / .07);
+  --nw-surface: #0d0d0e;
+  --nw-sunk: #060606;
+  --nw-ink: #b8b1a4;
+  --nw-ink-2: #6c675f;
+  --nw-hover: rgb(255 255 255 / .04);
+  --nw-awake: var(--am); --nw-belled: #ff8a2a; --nw-folding: #d9c39a; --nw-sleeping: #57534c;
+  --nw-orphaned: #d9707f; --nw-failed: #ff4433; --nw-ok: #8a8272; --nw-manual: #c9b48c; --nw-warn: #ff8a2a;
+  --nw-tip-bg: #18171a; --nw-tip-ink: #d8d0c0;
+  /* finishes */
+  --ob-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  --ob-matte: var(--ob-grain), #0d0d0e;
+  --ob-gloss: linear-gradient(180deg, rgb(255 255 255 / .075) 0, rgb(255 255 255 / .02) 38%, transparent 39%), linear-gradient(180deg, #19191b, #09090a);
+  --ob-edge: inset 0 1px 0 rgb(255 255 255 / .09), inset 0 -1px 0 rgb(0 0 0 / .8);
+}
+
+/* @@BASE@@ (build_skins.py inserts minimal's layout here) */
+/* ================= Amber: the obelisk ================= */
+body { color: var(--nw-ink); }
+.nw-app { gap: 0; filter: drop-shadow(0 22px 40px rgb(0 0 0 / .65)) drop-shadow(0 0 1px rgb(0 0 0)); }
+/* matte bodies, flush: the seam is where two edges meet, each catching light */
+.nw-head, .nw-controls, .nw-timeline, .nw-log, .nw-lane > header, .nw-lane [data-part="body"] > *, .nw-alarm, .nw-confirm, .nw-glyphs,
+.nw-add > [data-part="add"], .nw-add [data-part="add-form"],
+.nw-settings, .nw-setup, .nw-add [data-part="preview"] { background: var(--ob-matte); outline: 0; box-shadow: var(--ob-edge); }
+/* gloss slabs */
+.nw-head { height: 42px; background: var(--ob-gloss); }
+.nw-head [data-part="title"] { font: 500 13px/1 var(--nw-cond); text-transform: uppercase; letter-spacing: .5em; color: var(--nw-ink); }
+.nw-head [data-part="schedule"], .nw-head [data-part="clock"] { color: var(--nw-ink-2); font-size: 11.5px; }
+.nw-head > button { color: var(--nw-ink-2); }
+.nw-head > button:hover, .nw-head > button[aria-expanded="true"] { color: var(--nw-ink); background: var(--nw-hover); }
+/* the glyph: a lit slit in the slab */
+.nw-glyph { --g: 14px; width: 3px; height: 16px; border-radius: 2px; background: var(--am); box-shadow: 0 0 8px var(--am), 0 0 18px var(--am-glow); }
+.nw-glyph[data-phase="night"] { -webkit-mask: none; mask: none; background: #6a6458; box-shadow: none; }
+.nw-glyph[data-phase="down"] { background: #2a2826; box-shadow: none; }
+.nw-glyph[data-phase="alarm"] { background: var(--nw-failed); box-shadow: 0 0 10px var(--nw-failed); }
+.nw-glyph[data-phase="alarm"]::before { display: none; }
+.nw-head [data-part="view-menu"] { border-radius: 2px; background: var(--ob-matte); border-color: rgb(255 255 255 / .08); box-shadow: 0 16px 40px rgb(0 0 0 / .7), var(--ob-edge); }
+.nw-head [data-part="view-menu"] label, .nw-head [data-part="view-menu"] button { font: 500 12px var(--nw-cond); text-transform: uppercase; letter-spacing: .12em; color: var(--nw-ink-2); }
+.nw-head [data-part="view-menu"] label:has(input:checked) { color: var(--nw-ink); }
+.nw-head [data-part="view-menu"] input { accent-color: #8a8272; }
+
+/* lanes: a gloss slab each, with the state as light leaking from a slit at the top */
+.nw-lane > header { border-radius: 0; background: var(--ob-gloss) !important;
+  box-shadow: var(--ob-edge), inset 0 2px 0 -1px color-mix(in srgb, var(--state) 70%, transparent), inset 0 10px 14px -12px var(--state) !important; }
+.nw-lane > header:hover { background: linear-gradient(rgb(255 255 255 / .03), rgb(255 255 255 / .03)), var(--ob-gloss) !important; }
+.nw-lane[data-state="sleeping"] > header, .nw-lane[data-state="down"] > header { box-shadow: var(--ob-edge) !important; }
+:is(.nw-lane [data-part="avatar"], .nw-persona [data-part="persona-avatar"]) { width: 4px; height: 26px; border-radius: 2px; font-size: 0; color: transparent; background: var(--state);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--state) 70%, transparent); }
+:is(.nw-lane[data-state="sleeping"] [data-part="avatar"], .nw-persona[data-state="sleeping"] [data-part="persona-avatar"]) { box-shadow: none; }
+.nw-lane [data-part="name"] { font: 500 15px/1.15 var(--nw-cond); text-transform: uppercase; letter-spacing: .16em; color: var(--nw-ink); }
+.nw-lane [data-part="model"] { font: 11px var(--nw-mono); color: var(--nw-ink-2); }
+.nw-lane [data-part="state"] { font: 500 10px var(--nw-cond); letter-spacing: .2em; color: color-mix(in srgb, var(--state) 70%, var(--nw-ink-2)); }
+.nw-lane [data-part="state"] i { width: 6px; height: 6px; border-radius: 1px; box-shadow: 0 0 6px var(--state) !important; }
+.nw-lane[data-state="failed"] [data-part="state"] { color: var(--nw-failed); }
+.nw-lane [data-part="toggle"] { color: var(--nw-ink-2); }
+.nw-lane [data-part="facts"] { font-family: var(--nw-mono); font-size: 11px; color: var(--nw-ink-2); }
+.nw-lane [data-part="next"], .nw-lane [data-part="glance"] time { color: var(--am-hi); text-shadow: 0 0 8px var(--am-glow); }
+
+/* instruments: a hairline on a tick scale. Context is a thin lit bar over a
+   10% scale; throughput is hairline columns over the same scale. */
+.nw-lane :is([data-part="context"] [data-part="bar"], [data-part="throughput"] svg:not(.nw-icon)) { height: 16px; border-radius: 0; box-shadow: none;
+  background: repeating-linear-gradient(90deg, rgb(255 255 255 / .1) 0 1px, transparent 1px 10%) bottom / 100% 4px no-repeat, linear-gradient(rgb(255 255 255 / .06) 0 0) bottom / 100% 1px no-repeat, var(--nw-sunk); }
+.nw-lane [data-part="context"] [data-part="bar"]::before { inset: auto auto 6px 0; height: 3px; border-radius: 0; width: calc(min(var(--fill), 1) * 100%);
+  background: linear-gradient(90deg, transparent, var(--meter)); box-shadow: 0 0 8px var(--meter), 0 0 2px var(--meter); }
+.nw-lane [data-part="context"] [data-part="bar"]::after { content: ""; position: absolute; bottom: 2px; width: 1px; height: 12px; left: calc(min(var(--fill), 1) * 100%); background: var(--meter); box-shadow: 0 0 6px var(--meter); }
+.nw-lane [data-part="throughput"] svg:not(.nw-icon) { padding: 2px 0 5px; }
+.nw-lane [data-part="throughput"] rect { fill: var(--meter); width: 1px; opacity: .9; filter: drop-shadow(0 0 2px var(--meter)); }
+.nw-lane :is([data-part="context"], [data-part="throughput"]) [data-part="value"] { color: var(--nw-ink); font-size: 10.5px; }
+.nw-lane [data-part="context"][data-level="high"] [data-part="value"] { color: var(--nw-warn); text-shadow: 0 0 8px rgb(255 138 42 / .5); }
+.nw-lane :is([data-part="context"], [data-part="throughput"]) > .nw-icon { color: var(--nw-ink-2); }
+.nw-lane [data-part="mini"] { height: 2px; border-radius: 0; background: rgb(255 255 255 / .07); }
+.nw-lane [data-part="mini"]::before { box-shadow: 0 0 6px var(--state); }
+
+/* keys: gloss, the danger key with a red slit */
+.nw-lane [data-part="actions"] button { border-radius: 2px; color: var(--nw-ink-2); }
+.nw-lane [data-part="actions"] button:hover { color: var(--nw-ink); background: var(--ob-gloss); box-shadow: var(--ob-edge); }
+.nw-lane [data-part="actions"] button[aria-expanded="true"] { color: var(--am-hi); background: var(--ob-gloss); box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--am); }
+[data-part="fix"], :is([data-part="buttons"], [data-part="session-row"]) button { border-radius: 2px; border: 0; background: var(--ob-gloss); box-shadow: var(--ob-edge); color: var(--nw-ink); font: 500 11.5px var(--nw-cond); letter-spacing: .1em; text-transform: uppercase; }
+[data-part="fix"]:first-child { background: var(--ob-gloss); color: #ffd1c9; box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--nw-failed), 0 6px 14px -8px var(--nw-failed); font-weight: 600; }
+[data-part="buttons"] button[data-primary="true"] { background: var(--ob-gloss); color: var(--am-hi); box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--am); }
+[data-part="buttons"] button[data-danger="true"] { color: #ff8a7a; }
+/* A confirm's danger button (Fold now, Fold all) is the act itself, not Remove's quiet link: it takes the
+   alert's emphasised-red look, dark gloss with a red underline glow (10/6, Ra: it read wrong as red-on-red). */
+.nw-confirm [data-part="buttons"] button[data-danger="true"] { background: var(--ob-gloss); color: #ffd1c9; font-weight: 600;
+  box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--nw-failed), 0 6px 14px -8px var(--nw-failed); }
+.nw-lane [data-part="settings"], .nw-add [data-part="add-form"] { background: var(--nw-sunk) !important; }
+.nw-lane [data-part="settings"] :is(select, input:not([type="checkbox"])), .nw-add :is(select, input:not([type="checkbox"])),
+:is(.nw-settings, .nw-setup) :is(select, textarea, input:not([type="checkbox"])) { border-radius: 2px; background: #0b0b0c; border-color: rgb(255 255 255 / .08); color: var(--nw-ink); font-family: var(--nw-mono); }
+input[type="checkbox"] { accent-color: #8a8272; }
+
+/* the one red thing */
+.nw-alert { background: linear-gradient(90deg, rgb(255 68 51 / .1), transparent 70%), var(--ob-matte) !important; box-shadow: var(--ob-edge), inset 2px 0 0 var(--nw-failed); }
+.nw-alert > .nw-icon { color: var(--nw-failed); filter: drop-shadow(0 0 4px var(--nw-failed)); }
+.nw-alert [data-part="title"] { color: #ffb3a8; font: 500 13px var(--nw-cond); text-transform: uppercase; letter-spacing: .12em; }
+.nw-alert [data-part="cause"] { color: var(--nw-ink-2); }
+.nw-alert [data-part="time"] { color: #ff8a7a; }
+
+/* add rail */
+.nw-add > [data-part="add"] { color: var(--nw-ink-2); background: var(--ob-gloss) !important; font-family: var(--nw-cond); text-transform: uppercase; letter-spacing: .2em; }
+.nw-add > [data-part="add"]:hover { color: var(--nw-ink); }
+
+/* the deck: a readout window and gloss keys; play has the lit slit */
+.nw-controls [data-part="display"] { border-radius: 0; background: var(--nw-sunk); box-shadow: inset 0 1px 3px rgb(0 0 0 / .9), 0 1px 0 rgb(255 255 255 / .05); }
+.nw-controls [data-part="summary"] { color: var(--nw-ink); font-family: var(--nw-cond); text-transform: uppercase; letter-spacing: .14em; font-size: 12px; }
+.nw-controls [data-part="summary"] b { color: var(--am-hi); text-shadow: 0 0 8px var(--am-glow); font-size: 16px; letter-spacing: 0; }
+.nw-controls [data-part="next"] { color: var(--nw-ink-2); font-size: 11.5px; } .nw-controls [data-part="next"] time { color: var(--am-hi); text-shadow: 0 0 8px var(--am-glow); }
+.nw-controls [data-part="counts"] li::before { border-radius: 1px; width: 3px; height: 10px; box-shadow: 0 0 6px var(--c); }
+.nw-controls [data-part="counts"] b { color: var(--nw-ink); }
+.nw-controls [data-part="transport"] button { border-radius: 2px; border: 0; background: var(--ob-gloss); box-shadow: var(--ob-edge), 0 2px 4px rgb(0 0 0 / .6); color: var(--nw-ink); }
+.nw-controls [data-part="primary"] { background: var(--ob-gloss) !important; color: var(--am-hi) !important; font: 500 12px var(--nw-cond) !important; text-transform: uppercase; letter-spacing: .16em;
+  box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--am), 0 8px 16px -10px var(--am) !important; }
+.nw-controls[data-setup="true"] [data-part="primary"] { color: #fff2d6 !important; }
+.nw-controls :is([data-part="toggles"], [data-part="transport"]) button[aria-pressed="true"] { color: var(--am-hi); background: transparent; box-shadow: inset 0 -2px 0 -1px var(--am); }
+
+/* timeline: hour ticks under a hairline; nodes are outlined diamonds */
+.nw-timeline [data-part="heading"], .nw-log [data-part="heading"] { font: 500 11.5px var(--nw-cond); letter-spacing: .3em; color: var(--nw-ink-2); }
+.nw-timeline [data-part="heading"] span { font-family: var(--nw-mono); letter-spacing: 0; color: var(--nw-ink-2); }
+.nw-timeline [data-part="range"] { border-radius: 2px; background: var(--nw-sunk); box-shadow: inset 0 1px 2px rgb(0 0 0 / .8); }
+.nw-timeline [data-part="range"] button { border-radius: 1px; color: var(--nw-ink-2); }
+.nw-timeline [data-part="range"] button[aria-checked="true"] { background: var(--ob-gloss); color: var(--am-hi); box-shadow: var(--ob-edge); }
+.nw-strip::before { font: 500 11px var(--nw-cond); text-transform: uppercase; letter-spacing: .16em; color: var(--nw-ink-2); }
+.nw-strip::after { height: 5px; top: 10px; background: linear-gradient(rgb(255 255 255 / .1) 0 0) top / 100% 1px no-repeat, repeating-linear-gradient(90deg, rgb(255 255 255 / .12) 0 1px, transparent 1px 12.5%) top / 100% 5px no-repeat; }
+/* the diamond is the node's ::before, so the node itself isn't clipped and
+   its ×3 badge can hang off the corner */
+.nw-node { width: 20px; height: 20px; top: 2px; border-radius: 0; border: 0; color: var(--c); background: none; box-shadow: none; isolation: isolate; }
+.nw-node::before { content: ""; position: absolute; inset: 0; z-index: -1; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--c) 16%, #0d0d0e) 55%, color-mix(in srgb, var(--c) 45%, #0d0d0e) 56%); }
+.nw-node .nw-icon { width: 10px; height: 10px; }
+.nw-node[data-status="ok"] { --c: #a59c8a; }
+.nw-node[data-alarm="true"] { background: none; color: #160604; filter: drop-shadow(0 0 5px var(--c)); }
+.nw-node[data-alarm="true"]::before { background: var(--c); }
+.nw-node [data-part="count"] { background: transparent; color: var(--c); }
+.nw-node [data-part="lanes"] i { border-radius: 1px; background: #2a2826; color: var(--nw-ink); }
+.nw-strip[data-mode="compressed"] .nw-node[style*="--stack: 1"], .nw-strip[data-mode="compressed"] .nw-node[style*="--stack: 2"] { box-shadow: none; }
+.nw-timeline [data-part="axis"] { color: var(--nw-ink-2); font-size: 9.5px; }
+
+/* log */
+.nw-log .nw-day { background: transparent; color: var(--nw-ink-2); font: 500 10.5px var(--nw-cond); letter-spacing: .3em; }
+.nw-log [data-part="filters"] label { border-radius: 2px; box-shadow: var(--ob-edge); background: var(--ob-gloss); color: var(--nw-ink-2); }
+.nw-log [data-part="filters"] label:has(input:checked) { color: var(--nw-ink); background: var(--ob-gloss); box-shadow: var(--ob-edge), inset 0 -2px 0 -1px #8a8272; }
+.nw-event { border-top-color: rgb(255 255 255 / .05); color: var(--nw-ink); }
+.nw-event [data-part="time"] { color: var(--nw-ink-2); }
+.nw-event [data-part="lane"] { font: 500 11px var(--nw-cond); text-transform: uppercase; letter-spacing: .12em; color: var(--nw-ink-2); }
+.nw-event > .nw-icon { color: var(--nw-ink-2); }
+.nw-event[data-status="failed"] > .nw-icon { color: var(--nw-failed); }
+.nw-event[data-alarm="true"] [data-part="what"] { color: #ff9a8c; font-weight: 500; }
+.nw-event [data-part="kept"] { background: linear-gradient(90deg, rgb(255 176 0 / .14) calc(var(--kept) * 100%), transparent 0) no-repeat; color: var(--nw-ink); }
+.nw-event[data-level="over"] [data-part="est"] { color: var(--nw-warn); }
+
+/* activity: a dim amber trace on the tick scale */
+.nw-timeline [data-part="activity"] { --act: var(--am); }
+.nw-timeline [data-part="activity"]::before { font: 500 10px var(--nw-cond); letter-spacing: .2em; text-transform: uppercase; color: var(--nw-ink-2); }
+.nw-timeline [data-part="activity"] [data-part="grid"] line { stroke: rgb(255 255 255 / .08); stroke-dasharray: none; }
+.nw-timeline [data-part="activity"] [data-part="fill-top"] { stop-opacity: .2; }
+.nw-timeline [data-part="activity"] [data-part="line"] { stroke-width: 1.25; filter: drop-shadow(0 0 3px var(--am)); }
+.nw-timeline :is([data-part="activity"], [data-part="sleep-bands"]) [data-part="sleep"] { background: repeating-linear-gradient(-45deg, rgb(255 255 255 / .045) 0 2px, transparent 2px 7px); border-radius: 0;
+  font: 500 9.5px var(--nw-cond); letter-spacing: .3em; text-transform: uppercase; color: #4a4640; }
+.nw-timeline [data-part="activity"] [data-part="peak"] { border-radius: 0; background: transparent; box-shadow: none; color: var(--am-hi); text-shadow: 0 0 6px var(--am-glow); }
+.nw-timeline [data-part="activity"] [data-part="peak"]::after { border-radius: 0; rotate: 45deg; box-shadow: 0 0 6px var(--am); }
+:is(.nw-timeline, .nw-log) [data-part="empty"] { font: 500 11px var(--nw-cond); letter-spacing: .18em; text-transform: uppercase; color: var(--nw-ink-2); }
+
+/* Hover keeps this theme's surface (the base layout's hover paints a faint
+   translucent tint, which on a solid theme read as the button vanishing;
+   Ra, 10/6). Brighten instead. */
+.nw-app .nw-add > [data-part="add"]:hover { background: var(--ob-gloss) !important; filter: brightness(1.12); }
+
+/* Vertical layout (10/6): the lane line is the same faint ruler stood on end. Squeezed to the base 2px width the
+   horizontal ruler drew nothing at all. */
+.nw-app[data-layout="column"] .nw-strip::after { width: 5px; left: calc(50% - 2.5px);
+  background: linear-gradient(rgb(255 255 255 / .1) 0 0) left / 1px 100% no-repeat, repeating-linear-gradient(180deg, rgb(255 255 255 / .12) 0 1px, transparent 1px 12.5%) left / 5px 100% no-repeat; }
+
+/* The vertical timeline's hour lines, as the graph draws them here: faint, solid (10/6). */
+:root { --tl-grid: rgb(255 255 255 / .08); --tl-grid-mask: none; }
+/* "now" reads like the lane labels beside it: dimmer, condensed caps (Ra, 10/6). */
+.nw-app[data-layout="column"] .nw-timeline [data-part="axis"]::before { font: 500 11px var(--nw-cond); text-transform: uppercase; letter-spacing: .16em; color: var(--nw-ink-2); }
+
+/* Persona names (10/7): the obelisk's gloss, and the lane name's condensed capitals, one size up and spaced wider,
+   so the persona reads above its agents. */
+/* The persona wears a card header's top light: the state's line and its soft glow under the edge (Ra, 10/7). */
+.nw-persona { --nw-persona-bg: var(--ob-gloss); --nw-persona-outline: none;
+  --nw-persona-shadow: var(--ob-edge), inset 0 2px 0 -1px color-mix(in srgb, var(--state) 70%, transparent), inset 0 10px 14px -12px var(--state); }
+.nw-app .nw-persona [data-part="persona-name"] { font: 600 15px/1 var(--nw-cond); letter-spacing: .3em; color: var(--nw-ink); }
+.nw-persona { --nw-spine-top: 11.1px; } /* bar centred on the cards' bars (measured, 10/7) */
+
+/* Round 5 (Ra, 10/7): the lights are the obelisk's small glowing squares (a card's state mark); the tray is a darker
+   well under a hairline. */
+:root { --nw-gutter-w: 57px; }
+.nw-persona [data-part="persona-agents"] li { width: 7px; height: 7px; border-radius: 1px; box-shadow: 0 0 6px var(--state); }
+.nw-persona [data-part="persona-agents"] li[data-state="sleeping"] { box-shadow: none; }
+.nw-persona [data-part="persona-body"] { --nw-persona-tray: rgb(0 0 0 / .28); }

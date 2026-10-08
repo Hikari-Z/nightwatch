@@ -1,0 +1,176 @@
+/* Nightwatch skin: Glass (contract v0.5). Frosted panes over the desktop.
+   Built on minimal's layout; every module is a pane of glass: a translucent
+   fill, a backdrop blur, a bright top edge, its own soft shadow. Panes sit a
+   few pixels apart like widgets, not hairline-joined like minimal's rack.
+   One trap worth knowing: a `filter` on an ancestor makes it a backdrop root,
+   and every pane under it blurs only the app's own (empty) layer. So no
+   app-level drop-shadow here: each pane casts its own. */
+
+:root {
+  --nw-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+  --nw-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --nw-seam: rgb(0 0 0 / .08);
+  --nw-surface: rgb(255 255 255 / .56);
+  --nw-sunk: rgb(0 0 0 / .06);
+  --nw-ink: #111114;
+  --nw-ink-2: rgb(20 20 30 / .58);
+  --nw-hover: rgb(255 255 255 / .45);
+  --nw-awake: #0a84ff; --nw-belled: #ff9f0a; --nw-folding: #bf5af2; --nw-sleeping: #64748b;
+  --nw-orphaned: #ff375f; --nw-failed: #ff3b30; --nw-ok: #30b158; --nw-manual: #0a84ff; --nw-warn: #ff9f0a;
+  --nw-tip-bg: rgb(30 30 36 / .86); --nw-tip-ink: #fff;
+  --nw-lane-w: 236px;
+  --nw-stack-w: 380px;
+  --nw-closed-h: 100px;
+  --gl-blur: blur(26px) saturate(1.8);
+  --gl-edge: inset 0 0 0 1px rgb(255 255 255 / .55), inset 0 1px 0 rgb(255 255 255 / .9);
+  --gl-shadow: 0 10px 30px rgb(0 0 0 / .16), 0 1px 3px rgb(0 0 0 / .1);
+  --gl-r: 14px;
+}
+/* Appearance (View menu, 10/6): this skin has both looks. Unset = follow the system; the runtime sets
+   data-theme="light"|"dark" when the viewer picks one. Native controls follow the same choice. */
+:root { --nw-appearances: both; color-scheme: light dark; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --nw-seam: rgb(255 255 255 / .1); --nw-surface: rgb(30 30 38 / .5); --nw-sunk: rgb(0 0 0 / .28); --nw-ink: #f4f4f7; --nw-ink-2: rgb(235 235 245 / .6);
+    --nw-hover: rgb(255 255 255 / .1); --nw-sleeping: #94a3b8; --nw-tip-bg: rgb(245 245 250 / .9); --nw-tip-ink: #111;
+    --gl-edge: inset 0 0 0 1px rgb(255 255 255 / .14), inset 0 1px 0 rgb(255 255 255 / .22);
+    --gl-shadow: 0 12px 34px rgb(0 0 0 / .45), 0 1px 3px rgb(0 0 0 / .3); }
+}
+/* the same, when the viewer picks Dark (View menu > Appearance) */
+:root[data-theme="dark"] { --nw-seam: rgb(255 255 255 / .1); --nw-surface: rgb(30 30 38 / .5); --nw-sunk: rgb(0 0 0 / .28); --nw-ink: #f4f4f7; --nw-ink-2: rgb(235 235 245 / .6);
+    --nw-hover: rgb(255 255 255 / .1); --nw-sleeping: #94a3b8; --nw-tip-bg: rgb(245 245 250 / .9); --nw-tip-ink: #111;
+    --gl-edge: inset 0 0 0 1px rgb(255 255 255 / .14), inset 0 1px 0 rgb(255 255 255 / .22);
+    --gl-shadow: 0 12px 34px rgb(0 0 0 / .45), 0 1px 3px rgb(0 0 0 / .3); }
+
+/* @@BASE@@ (build_skins.py inserts minimal's layout here) */
+/* ================= Glass: panes instead of a rack ================= */
+.nw-app { gap: 8px; filter: none; }
+.nw-lanes { gap: 8px; }
+/* the panes */
+.nw-head, .nw-controls, .nw-timeline, .nw-log, .nw-lane, .nw-add > [data-part="add"], .nw-add[data-open="true"], .nw-alarm, .nw-confirm, .nw-glyphs, .nw-head [data-part="view-menu"],
+.nw-settings, .nw-setup, .nw-add [data-part="preview"] {
+  background: var(--nw-surface); -webkit-backdrop-filter: var(--gl-blur); backdrop-filter: var(--gl-blur);
+  border-radius: var(--gl-r); box-shadow: var(--gl-edge), var(--gl-shadow); outline: none; border: 0; }
+/* everything inside a pane is clear glass, split by hairlines */
+.nw-lane > header, .nw-lane [data-part="body"] > *, .nw-add > [data-part="add"] ~ *, .nw-add[data-open="true"] > [data-part="add"] { outline: none; background: transparent; }
+.nw-lane [data-part="body"] { gap: 0; }
+.nw-lane [data-part="body"] > * { border-top: 1px solid var(--nw-seam); }
+.nw-lane > header { border-radius: var(--gl-r) var(--gl-r) 0 0; box-shadow: inset 0 3px 0 var(--state);
+  background: linear-gradient(color-mix(in srgb, var(--state) 14%, transparent), transparent) !important; }
+.nw-lane[data-open="false"] > header { border-radius: var(--gl-r); }
+.nw-lane > header:hover { background: linear-gradient(color-mix(in srgb, var(--state) 22%, transparent), transparent) !important; }
+:is(.nw-lane [data-part="avatar"], .nw-persona [data-part="persona-avatar"]) { border-radius: 8px; box-shadow: inset 0 1px 0 rgb(255 255 255 / .4), 0 2px 6px color-mix(in srgb, var(--state) 45%, transparent); }
+.nw-head { height: 40px; }
+.nw-head > button:hover, .nw-head > button[aria-expanded="true"] { background: var(--nw-hover); }
+.nw-head [data-part="view-menu"] { border-radius: 12px; }
+
+/* meters: glass tubes with a lit fill */
+.nw-lane :is([data-part="context"] [data-part="bar"], [data-part="throughput"] svg:not(.nw-icon)) { border-radius: 7px; background: var(--nw-sunk); box-shadow: inset 0 1px 2px rgb(0 0 0 / .12), 0 1px 0 rgb(255 255 255 / .5); }
+.nw-lane [data-part="context"] [data-part="bar"]::before { border-radius: 5px; background: linear-gradient(color-mix(in srgb, var(--meter) 70%, #fff), var(--meter)); box-shadow: 0 0 8px color-mix(in srgb, var(--meter) 55%, transparent); }
+.nw-lane [data-part="throughput"] rect { fill: var(--meter); filter: drop-shadow(0 0 1.5px color-mix(in srgb, var(--meter) 60%, transparent)); }
+.nw-lane [data-part="mini"] { height: 5px; border-radius: 3px; background: var(--nw-sunk); }
+
+/* alert: red-tinted glass */
+.nw-alert { background: rgb(255 59 48 / .12) !important; box-shadow: inset 3px 0 0 var(--nw-failed); border-top-color: transparent !important; }
+[data-part="fix"] { border-radius: 8px; background: rgb(255 255 255 / .55); border-color: var(--nw-seam); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+[data-part="fix"]:first-child { background: var(--nw-failed); box-shadow: 0 2px 8px rgb(255 59 48 / .35); }
+:is([data-part="buttons"], [data-part="session-row"]) button { border-radius: 8px; background: rgb(255 255 255 / .5); }
+.nw-lane [data-part="settings"], .nw-add [data-part="add-form"] { background: var(--nw-sunk) !important; border-radius: 0 0 var(--gl-r) var(--gl-r); }
+.nw-lane [data-part="actions"] button:hover { background: var(--nw-hover); }
+
+/* the add pane */
+.nw-add { background: none; }
+.nw-add[data-open="false"] > [data-part="add"] { border-radius: var(--gl-r); }
+.nw-add[data-open="true"] { display: flex; flex-direction: column; }
+.nw-add[data-open="true"] > [data-part="add"] { box-shadow: inset 0 3px 0 var(--nw-awake); border-radius: var(--gl-r) var(--gl-r) 0 0; }
+
+/* panels */
+.nw-timeline [data-part="range"] { border-radius: 8px; background: var(--nw-sunk); box-shadow: inset 0 1px 2px rgb(0 0 0 / .1); }
+.nw-timeline [data-part="range"] button[aria-checked="true"] { border-radius: 6px; background: rgb(255 255 255 / .75); box-shadow: 0 1px 3px rgb(0 0 0 / .15); }
+.nw-node { background: rgb(255 255 255 / .85); }
+.nw-strip::after { background: color-mix(in srgb, var(--nw-ink-2) 30%, transparent); }
+.nw-log .nw-day { background: transparent; -webkit-backdrop-filter: var(--gl-blur); backdrop-filter: var(--gl-blur); }
+.nw-log [data-part="filters"] label { border-radius: 8px; }
+.nw-log [data-part="filters"] label:has(input:checked) { background: rgb(255 255 255 / .55); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .nw-timeline [data-part="range"] button[aria-checked="true"], :root:not([data-theme="light"]) .nw-log [data-part="filters"] label:has(input:checked), :root:not([data-theme="light"]) [data-part="fix"], :root:not([data-theme="light"]) :is([data-part="buttons"], [data-part="session-row"]) button { background: rgb(255 255 255 / .12); }
+  :root:not([data-theme="light"]) .nw-node { background: rgb(30 30 38 / .9); }
+  :root:not([data-theme="light"]) .nw-lane :is([data-part="context"] [data-part="bar"], :root:not([data-theme="light"]) [data-part="throughput"] svg:not(.nw-icon)) { box-shadow: inset 0 1px 2px rgb(0 0 0 / .4), 0 1px 0 rgb(255 255 255 / .06); }
+}
+/* the same, when the viewer picks Dark (View menu > Appearance) */
+:root[data-theme="dark"] .nw-timeline [data-part="range"] button[aria-checked="true"], :root[data-theme="dark"] .nw-log [data-part="filters"] label:has(input:checked), :root[data-theme="dark"] [data-part="fix"], :root[data-theme="dark"] :is([data-part="buttons"], [data-part="session-row"]) button { background: rgb(255 255 255 / .12); }
+:root[data-theme="dark"] .nw-node { background: rgb(30 30 38 / .9); }
+:root[data-theme="dark"] .nw-lane :is([data-part="context"] [data-part="bar"], :root[data-theme="dark"] [data-part="throughput"] svg:not(.nw-icon)) { box-shadow: inset 0 1px 2px rgb(0 0 0 / .4), 0 1px 0 rgb(255 255 255 / .06); }
+.nw-log .nw-day { position: static; -webkit-backdrop-filter: none; backdrop-filter: none; }   /* a sticky frosted bar read heavy */
+
+/* the deck */
+.nw-controls [data-part="display"] { border-radius: 10px; background: var(--nw-sunk); box-shadow: inset 0 1px 2px rgb(0 0 0 / .1); }
+.nw-controls [data-part="transport"] button { border-radius: 10px; background: rgb(255 255 255 / .5); border-color: rgb(255 255 255 / .6); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+.nw-controls [data-part="primary"] { box-shadow: 0 4px 14px color-mix(in srgb, var(--nw-awake) 45%, transparent); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .nw-controls [data-part="transport"] button { background: rgb(255 255 255 / .1); border-color: rgb(255 255 255 / .12); }
+}
+/* the same, when the viewer picks Dark (View menu > Appearance) */
+:root[data-theme="dark"] .nw-controls [data-part="transport"] button { background: rgb(255 255 255 / .1); border-color: rgb(255 255 255 / .12); }
+
+/* ---- the core module is one piece of glass (Ra, round 9) ----
+   Head + deck + timeline + log join with hairline seams and round only at the
+   outer corners; the agent panes below keep floating. The app's gap is 0, and
+   the lanes subgrid sets its own gap (subgrid may) plus a top margin. */
+.nw-app { gap: 0; }
+.nw-lanes { margin-top: 8px; column-gap: 8px; }
+.nw-head, .nw-controls, .nw-timeline, .nw-log { border-radius: 0; box-shadow: var(--gl-edge); }
+.nw-head { border-radius: var(--gl-r) var(--gl-r) 0 0; box-shadow: var(--gl-edge), 0 -6px 24px -10px rgb(0 0 0 / .18); }
+.nw-controls, .nw-timeline, .nw-log { box-shadow: inset 0 1px 0 rgb(255 255 255 / .35), inset 1px 0 0 rgb(255 255 255 / .28), 0 12px 24px -14px rgb(0 0 0 / .3); }
+.nw-app[data-show-controls="true"] .nw-controls { border-bottom-left-radius: var(--gl-r); }
+.nw-app[data-show-log="true"] .nw-log { border-bottom-right-radius: var(--gl-r); }
+.nw-app[data-show-log="false"] .nw-timeline { border-bottom-right-radius: var(--gl-r); }
+.nw-app[data-show-timeline="false"][data-show-log="false"] .nw-controls { border-radius: 0 0 var(--gl-r) var(--gl-r); }
+.nw-app[data-layout="stack"] .nw-controls, .nw-app[data-layout="stack"] .nw-timeline { border-radius: 0; }
+.nw-app[data-layout="stack"] .nw-log { border-radius: 0 0 var(--gl-r) var(--gl-r); }
+
+/* The menus hang below the head, and a backdrop-filter nested inside the head's own can only sample the head,
+   so the frost never reached what's under the menu and it read see-through (10/6). Menus get a near-opaque pane. */
+.nw-head [data-part="view-menu"] { background: rgb(248 248 251 / .95); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .nw-head [data-part="view-menu"] { background: rgb(30 30 38 / .95); } }
+:root[data-theme="dark"] .nw-head [data-part="view-menu"] { background: rgb(30 30 38 / .95); }
+
+/* An inactive window (10/6): macOS only lets the frost sample the desktop while the window is active. Clicked
+   away, the panes kept just their thin tint and read see-through over a busy window (Ra: over this terminal).
+   So when the window isn't active, every pane goes near-opaque in the same colour. */
+@media (prefers-color-scheme: light) { :root[data-window-active="false"]:not([data-theme="dark"]) { --nw-surface: rgb(246 246 250 / .95); --nw-sunk: rgb(232 232 238 / .95); } }
+:root[data-window-active="false"][data-theme="light"] { --nw-surface: rgb(246 246 250 / .95); --nw-sunk: rgb(232 232 238 / .95); }
+@media (prefers-color-scheme: dark) { :root[data-window-active="false"]:not([data-theme="light"]) { --nw-surface: rgb(30 30 38 / .95); --nw-sunk: rgb(18 18 24 / .95); } }
+:root[data-window-active="false"][data-theme="dark"] { --nw-surface: rgb(30 30 38 / .95); --nw-sunk: rgb(18 18 24 / .95); }
+
+/* Persona rows (10/7): Glass hangs each persona's name off the app's left edge like a tab, so its floating
+   panes keep their columns. */
+:root { --nw-persona-label: hang; }
+/* The persona name is one of Glass's panes in every layout (the tab, the column header, the stack heading):
+   same frost, edge, shadow and corner, so it reads over any desktop (Ra, 10/7: it had lost its border and shape). */
+.nw-persona { --nw-persona-bg: var(--nw-surface); --nw-persona-outline: none; --nw-persona-shadow: inset 0 3px 0 var(--state), var(--gl-edge), var(--gl-shadow); --nw-persona-r: var(--gl-r); --nw-persona-blur: var(--gl-blur); }
+/* ...and it's set like Glass's own names (Ra, 10/7: "still slightly off-style"): sentence case, semibold system
+   type a step above a lane's name, no tracking; a softer corner on the tab than a full pill. */
+.nw-app .nw-persona [data-part="persona-name"] { font: 650 15.5px/1.1 var(--nw-font); letter-spacing: .005em; text-transform: none; color: var(--nw-ink); }
+/* The tab is two columns (round 5); the columns carry the padding, and the tray takes the tab's softer corner. */
+:root { --nw-spine-pad-x: 7px; }
+.nw-app[data-persona-label="hang"]:not([data-layout="stack"], [data-layout="column"]) .nw-persona { --nw-persona-r: 12px; }
+
+
+/* ---- Vertical: the core module is the head plus the left column (Ra, 10/7) ----
+   Joined like Horizontal's, and the persona columns float beside it with the same 8px they keep below the head.
+   The head runs over the agent column, so its own lower-right corner rounds; the left column is square except the
+   bottom of whichever pane is last. */
+.nw-app[data-layout="column"] { column-gap: 8px; }
+.nw-app[data-layout="column"] .nw-head { border-radius: var(--gl-r) var(--gl-r) var(--gl-r) 0; }
+.nw-app[data-layout="column"] :is(.nw-controls, .nw-timeline, .nw-log) { border-radius: 0; }
+.nw-app[data-layout="column"][data-show-log="true"] .nw-log,
+.nw-app[data-layout="column"][data-show-log="false"][data-show-timeline="true"] .nw-timeline,
+.nw-app[data-layout="column"][data-show-log="false"][data-show-timeline="false"] .nw-controls { border-radius: 0 0 var(--gl-r) var(--gl-r); }
+/* ...and inside a persona column the cards keep the 8px they float with in Horizontal. */
+.nw-app[data-layout="column"] .nw-persona { row-gap: 8px; }
+.nw-persona { --nw-spine-top: 12.6px; } /* badge centred on the cards' avatars (measured, 10/7) */
+/* Glass's Horizontal deck is a card-width narrower than the others (no gutter): a slimmer Wake all keeps the
+   transport's squares full size on their line (10/7). */
+.nw-app:not([data-layout="column"]) .nw-controls [data-part="transport"] > [data-part="primary"] { padding-inline: 8px 10px; }

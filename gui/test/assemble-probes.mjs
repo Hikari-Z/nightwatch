@@ -1,0 +1,187 @@
+#!/usr/bin/env node
+// Fake-io probes for gui/assemble.mjs — the derivations that have bitten.
+// Pure io injection means no scratch dirs, no live files, no daemons.
+//
+//   node gui/test/assemble-probes.mjs
+//
+// Written by: claude-fable-5, 2026-10-06
+import { assemble } from '../assemble.mjs';
+
+const cfg = {
+  timezone: 'America/Los_Angeles', defaultLane: 'fable',
+  schedule: { sleep: '02:00', wake: '08:00' },
+  lanes: { fable: { targetTokens: 250_000, switchboard: true } },
+  paths: { events: '/ev', wakecycle: '/wc', transcripts: '/tx', armedFile: '/armed', folds: '/folds' },
+};
+const NOW = Date.now();
+const iso = (agoMs) => new Date(NOW - agoMs).toISOString();
+
+let failures = 0;
+const check = (name, pass, detail) => {
+  console.log(`${pass ? 'PASS' : 'FAIL'} ${name}${pass ? '' : ` — ${detail}`}`);
+  if (!pass) failures++;
+};
+
+// A transcript line carrying one API reply's usage.
+const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
+  timestamp: iso(agoMs),
+  message: { id, model: 'claude-fable-5', usage: { input_tokens: ctxTokens, output_tokens: outTokens } },
+});
+
+// ---- probes 1–4: DAEMON phase derivation (v0.9.1, first landed inline)
+{
+  const io = (events) => ({
+    readText: (p) => p === '/ev' ? events : p === '/armed' ? 'fable' : null,
+    readDir: () => [], stat: () => null, readTail: () => null,
+    livePids: () => [], psCommand: () => null, now: () => NOW,
+  });
+  const beat = (agoMs) => JSON.stringify({ at: iso(agoMs), kind: 'daemon-alive', armed: ['fable'] });
+
+  let s = assemble(cfg, io(beat(2 * 3600e3)), '8h');
+  check('stale heartbeat → down, per-episode ackId',
+    s.DAEMON.phase === 'down' && s.ALARMS[0]?.ackId.startsWith('daemon-down:2'),
+    JSON.stringify([s.DAEMON.phase, s.ALARMS[0]?.ackId]));
+
+  s = assemble(cfg, io(''), '8h');
+  check('no heartbeat ever → down, honest cause',
+    s.DAEMON.phase === 'down' && s.ALARMS[0]?.cause.startsWith('No nightshift heartbeat yet'),
+    JSON.stringify([s.DAEMON.phase, s.ALARMS[0]?.cause]));
+
+  s = assemble(cfg, io(beat(60e3)), '8h');
+  check('fresh heartbeat → day, no alarms', s.DAEMON.phase === 'day' && s.ALARMS.length === 0,
+    JSON.stringify([s.DAEMON.phase, s.ALARMS.length]));
+
+  const failed = [beat(60e3), JSON.stringify({ at: iso(30e3), kind: 'wake-failed', lane: 'fable', alarm: true })].join('\n');
+  s = assemble(cfg, io(failed), '8h');
+  check('failed lane → phase alarm (derived from LANES)',
+    s.DAEMON.phase === 'alarm' && s.LANES[0].state === 'failed' && s.LANES[0].alert?.kind === 'wake-failed',
+    JSON.stringify([s.DAEMON.phase, s.LANES[0].state]));
+}
+
+// ---- probe 5: fork-wake stats source (10/6 phantom-833k bug).
+// A --resume <tail> --fork-session wake shows the TAIL sid in ps, but the
+// live session writes the REGISTRY sid's transcript. Label AND stats must
+// both follow the registry sid when its pid is alive; the frozen tail's
+// transcript is last night's context, which nothing writes any more.
+{
+  const REG = 'aaaaaaaa-1111-1111-1111-111111111111'; // live session (registry, pid alive)
+  const TAIL = 'bbbbbbbb-2222-2222-2222-222222222222'; // frozen tail (ps --resume arg)
+  const transcripts = {
+    [`/tx/${REG}.jsonl`]: usageLine('msg_fresh', 5 * 60e3, 552_000, 900),
+    [`/tx/${TAIL}.jsonl`]: usageLine('msg_stale', 14 * 3600e3, 833_000, 50_000),
+  };
+  const io = {
+    readText: (p) => p === '/ev' ? JSON.stringify({ at: iso(60e3), kind: 'daemon-alive', armed: ['fable'] })
+      : p === '/armed' ? 'fable'
+        : p === `/wc/lane.${REG}` ? JSON.stringify({ lane: 'fable', pid: 100 })
+          : transcripts[p] ?? null,
+    readDir: (p) => p === '/wc' ? [`lane.${REG}`] : [],
+    stat: (p) => transcripts[p] ? { size: transcripts[p].length, mtimeMs: NOW - 60e3 } : (p.startsWith('/wc/') ? { size: 1, mtimeMs: NOW - 3600e3 } : null),
+    readTail: (p) => transcripts[p] ?? null,
+    livePids: () => [100],
+    psCommand: (pid) => pid === 100 ? `claude --resume ${TAIL} --fork-session` : null,
+    now: () => NOW,
+  };
+  const s = assemble(cfg, io, '8h');
+  const L = s.LANES[0];
+  check('fork-wake: label follows the registry sid', L.session === REG.slice(0, 8),
+    `session=${L.session}`);
+  check('fork-wake: STATS follow the registry sid too (not the frozen tail)',
+    L.ctx === 552_000, `ctx=${L.ctx} (833000 = reading the tail again)`);
+  check('fork-wake: throughput series is the live transcript\'s',
+    L.series.reduce((a, b) => a + b, 0) === 900, `series total=${L.series.reduce((a, b) => a + b, 0)}`);
+}
+
+
+// ---- probes: Fold now narration (Ra's refresh ruling, 10/6; claude-opus-5-5)
+{
+  const io = (events) => ({
+    readText: (p) => p === '/ev' ? events : p === '/armed' ? 'fable' : null,
+    readDir: () => [], stat: () => null, readTail: () => null,
+    livePids: () => [], psCommand: () => null, now: () => NOW,
+  });
+  const ev = (agoMs, kind, extra = {}) => JSON.stringify({ at: iso(agoMs), kind, lane: 'fable', ...extra });
+  const alive = JSON.stringify({ at: iso(30e3), kind: 'daemon-alive', armed: ['fable'] });
+  const deadline = new Date(NOW + 7 * 60e3).toISOString();
+  let s = assemble(cfg, io([alive, ev(180e3, 'fold-requested', { deadline })].join('\n')), '8h');
+  check('fold-requested alone → pending with its deadline',
+    s.LANES[0].foldRequest?.phase === 'requested' && s.LANES[0].foldRequest?.deadline === deadline, JSON.stringify(s.LANES[0].foldRequest));
+  s = assemble(cfg, io([alive, ev(180e3, 'fold-requested', { deadline }), ev(60e3, 'fold-forced', { reason: 'deadline' })].join('\n')), '8h');
+  check('forced, not yet woken → refreshing (forced)',
+    s.LANES[0].foldRequest?.phase === 'refreshing' && s.LANES[0].foldRequest?.forced === true, JSON.stringify(s.LANES[0].foldRequest));
+  s = assemble(cfg, io([alive, ev(180e3, 'fold-requested', { deadline }), ev(90e3, 'fold-request-met'), ev(20e3, 'wake-confirmed')].join('\n')), '8h');
+  check('met then woken → no narration left', s.LANES[0].foldRequest === undefined, JSON.stringify(s.LANES[0].foldRequest));
+}
+
+
+// ---- probe: every lane keeps its timeline row in a quiet range (10/6; claude-opus-5-5)
+{
+  const cfg2 = { ...cfg, lanes: { fable: { targetTokens: 250_000, switchboard: true }, opus: { targetTokens: 250_000 } } };
+  const io = (events) => ({
+    readText: (p) => p === '/ev' ? events : p === '/armed' ? 'fable,opus' : null,
+    readDir: () => [], stat: () => null, readTail: () => null,
+    livePids: () => [], psCommand: () => null, now: () => NOW,
+  });
+  const ev = JSON.stringify({ at: iso(30 * 60e3), kind: 'bell-rung', lane: 'opus' });
+  const old = JSON.stringify({ at: iso(10 * 3600e3), kind: 'wake-confirmed', lane: 'fable' });
+  const s = assemble(cfg2, io([old, ev].join('\n')), '8h');
+  check('8h: a lane with no event in range still has its row', JSON.stringify(Object.keys(s.NIGHT)) === '["fable","opus"]' && s.NIGHT.fable.length === 0,
+    JSON.stringify(Object.keys(s.NIGHT)));
+}
+
+
+// ---- probes: the throughput strip follows the selected range (10/6; claude-opus-5-5)
+{
+  const cfg3 = { ...cfg, lanes: { fable: { targetTokens: 250_000, switchboard: true }, opus: { targetTokens: 250_000 } } };
+  const line = (id, agoMs, out) => JSON.stringify({ timestamp: iso(agoMs), message: { id, model: 'claude-opus-5-5', usage: { input_tokens: 1, output_tokens: out } } });
+  const files = {
+    '/tx/old.jsonl': [line('r1', 20 * 3600e3, 100), line('r2', 2 * 3600e3, 10)].join('\n') + '\n',
+    // a fork-session wake copies r2 into the new file; it must count once
+    '/tx/new.jsonl': [line('r2', 2 * 3600e3, 10), line('r3', 30 * 60e3, 1)].join('\n') + '\n',
+    '/tx/stranger.jsonl': line('x1', 30 * 60e3, 5000) + '\n',
+    '/wc/lane.new': JSON.stringify({ lane: 'opus', pid: 1 }),
+  };
+  const io = {
+    readText: (p) => p === '/ev' ? JSON.stringify({ at: iso(60e3), kind: 'folded', lane: 'opus', tail: 'old' }) : p === '/armed' ? 'fable,opus' : files[p] ?? null,
+    readDir: (d) => Object.keys(files).filter((p) => p.startsWith(d + '/')).map((p) => p.slice(d.length + 1)),
+    stat: (p) => files[p] != null ? { size: files[p].length, mtimeMs: NOW - 60e3 } : null,
+    readTail: (p, n) => files[p] != null ? files[p].slice(-n) : null,
+    livePids: () => [], psCommand: () => null, now: () => NOW,
+  };
+  const s8 = assemble(cfg3, io, '8h'), s24 = assemble(cfg3, io, '24h');
+  const sum = (a) => a.reduce((x, y) => x + y, 0);
+  check('8h strip: 10-minute buckets, the copied reply counted once, strangers left out', s8.TIMELINE.bucket_min === 10 && sum(s8.ACTIVITY) === 11, JSON.stringify([s8.TIMELINE.bucket_min, sum(s8.ACTIVITY)]));
+  check('24h strip: 30-minute buckets, reaches back to the 20h-old reply', s24.TIMELINE.bucket_min === 30 && sum(s24.ACTIVITY) === 111 && s24.ACTIVITY.length === 48, JSON.stringify([s24.TIMELINE.bucket_min, sum(s24.ACTIVITY)]));
+}
+
+// ---- spiralwatch canary card (Ra, 10/7): spiral-alarm events become lane
+// alerts; an episode ends when the session folds/re-wakes/closes; a
+// wake-failed outranks it.
+{
+  const ev = (rows) => rows.map((r) => JSON.stringify(r)).join('\n');
+  const spiral = { at: iso(30 * 60e3), kind: 'spiral-alarm', lane: 'fable', session: 'sess-x', errors: 4, windowMin: 60, alarm: true };
+  const io = (events) => ({
+    readText: (p) => p === '/ev' ? events : p === '/armed' ? 'fable' : null,
+    readDir: () => [], stat: () => null, readTail: () => null,
+    livePids: () => [], psCommand: () => null, now: () => NOW,
+  });
+  const live = assemble(cfg, io(ev([spiral])), '8h');
+  const L = live.LANES.find((x) => x.id === 'fable');
+  check('spiral-alarm event raises the lane alert card', L?.alert?.kind === 'spiral-alarm' && /4 API errors in 60m/.test(L.alert.cause) && L.alert.at[0] === spiral.at, JSON.stringify(L?.alert ?? null));
+  const endedS = assemble(cfg, io(ev([spiral, { at: iso(10 * 60e3), kind: 'folded', lane: 'fable', tail: 't' }])), '8h');
+  check('a later fold ends the spiral episode (no card)', endedS.LANES.find((x) => x.id === 'fable')?.alert == null, JSON.stringify(endedS.LANES.find((x) => x.id === 'fable')?.alert ?? null));
+  const both = assemble(cfg, io(ev([spiral, { at: iso(5 * 60e3), kind: 'wake-failed', lane: 'fable', cause: 'checkpoint missing', alarm: true }])), '8h');
+  const Lb = both.LANES.find((x) => x.id === 'fable');
+  check('wake-failed outranks the spiral card', Lb?.alert?.kind === 'wake-failed', JSON.stringify(Lb?.alert?.kind ?? null));
+}
+
+// ---- the midnight hour reads 00, never 24 (en-US with hour12:false wrote "24:32"; Ra saw it in the log, 10/7)
+{
+  const io = { readText: (p) => p === '/ev' ? JSON.stringify({ at: '2026-10-07T07:32:00Z', kind: 'daemon-alive', armed: ['fable'] }) : null,
+    readDir: () => [], stat: () => null, readTail: () => null, livePids: () => [], psCommand: () => null, now: () => NOW };
+  const times = assemble(cfg, io, '7d').LOG.flatMap(([, rows]) => rows.map((r) => r[0]));
+  check('a 00:32 event is stamped 00:32 in the log, not 24:32', times.includes('00:32') && !times.some((t) => t.startsWith('24')), JSON.stringify(times));
+}
+
+console.log(failures === 0 ? 'PROBES CLEAN' : `PROBES: ${failures} failure(s)`);
+process.exit(failures ? 1 : 0);

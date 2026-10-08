@@ -1,0 +1,148 @@
+#!/usr/bin/env node
+// Byte-parity harness: gui/emitter.mjs vs skins/build_fixture.py.
+// Acceptance for the Phase B port (opus's spec): the frozen fixture, live
+// snapshots at every range, and a quiet night must render IDENTICALLY
+// through both emitters. Any diff is a bug in the port (or a drift in the
+// python) — there is no "close enough" here, because two emitters that
+// differ by a byte will differ by a feature within a week.
+//
+//   node gui/test/parity.mjs          all cases
+//   node gui/test/parity.mjs frozen   one case
+//
+// Written by: claude-fable-5, 2026-10-06
+import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { renderPage, mergeSnapshot } from '../emitter.mjs';
+import { FIXTURE } from '../fixture-data.mjs';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const GUI = join(HERE, '..');
+const SKINS = join(GUI, '..', 'skins');
+const OUT = join(HERE, 'out');
+mkdirSync(OUT, { recursive: true });
+
+// Cross-check: fixture-data's frozen SKINS list vs what the python will
+// read from disk (skins_installed). If a skin lands or renames, this fails
+// first with a clear message instead of a mysterious byte diff.
+const SKIN_ORDER = ['minimal', 'glass', 'amber', 'metal', 'wacky', 'steampunk'];
+function skinsFromDisk() {
+  const found = [];
+  for (const d of readdirSync(SKINS).sort()) {
+    try {
+      const m = join(SKINS, d, 'manifest.json');
+      statSync(m); statSync(join(SKINS, d, 'skin.css'));
+      found.push([d, JSON.parse(readFileSync(m, 'utf8')).title ?? d]);
+    } catch {}
+  }
+  const rank = Object.fromEntries(SKIN_ORDER.map((n, i) => [n, i]));
+  return found.sort((a, b) => (rank[a[0]] ?? SKIN_ORDER.length) - (rank[b[0]] ?? SKIN_ORDER.length) || (a[0] < b[0] ? -1 : 1));
+}
+
+function pythonRender(snapPath) {
+  const args = [join(SKINS, 'build_fixture.py')];
+  if (snapPath) args.push('--data', snapPath);
+  args.push('--out', '-');
+  return execFileSync('python3', args, { encoding: 'utf8', cwd: SKINS, maxBuffer: 64 * 1024 * 1024 });
+}
+
+function firstDiff(a, b) {
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) if (a[i] !== b[i]) return i;
+  return a.length === b.length ? -1 : n;
+}
+
+function diffReport(name, py, js) {
+  const i = firstDiff(py, js);
+  if (i === -1) return null;
+  const from = Math.max(0, i - 80);
+  return `  first diff at byte ${i} (py ${py.length}B, js ${js.length}B)\n` +
+    `  py: …${JSON.stringify(py.slice(from, i + 80))}\n` +
+    `  js: …${JSON.stringify(js.slice(from, i + 80))}`;
+}
+
+const CASES = {
+  frozen: () => ({ snap: null }),
+  live_8h: () => ({ live: '8h' }), live_24h: () => ({ live: '24h' }),
+  live_3d: () => ({ live: '3d' }), live_7d: () => ({ live: '7d' }),
+  daemon_down: () => ({
+    snap: {
+      NOW: '2026-10-06T12:30-07:00',
+      SCHEDULE: { sleep: '03:00', wake: '09:00' },
+      DAEMON: { phase: 'down', lastAlive: '2026-10-06T09:42-07:00', lastAliveHm: '09:42', down: true },
+      ALARMS: [{
+        kind: 'daemon-down',
+        title: "The nightshift isn't running",
+        cause: 'No heartbeat since 09:42. Bells, folds and wakes are all paused.',
+        at: ['2026-10-06T09:42-07:00', '09:42'],
+        ackId: 'daemon-down:2026-10-06T09:42-07:00',
+        fixes: [
+          ['retry', 'restart-daemon', 'Restart it', 'Start the nightshift daemon again'],
+          ['log', 'show-log', 'Show log', 'Open the nightshift log at this failure'],
+        ],
+      }],
+    },
+  }),
+  quiet: () => ({
+    snap: {
+      NOW: '2026-10-06T08:05-07:00',
+      ACTIVITY: Array(48).fill(0),
+      TIMELINE: { range: '8h', from: '2026-10-06T00:05-07:00', to: '2026-10-06T08:05-07:00', label: 'Last 8 hours',
+        ticks: [[0.1, '01'], [0.6, '06']], sleep_bands: [[0.2396, 0.9896]] },
+      DECK: { next_at: '2026-10-07T02:00-07:00', countdown: '17h 55m' },
+    },
+  }),
+};
+
+const diskSkins = skinsFromDisk();
+if (JSON.stringify(diskSkins) !== JSON.stringify(FIXTURE.SKINS)) {
+  console.error('SKINS drift: fixture-data.mjs says', JSON.stringify(FIXTURE.SKINS));
+  console.error('           but the skins dir has', JSON.stringify(diskSkins));
+  process.exit(1);
+}
+
+// Live cases need a live snapshot per range: ask the running server (it
+// writes gui/snapshot.json on every render), else skip with a note.
+async function liveSnap(range) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${process.env.NIGHTWATCH_PORT ?? 7352}/?range=${range}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await res.text();
+    return JSON.parse(readFileSync(join(GUI, 'snapshot.json'), 'utf8'));
+  } catch (e) {
+    return null;
+  }
+}
+
+const only = process.argv[2];
+let failures = 0, ran = 0;
+for (const [name, make] of Object.entries(CASES)) {
+  if (only && name !== only) continue;
+  const c = make();
+  let snap = c.snap;
+  if (c.live) {
+    snap = await liveSnap(c.live);
+    if (!snap) { console.log(`SKIP ${name} — viewer not serving on 7352`); continue; }
+  }
+  let snapPath = null;
+  if (snap) {
+    snapPath = join(OUT, `${name}.snapshot.json`);
+    writeFileSync(snapPath, JSON.stringify(snap));
+  }
+  const py = pythonRender(snapPath);
+  const js = renderPage(mergeSnapshot(FIXTURE, snap ?? {}));
+  ran++;
+  const report = diffReport(name, py, js);
+  if (report) {
+    failures++;
+    console.log(`FAIL ${name}`);
+    console.log(report);
+    writeFileSync(join(OUT, `${name}.py.html`), py);
+    writeFileSync(join(OUT, `${name}.js.html`), js);
+  } else {
+    console.log(`PASS ${name} (${py.length} bytes, identical)`);
+  }
+}
+console.log(failures === 0 ? `PARITY CLEAN (${ran} case${ran === 1 ? '' : 's'})` : `PARITY: ${failures} failure(s) — diffs in gui/test/out/`);
+process.exit(failures ? 1 : 0);

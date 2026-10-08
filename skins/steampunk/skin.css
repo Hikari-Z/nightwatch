@@ -1,0 +1,786 @@
+/* Nightwatch skin: Brassworks (contract v0.7). An airship engine room.
+   Built on Moonlamp's round skeleton (porthole lanes with drawers, the dial,
+   round deck buttons) and re-machined in metallic brass: bolted rims, smoked
+   glass faces, pipes of several bores. A manifold runs along the lane row; each
+   porthole draws from it through a branch pipe with a handwheel valve; drawers
+   hang on pipes, not chains; stubs feed every panel from the head; a riser runs
+   up the side. Liquid light only where something is measured. No wood: Ra,
+   round 9 ("entirely metallic brass ... a piece of machinery").
+   The Moonlamp rules below are the skeleton; the BRASSWORKS section at the end
+   re-skins them. Pipes are pseudo-elements Moonlamp leaves free; they are not
+   contract hooks. */
+
+:root {
+  --mw-sky: #14112b;
+  --mw-sky-2: #241d4f;
+  --mw-paper: #fff6d8;
+  --mw-ink: #2a1f12;
+  --mw-glow: #ffe08a;
+  --mw-lcd: #9dff8a;
+  --mw-rim: #b8b0d8;
+  --mw-brass: #d9b45a;
+  --mw-wood: #a86a32;
+  --mw-font: "Chalkboard SE", "Marker Felt", "Comic Sans MS", cursive;
+  --mw-type: "American Typewriter", "Courier New", monospace;
+  --mw-mono: "Courier New", ui-monospace, monospace;
+
+  --mw-awake: #ffd23f; --mw-belled: #ff9f1c; --mw-folding: #b388ff; --mw-sleeping: #8fa3ff;
+  --mw-orphaned: #ff6ec7; --mw-failed: #ff4d4d; --mw-ok: #7cff9b; --mw-manual: #5ce1ff;
+
+  --mw-lane-w: 228px;
+  --mw-stack-w: 380px;
+  --mw-starfield:
+    radial-gradient(1.5px 1.5px at 12% 18%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 33% 62%, #fff 50%, transparent 51%),
+    radial-gradient(2px 2px at 71% 9%, #fff8 50%, transparent 51%),
+    radial-gradient(1px 1px at 88% 44%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 54% 83%, #fff9 50%, transparent 51%);
+  --mw-starsize: 160px 160px, 210px 210px, 260px 260px, 130px 130px, 230px 230px;
+
+  /* the dial, in .nw-timeline's coordinates */
+  --dial: 280px;
+  --dial-x: 214px;
+  --dial-y: 182px;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--mw-paper); font: 14px/1.35 var(--mw-font); }   /* no background: the window is transparent */
+code, time { font-family: var(--mw-mono); }
+h1, h2, h3, h4, p { margin: 0; font-weight: 700; }
+p { font-weight: inherit; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.nw-icon { width: 16px; height: 16px; flex: none; vertical-align: -3px; overflow: visible; }
+
+[data-tip] { position: relative; }
+[data-tip]:hover::after { content: attr(data-tip); position: absolute; z-index: 40; left: 50%; bottom: calc(100% + 8px); translate: -50% 0;
+  width: max-content; max-width: 220px; padding: 5px 9px; border-radius: 4px; background: var(--mw-paper); color: var(--mw-ink);
+  font: 12px/1.3 var(--mw-type); box-shadow: 2px 3px 0 #0008; pointer-events: none; }
+
+/* ---------- the arrangement: objects floating over the desktop ---------- */
+.nw-app { --row: "controls controls controls"; display: grid; gap: 14px; width: max-content; align-items: start;
+  grid-template-columns: 240px 440px 300px; grid-template-areas: "head head head" "alarms alarms alarms" var(--row) "lanes lanes lanes";
+  filter: drop-shadow(0 12px 22px rgb(0 0 0 / .45)); }
+.nw-app[data-show-controls="true"][data-show-timeline="true"][data-show-log="true"]  { --row: "controls timeline log"; }
+.nw-app[data-show-controls="true"][data-show-timeline="true"][data-show-log="false"] { --row: "controls timeline timeline"; }
+.nw-app[data-show-controls="true"][data-show-timeline="false"][data-show-log="true"] { --row: "controls log log"; }
+.nw-app[data-show-controls="false"][data-show-timeline="true"][data-show-log="true"] { --row: "timeline timeline log"; }
+.nw-app[data-show-controls="false"][data-show-timeline="true"][data-show-log="false"] { --row: "timeline timeline timeline"; }
+.nw-app[data-show-controls="false"][data-show-timeline="false"][data-show-log="true"] { --row: "log log log"; }
+/* All three panels hidden: NO panel row. An empty string is not a valid grid row, and it voided the
+   whole grid-template-areas (the app jumped right and the lanes piled over the head; found 10/6). */
+.nw-app:not([data-layout="stack"])[data-show-controls="false"][data-show-timeline="false"][data-show-log="false"] { grid-template-areas: "head head head" "alarms alarms alarms" "lanes lanes lanes"; }
+.nw-head { grid-area: head; } .nw-app > .nw-alarms { grid-area: alarms; } .nw-lanes { grid-area: lanes; }
+.nw-controls { grid-area: controls; } .nw-timeline { grid-area: timeline; } .nw-log { grid-area: log; }
+.nw-app[data-show-controls="false"] .nw-controls, .nw-app[data-show-timeline="false"] .nw-timeline, .nw-app[data-show-log="false"] .nw-log { display: none; }
+.nw-app[data-layout="stack"], html[data-surface="popover"] .nw-app { grid-template-columns: var(--mw-stack-w); grid-template-areas: "head" "alarms" "controls" "timeline" "log" "lanes"; }
+.nw-gallery { display: none; }
+.nw-alarms:empty { display: none; }
+
+/* ---------- head: a Winamp-grade bevel with an LCD ---------- */
+.nw-head { position: relative; display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 12px; border-radius: 8px; cursor: grab;
+  background: linear-gradient(#5b4fa8, #2c2466); box-shadow: inset 2px 2px 0 #8e83e0, inset -2px -2px 0 #120d33, 0 4px 0 #0b0820; }
+.nw-head [data-part="title"] { font: 700 17px/1 var(--mw-font); letter-spacing: .3em; text-transform: uppercase; color: var(--mw-glow); text-shadow: 2px 2px 0 #c2410c; }
+.nw-head [data-part="schedule"] { margin-left: auto; display: flex; align-items: center; gap: 4px; font: 12px var(--mw-type); color: #d9d2ff; }
+.nw-head [data-part="schedule"] time { margin-right: 6px; }
+.nw-head [data-part="clock"] { background: #071a07; color: var(--mw-lcd); padding: 3px 8px; border-radius: 3px; font: 700 15px var(--mw-mono); letter-spacing: .12em; text-shadow: 0 0 6px var(--mw-lcd); box-shadow: inset 1px 1px 0 #000; }
+.nw-head > button { display: grid; place-items: center; width: 30px; height: 26px; border: 0; border-radius: 5px; color: #e9e4ff;
+  background: linear-gradient(#6d61c4, #3a3088); box-shadow: inset 1px 1px 0 #a69cf0, inset -1px -1px 0 #1a1446; }
+.nw-head > button[aria-expanded="true"] { background: linear-gradient(#3a3088, #6d61c4); box-shadow: inset 1px 1px 0 #1a1446, inset -1px -1px 0 #a69cf0; }
+.nw-app[data-layout="stack"] .nw-head [data-part="schedule"], html[data-surface="popover"] .nw-head [data-part="schedule"] { display: none; }
+.nw-app[data-layout="stack"] .nw-head [data-part="clock"], html[data-surface="popover"] .nw-head [data-part="clock"] { margin-left: auto; }
+.nw-app[data-layout="stack"] .nw-head [data-part="title"] { letter-spacing: .18em; font-size: 15px; }
+
+/* the view menu: a typed index card */
+.nw-head [data-part="view-menu"] { display: none; position: absolute; z-index: 30; right: 40px; top: calc(100% + 8px); margin: 0; padding: 10px 8px 8px; list-style: none;
+  min-width: 250px; rotate: -1deg; background: var(--mw-paper); color: var(--mw-ink); font: 13px var(--mw-type); cursor: default;
+  background-image: repeating-linear-gradient(transparent 0 23px, #9ec3e8 23px 24px); box-shadow: 3px 5px 0 #0007; border-top: 3px solid #e06666; }
+.nw-head [data-part="view-menu"][data-open="true"] { display: block; }
+.nw-head [data-part="view-menu"] li[role="separator"] { height: 0; margin: 4px 0; border-top: 2px dashed #2a1f1255; }
+.nw-head [data-part="view-menu"] label, .nw-head [data-part="view-menu"] button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 3px 6px; border: 0; background: none; text-align: left; }
+.nw-head [data-part="view-menu"] [role="menuitemradio"] { padding-left: 28px; }
+.nw-head [data-part="view-menu"] [role="menuitemradio"][data-view="layout"] { padding-left: 6px; }
+.nw-head [data-part="view-menu"] input { margin: 0; accent-color: #c2410c; }
+.nw-head [data-part="view-menu"] label:has(input:checked) { font-weight: 700; }
+
+.nw-glyph { --g: 24px; width: var(--g); height: var(--g); border-radius: 50%; display: inline-block; position: relative; flex: none; background: radial-gradient(circle at 35% 35%, #fff7c2, var(--mw-awake) 60%, #c98a00); box-shadow: 0 0 10px #ffd23f88; }
+.nw-glyph[data-phase="night"] { background: radial-gradient(circle at 35% 35%, #e8ecff, var(--mw-sleeping) 70%); box-shadow: inset calc(var(--g) * -.35) 0 0 #1b1640, 0 0 8px #8fa3ff66; }
+.nw-glyph[data-phase="belled"] { background: radial-gradient(circle at 35% 35%, #ffe2b8, var(--mw-belled) 65%); }
+.nw-glyph[data-phase="alarm"]::before { content: "!"; position: absolute; right: -9px; top: -8px; width: 16px; height: 16px; border-radius: 50%; background: var(--mw-failed); color: #fff; font: 700 12px/16px var(--mw-font); text-align: center; box-shadow: 0 0 8px var(--mw-failed); }
+.nw-glyph[data-phase="down"] { background: #3a3550; box-shadow: none; }
+
+/* ---------- lanes: portholes in a row; capsules when stacked ---------- */
+.nw-lanes { display: grid; gap: 14px; align-items: start; grid-template-columns: repeat(4, var(--mw-lane-w)) auto; }
+.nw-app[data-layout="stack"] .nw-lanes, html[data-surface="popover"] .nw-lanes { grid-template-columns: var(--mw-stack-w); gap: 10px; }
+
+.nw-lane { --state: var(--mw-awake); --phase: 0; --port: 196px; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.nw-lane[data-open="false"] { --port: 150px; }
+.nw-lane[data-state="belled"]   { --state: var(--mw-belled);   --phase: .3; }
+.nw-lane[data-state="folding"]  { --state: var(--mw-folding);  --phase: .55; }
+.nw-lane[data-state="sleeping"] { --state: var(--mw-sleeping); --phase: .85; }
+.nw-lane[data-state="waking"]   { --state: var(--mw-manual);   --phase: .55; }
+.nw-lane[data-state="orphaned"] { --state: var(--mw-orphaned); --phase: .4; }
+.nw-lane[data-state="failed"]   { --state: var(--mw-failed);   --phase: .7; }
+.nw-lane[data-state="down"]     { --state: #6b6680;            --phase: 1; }
+
+/* the porthole (header) */
+.nw-lane > header { position: relative; z-index: 2; width: var(--port); height: var(--port); border-radius: 50%; cursor: pointer;
+  display: grid; justify-items: center; align-content: start; padding-top: calc(var(--port) * .29); text-align: center;
+  background: radial-gradient(circle at 50% 40%, #2d2763, #120f2b 72%), var(--mw-starfield); background-size: auto, var(--mw-starsize);
+  border: 9px solid var(--mw-rim); box-shadow: inset 0 0 0 3px #6d63a6, 0 0 0 3px #3a335f; }
+.nw-lane > header::before { /* the moon: a disc, its shadow sliding across by --phase */
+  content: ""; position: absolute; top: calc(var(--port) * .07); left: 50%; translate: -50% 0; width: calc(var(--port) * .19); aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff, var(--state) 70%);
+  box-shadow: inset calc(var(--phase) * var(--port) * -.19) 0 0 #120f2b, 0 0 calc((1 - var(--phase)) * 16px) var(--state); }
+.nw-lane[data-alarm="true"] > header::before { animation: mw-wobble .5s ease-in-out infinite alternate; }
+@keyframes mw-wobble { from { rotate: -10deg; } to { rotate: 10deg; } }
+.nw-lane [data-part="avatar"] { display: none; }
+.nw-lane [data-part="ident"] { display: grid; justify-items: center; max-width: 76%; }
+.nw-lane [data-part="name"] { font-size: calc(var(--port) * .105); color: var(--state); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 2px 0 #000; }
+.nw-lane [data-part="model"] { font: 11px var(--mw-type); color: #c9c2ef; }
+.nw-lane [data-part="glance"] { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 12px; color: var(--mw-glow); }
+.nw-lane [data-part="glance"] .nw-icon { width: 13px; height: 13px; }
+.nw-lane [data-part="mini"] { /* the context ring on the rim */
+  position: absolute; inset: -9px; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(from 210deg, var(--state) calc(min(var(--fill), 1) * 300deg), #ffffff1c 0 300deg, transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px)); mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px)); }
+.nw-lane [data-part="mini"][data-level="high"] { --state: var(--mw-belled); }
+.nw-lane [data-part="mini"][data-level="over"] { --state: var(--mw-failed); }
+.nw-lane [data-part="state"] { position: absolute; bottom: calc(var(--port) * .1); left: 50%; translate: -50% 0; display: inline-flex; align-items: center; gap: 4px;
+  font: 700 10px var(--mw-font); text-transform: uppercase; letter-spacing: .12em; color: var(--mw-ink); background: var(--state); padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+.nw-lane [data-part="state"] i { display: none; }
+.nw-lane [data-part="toggle"] { /* a brass pull-knob on the rim */
+  position: absolute; bottom: -20px; left: 50%; translate: -50% 0; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center;
+  color: var(--mw-ink); background: radial-gradient(circle at 35% 30%, #fff1b8, var(--mw-brass) 60%, #8a6a1e); box-shadow: 0 2px 0 #4a3a10; }
+.nw-lane [data-part="toggle"] .nw-icon { width: 14px; height: 14px; }
+.nw-lane[data-open="true"] [data-part="toggle"] .nw-icon { rotate: 180deg; }
+.nw-lane[data-open="false"] [data-part="model"] { display: none; }
+
+/* the drawer, lowered on two chains */
+.nw-lane [data-part="body"] { position: relative; width: 100%; margin-top: 26px; padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  border-radius: 14px; border: 3px solid var(--mw-rim); background: linear-gradient(#2e2463, #1a1540); box-shadow: inset 0 0 0 2px #6d63a6; }
+.nw-lane[data-open="false"] [data-part="body"] { display: none; }
+.nw-lane [data-part="body"]::before, .nw-lane [data-part="body"]::after { content: ""; position: absolute; top: -29px; width: 4px; height: 26px;
+  background: repeating-linear-gradient(var(--mw-brass) 0 5px, #6b5414 5px 7px); border-radius: 2px; }
+.nw-lane [data-part="body"]::before { left: 22%; } .nw-lane [data-part="body"]::after { right: 22%; }
+
+.nw-lane [data-part="facts"] { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 10px; font: 12px var(--mw-type); color: #d9d2ff; }
+.nw-lane [data-part="facts"] li { display: inline-flex; align-items: center; gap: 4px; }
+.nw-lane [data-part="next"] { color: var(--mw-glow); }
+.nw-lane [data-part="meters"] { display: grid; gap: 6px; }
+/* Two matching instrument windows: same bezel, same height, same scanlines,
+   same readout column, both lit in the lane's colour. The context window is a
+   filling tube; the throughput window is a little oscilloscope. */
+.nw-lane :is([data-part="context"], [data-part="throughput"]) { --meter: var(--state); display: grid; grid-template-columns: 16px minmax(0, 1fr) 40px; align-items: center; gap: 6px; color: var(--meter); }
+.nw-lane :is([data-part="context"] [data-part="bar"], [data-part="throughput"] svg:not(.nw-icon)) {
+  height: 26px; width: 100%; border-radius: 9px / 40%; box-shadow: inset 0 0 0 2px #333, 0 0 0 2px #5a5480;
+  background: repeating-linear-gradient(#0000 0 2px, #0004 2px 3px), radial-gradient(color-mix(in srgb, var(--meter) 14%, #0a0820), #05040f 85%); }
+.nw-lane [data-part="context"] [data-part="bar"] { position: relative; overflow: hidden; }
+.nw-lane [data-part="context"] [data-part="bar"]::before { content: ""; position: absolute; left: 7px; top: 50%; translate: 0 -50%; height: 8px; border-radius: 99px;
+  width: calc(min(var(--fill), 1) * (100% - 14px)); background: var(--meter); box-shadow: 0 0 8px var(--meter); }
+.nw-lane [data-part="context"][data-level="high"] { --meter: var(--mw-belled); }
+.nw-lane [data-part="context"][data-level="over"] { --meter: var(--mw-failed); }
+.nw-lane [data-part="throughput"] svg:not(.nw-icon) { padding: 5px 7px; overflow: hidden; }
+.nw-lane [data-part="throughput"] polyline { fill: none; stroke: var(--meter); stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; filter: drop-shadow(0 0 2px var(--meter)); }
+.nw-lane [data-part="throughput"] [data-part="bars"] { display: none; }
+.nw-lane [data-part="throughput"][data-empty="true"] polyline { stroke: color-mix(in srgb, var(--meter) 40%, #000); stroke-dasharray: 3 4; filter: none; }
+.nw-lane :is([data-part="context"], [data-part="throughput"]) [data-part="value"] { font: 700 12px var(--mw-mono); text-align: right; text-shadow: 0 0 6px var(--meter); white-space: nowrap; }
+
+/* the alarm, on the drawer: a crooked wooden sign with its fixes */
+.nw-alert { position: relative; rotate: -1.4deg; margin: 4px -4px; padding: 10px 10px 8px; border-radius: 4px; color: #fff3d6;
+  display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: start;
+  background: repeating-linear-gradient(90deg, var(--mw-wood) 0 22px, #9a5f2a 22px 24px); border: 3px solid #5c3613; box-shadow: 0 5px 0 #4a2a10; }
+.nw-alert > .nw-icon { width: 26px; height: 26px; color: var(--mw-awake); grid-row: span 2; }
+.nw-alert [data-part="title"] { font-size: 14px; font-weight: 700; }
+.nw-alert [data-part="cause"] { font: 11px var(--mw-type); color: #ffdca8; overflow-wrap: anywhere; }
+.nw-alert [data-part="time"] { grid-column: 2; font-size: 11px; color: #ffdca8; }
+.nw-alert [data-part="fixes"], .nw-alarm [data-part="fixes"] { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+[data-part="fix"] { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 0; border-radius: 99px; font: 700 12px var(--mw-font);
+  color: var(--mw-ink); background: var(--mw-paper); box-shadow: 0 3px 0 #5c3613; }
+[data-part="fix"]:first-child { color: #fff; background: radial-gradient(circle at 35% 30%, #ff9a9a, var(--mw-failed) 60%, #9e1111); box-shadow: 0 3px 0 #5e0a0a; }
+.nw-alert [data-part="ack"] { position: absolute; right: -10px; bottom: -12px; width: 40px; height: 40px; border-radius: 50%; border: 0; display: grid; place-items: center;
+  background: radial-gradient(circle at 35% 30%, #a6ffb5, #2f8f5b 60%, #14532d); box-shadow: 0 3px 0 #0b3b1f; color: #fff; font-size: 0; }
+.nw-alert [data-part="ack"] .nw-icon { display: none; }
+.nw-alert [data-part="ack"][data-short]::after { content: attr(data-short); font: 700 14px var(--mw-font); }
+.nw-alert[data-acked="true"] { rotate: 3deg; opacity: .55; }
+
+/* brass buttons */
+.nw-lane [data-part="actions"] { display: flex; justify-content: center; gap: 5px; }
+.nw-lane [data-part="actions"] button { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 50%; color: var(--mw-ink);
+  background: radial-gradient(circle at 35% 30%, #fff1b8, var(--mw-brass) 60%, #8a6a1e); box-shadow: 0 2px 0 #4a3a10; }
+.nw-lane [data-part="actions"] button .nw-icon { width: 15px; height: 15px; }
+.nw-lane [data-part="actions"] button[aria-disabled="true"] { filter: grayscale(1) brightness(.55); cursor: default; }
+.nw-lane [data-part="actions"] button[data-danger="true"]:not([aria-disabled="true"]) { color: #fff; background: radial-gradient(circle at 35% 30%, #ff9a9a, var(--mw-failed) 60%, #9e1111); box-shadow: 0 2px 0 #5e0a0a; }
+.nw-lane [data-part="actions"] button[aria-expanded="true"] { translate: 0 2px; box-shadow: none; }
+
+/* settings: an index card clipped under the drawer */
+.nw-lane [data-part="settings"][data-open="false"] { display: none; }
+.nw-lane [data-part="settings"], .nw-add [data-part="add-form"], .nw-confirm, .nw-settings {
+  position: relative; display: grid; gap: 4px; padding: 12px 10px 10px; rotate: .8deg; color: var(--mw-ink); font: 12px var(--mw-type);
+  background: var(--mw-paper) repeating-linear-gradient(transparent 0 23px, #9ec3e8 23px 24px); border-top: 3px solid #e06666; box-shadow: 2px 4px 0 #0007; }
+.nw-lane [data-part="settings"]::before, .nw-add [data-part="add-form"]::before { content: ""; position: absolute; top: -9px; left: 50%; translate: -50% 0; width: 46px; height: 14px; background: #f5e7a8cc; rotate: -3deg; }
+.nw-lane [data-part="settings"] label, .nw-add label { display: flex; align-items: center; gap: 6px; }
+.nw-lane [data-part="settings"] label > span, .nw-add label > span { width: 56px; flex: none; }
+.nw-lane [data-part="settings"] select, .nw-lane [data-part="settings"] input:not([type="checkbox"]), .nw-add select, .nw-add input:not([type="checkbox"]) {
+  flex: 1; min-width: 0; width: 100%; padding: 1px 4px; border: 0; border-bottom: 2px solid var(--mw-ink); background: transparent; font: 13px var(--mw-font); }
+.nw-lane [data-part="settings"] input[type="number"] { flex: 0 0 56px; }
+.nw-lane [data-part="settings"] label i { font-style: normal; }
+.nw-lane [data-part="settings"] [data-part="armed"] > span, .nw-add [data-part="armed"] > span { width: auto; flex: 1; }
+[data-part="buttons"] { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }
+[data-part="buttons"] button { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border: 2px solid var(--mw-ink); border-radius: 99px; background: none; font: 700 12px var(--mw-font); color: var(--mw-ink); }
+[data-part="buttons"] button[data-primary="true"] { background: var(--mw-ink); color: var(--mw-paper); }
+[data-part="buttons"] button[data-danger="true"] { margin-right: auto; color: #b91c1c; border-color: #b91c1c; }
+
+/* the add slot: a small brass porthole with a plus; opens into an index card */
+.nw-add { --port: 64px; align-self: start; }
+.nw-add > [data-part="add"] { width: 64px; height: 64px; border-radius: 50%; border: 0; display: grid; place-items: center; color: var(--mw-ink);
+  background: radial-gradient(circle at 35% 30%, #fff1b8, var(--mw-brass) 60%, #8a6a1e); box-shadow: 0 4px 0 #4a3a10, 0 0 0 3px #3a335f; }
+.nw-add > [data-part="add"] .nw-icon { width: 26px; height: 26px; stroke-width: 2.6; }
+.nw-add > [data-part="add"] span { display: none; }
+.nw-add[data-open="false"] [data-part="add-form"] { display: none; }
+.nw-add[data-open="true"] { width: 100%; }
+.nw-add[data-open="true"] > [data-part="add"] { margin-bottom: 14px; }
+.nw-add[data-open="true"] [data-part="add-form"] { width: 100%; grid-template-columns: minmax(0, 1fr); }
+
+/* stacked: portholes become capsules */
+.nw-app[data-layout="stack"] .nw-lane, html[data-surface="popover"] .nw-lane { --port: 76px; align-items: stretch; }
+.nw-app[data-layout="stack"] .nw-lane > header, html[data-surface="popover"] .nw-lane > header {
+  width: 100%; height: 76px; border-radius: 99px; border-width: 6px; padding: 8px 40px 8px 74px; justify-items: start; align-content: center; text-align: left; }
+.nw-app[data-layout="stack"] .nw-lane > header::before, html[data-surface="popover"] .nw-lane > header::before { top: 50%; left: 34px; translate: -50% -50%; width: 38px; box-shadow: inset calc(var(--phase) * -38px) 0 0 #120f2b, 0 0 calc((1 - var(--phase)) * 14px) var(--state); }
+.nw-app[data-layout="stack"] .nw-lane [data-part="ident"], html[data-surface="popover"] .nw-lane [data-part="ident"] { justify-items: start; max-width: 60%; }
+.nw-app[data-layout="stack"] .nw-lane [data-part="name"], html[data-surface="popover"] .nw-lane [data-part="name"] { font-size: 19px; }
+.nw-app[data-layout="stack"] .nw-lane > header, html[data-surface="popover"] .nw-lane > header { grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; row-gap: 3px; }
+.nw-app[data-layout="stack"] .nw-lane [data-part="ident"], html[data-surface="popover"] .nw-lane [data-part="ident"] { grid-row: span 2; }
+.nw-app[data-layout="stack"] .nw-lane [data-part="glance"], html[data-surface="popover"] .nw-lane [data-part="glance"] { margin: 0; justify-self: end; }
+.nw-app[data-layout="stack"] .nw-lane [data-part="state"], html[data-surface="popover"] .nw-lane [data-part="state"] { position: static; translate: none; justify-self: end; }
+.nw-app[data-layout="stack"] .nw-lane [data-part="mini"], html[data-surface="popover"] .nw-lane [data-part="mini"] { inset: auto 50px 4px 74px; height: 5px; border-radius: 99px; -webkit-mask: none; mask: none;
+  background: linear-gradient(90deg, var(--state) calc(min(var(--fill), 1) * 100%), #ffffff1c 0); }
+.nw-app[data-layout="stack"] .nw-lane [data-part="toggle"], html[data-surface="popover"] .nw-lane [data-part="toggle"] { bottom: auto; top: 50%; left: auto; right: 8px; translate: 0 -50%; }
+.nw-app[data-layout="stack"] .nw-lane [data-part="model"], html[data-surface="popover"] .nw-lane [data-part="model"] { display: block; }
+.nw-app[data-layout="stack"] .nw-lane [data-part="body"], html[data-surface="popover"] .nw-lane [data-part="body"] { margin-top: 22px; }
+.nw-app[data-layout="stack"] .nw-add, html[data-surface="popover"] .nw-add { align-items: center; }
+
+/* ---------- the deck: a Winamp faceplate ---------- */
+.nw-controls { container-type: inline-size; display: grid; gap: 10px; padding: 12px; border-radius: 10px; align-self: start; align-content: start;
+  background: linear-gradient(#4a3f96, #241d5a); box-shadow: inset 2px 2px 0 #8e83e0, inset -2px -2px 0 #120d33, 0 4px 0 #0b0820; }
+.nw-controls [data-part="display"] { padding: 8px 10px; border-radius: 4px; background: #071a07; box-shadow: inset 2px 2px 0 #000, inset -1px -1px 0 #1d3b1d;
+  color: var(--mw-lcd); font: 13px var(--mw-mono); text-shadow: 0 0 6px var(--mw-lcd); display: grid; gap: 2px; }
+.nw-controls [data-part="summary"] { font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.nw-controls [data-part="summary"] b { font-size: 18px; }
+.nw-controls [data-part="next"] { font-size: 11.5px; color: #6fd862; }
+.nw-controls [data-part="counts"] { list-style: none; margin: 2px 0 0; padding: 0; display: flex; gap: 10px; font-size: 11px; }
+.nw-controls [data-part="counts"]:empty { display: none; }
+.nw-controls [data-part="counts"] li { display: inline-flex; gap: 3px; align-items: center; }
+.nw-controls [data-part="counts"] li[data-state="failed"] { color: #ff8a8a; text-shadow: 0 0 6px #ff4d4d; }
+.nw-controls [data-part="transport"] { display: flex; justify-content: center; align-items: center; gap: 12px; }
+.nw-controls [data-part="transport"] button { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 0; color: var(--mw-ink);
+  background: radial-gradient(circle at 35% 30%, #fff1b8, var(--mw-brass) 60%, #8a6a1e); box-shadow: 0 4px 0 #4a3a10, 0 0 0 3px #1a1446; }
+.nw-controls [data-part="transport"] button .nw-icon { width: 20px; height: 20px; stroke-width: 2.4; }
+.nw-controls [data-part="primary"] { width: 64px !important; height: 64px !important; background: radial-gradient(circle at 35% 30%, #fff7c2, var(--mw-awake) 55%, #c98a00) !important; box-shadow: 0 5px 0 #6b4e00, 0 0 0 3px #1a1446, 0 0 18px #ffd23f88 !important; }
+.nw-controls [data-part="primary"] span { display: none; }
+.nw-controls [data-part="primary"] .nw-icon { width: 28px !important; height: 28px !important; fill: currentColor; }
+.nw-controls[data-setup="true"] [data-part="primary"] { background: radial-gradient(circle at 35% 30%, #d9ffd2, var(--mw-ok) 55%, #1f8a3a) !important; box-shadow: 0 5px 0 #0b3b1f, 0 0 0 3px #1a1446, 0 0 20px #7cff9b99 !important; }
+.nw-controls[data-setup="true"] [data-part="primary"] .nw-icon { fill: none; }
+.nw-controls [data-part="transport"] button[data-danger="true"] { color: #fff; background: radial-gradient(circle at 35% 30%, #ff9a9a, var(--mw-failed) 60%, #9e1111); box-shadow: 0 4px 0 #5e0a0a, 0 0 0 3px #1a1446; }
+.nw-controls button[aria-disabled="true"] { filter: grayscale(1) brightness(.6); }
+.nw-controls [data-part="toggles"] { display: flex; justify-content: space-between; gap: 6px; }
+.nw-controls [data-part="toggles"] button { flex: 1; display: grid; justify-items: center; gap: 3px; padding: 6px 2px 4px; border: 0; border-radius: 5px; color: #d9d2ff; font: 700 10px var(--mw-font); text-transform: uppercase; letter-spacing: .1em;
+  background: linear-gradient(#3a3088, #2a2266); box-shadow: inset 1px 1px 0 #6d61c4, inset -1px -1px 0 #120d33; }
+.nw-controls [data-part="toggles"] button .nw-icon { width: 15px; height: 15px; }
+.nw-controls :is([data-part="toggles"], [data-part="transport"]) button[aria-pressed="true"] { color: var(--mw-glow); text-shadow: 0 0 6px var(--mw-glow); box-shadow: inset 1px 1px 0 #120d33, inset -1px -1px 0 #6d61c4; background: linear-gradient(#2a2266, #3a3088); }
+/* alone on its row (timeline and log hidden): a horizontal transport bar.
+   Keyed off the app's view attributes: a container query can't restyle its own container. */
+.nw-app:not([data-layout="stack"])[data-show-timeline="false"][data-show-log="false"] .nw-controls { grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; }
+.nw-app:not([data-layout="stack"])[data-show-timeline="false"][data-show-log="false"] .nw-controls [data-part="display"] { grid-template-columns: auto auto 1fr; align-items: baseline; column-gap: 14px; }
+.nw-app:not([data-layout="stack"])[data-show-timeline="false"][data-show-log="false"] .nw-controls [data-part="counts"] { justify-content: end; }
+.nw-app:not([data-layout="stack"])[data-show-timeline="false"][data-show-log="false"] .nw-controls [data-part="toggles"] button { padding: 6px 10px; }
+.nw-app[data-layout="stack"] .nw-timeline { --dial-x: 176px; }
+
+/* ---------- app-level alarm: the big crooked sign ---------- */
+.nw-alarms { display: grid; gap: 14px; padding-top: 14px; }
+.nw-alarm { position: relative; rotate: -1.2deg; padding: 12px 16px 12px 58px; border-radius: 4px; color: #fff3d6;
+  background: repeating-linear-gradient(90deg, var(--mw-wood) 0 22px, #9a5f2a 22px 24px); border: 3px solid #5c3613; box-shadow: 0 6px 0 #4a2a10;
+  display: grid; gap: 2px; }
+.nw-alarm::before, .nw-alarm::after { content: ""; position: absolute; top: -17px; width: 2px; height: 16px; background: #d9c9a0; }
+.nw-alarm::before { left: 20%; } .nw-alarm::after { right: 20%; }
+.nw-alarm > .nw-icon { position: absolute; left: 14px; top: 14px; width: 30px; height: 30px; color: var(--mw-awake); }
+.nw-alarm [data-part="title"] { font-size: 15px; font-weight: 700; }
+.nw-alarm [data-part="cause"] { font: 12px var(--mw-type); color: #ffdca8; }
+
+/* ---------- confirm: an index card ---------- */
+.nw-confirm { gap: 8px; padding: 14px; font-size: 13px; }
+.nw-confirm [data-part="title"] { display: flex; gap: 6px; align-items: center; font: 700 15px var(--mw-font); }
+.nw-confirm button[data-danger="true"] { margin-right: 0; color: #fff; background: #b91c1c; }
+
+/* ---------- the timeline dial ---------- */
+.nw-timeline [data-part="range"] { position: absolute; z-index: 2; top: 12px; right: 14px; display: flex; gap: 3px; padding: 3px; border-radius: 4px; background: #071a07; box-shadow: inset 1px 1px 0 #000, 0 0 0 2px #3a335f; }
+.nw-timeline [data-part="range"] button { border: 0; padding: 0 5px; background: none; font: 700 11px var(--mw-mono); color: #2f6b2f; }
+.nw-timeline [data-part="range"] button[aria-checked="true"] { color: var(--mw-lcd); text-shadow: 0 0 6px var(--mw-lcd); }
+.nw-timeline { position: relative; min-height: calc(var(--dial-y) + var(--dial) / 2 + 24px); padding: 14px; border-radius: 22px; align-self: stretch;
+  background: radial-gradient(circle at var(--dial-x) var(--dial-y), #2a2260 0, #1a1540 calc(var(--dial) / 2), transparent calc(var(--dial) / 2 + 1px)), var(--mw-starfield), #0f0c26;
+  background-size: auto, var(--mw-starsize), auto; border: 3px dashed #4b4290; }
+.nw-timeline::before { /* the lane rings: two when expanded */
+  content: ""; position: absolute; left: calc(var(--dial-x) - var(--dial) / 2 + 14px); top: calc(var(--dial-y) - var(--dial) / 2 + 14px);
+  width: calc(var(--dial) - 28px); height: calc(var(--dial) - 28px); border-radius: 50%; border: 2px solid #ffffff22; box-shadow: inset 0 0 0 32px transparent, inset 0 0 0 34px #ffffff1a; }
+.nw-app[data-timeline-mode="compressed"] .nw-timeline::before { box-shadow: inset 0 0 0 14px transparent, inset 0 0 0 16px #ffffff22; }
+.nw-timeline [data-part="heading"] { position: absolute; left: var(--dial-x); top: var(--dial-y); translate: -50% -50%; text-align: center; font-size: 15px; color: var(--mw-glow); width: 110px; }
+.nw-timeline [data-part="heading"] span { display: block; font: 11px var(--mw-type); color: #c9c2ef; }
+.nw-timeline [data-part="axis"] { position: absolute; inset: 0; pointer-events: none; }
+.nw-timeline [data-part="axis"] span { position: absolute; left: var(--dial-x); top: var(--dial-y); font: 700 11px var(--mw-mono); color: #d9d2ff;
+  transform: translate(-50%, -50%) rotate(calc(var(--t) * 270deg - 135deg)) translateY(calc(var(--dial) / -2 - 12px)) rotate(calc(var(--t) * -270deg + 135deg)); }
+.nw-app[data-timeline-mode="expanded"] .nw-strip[data-mode="compressed"], .nw-app[data-timeline-mode="compressed"] .nw-strip[data-mode="expanded"] { display: none; }
+.nw-strip { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; --r: calc(var(--dial) / 2 - 30px); }
+.nw-strip[data-mode="expanded"] + .nw-strip[data-mode="expanded"] { --r: calc(var(--dial) / 2 - 62px); }
+.nw-strip[data-mode="compressed"] { --r: calc(var(--dial) / 2 - 36px); }
+.nw-timeline [data-part="axis"] + .nw-strip, .nw-strip[data-mode="compressed"] { margin-top: calc(var(--dial) + 52px); }
+.nw-strip::before { content: attr(data-label) " ▸"; width: 100%; font-size: 13px; color: var(--mw-glow); }
+/* legend chips (expanded): icon + time. The dot on the dial is the node's ::before. */
+.nw-node { --c: var(--mw-ok); display: inline-flex; align-items: center; gap: 3px; font: 11px var(--mw-type); color: var(--mw-ink); background: var(--mw-paper); border-radius: 3px; padding: 1px 6px; box-shadow: 1px 2px 0 #0007; }
+.nw-node .nw-icon { width: 12px; height: 12px; color: color-mix(in srgb, var(--c) 65%, #000); }
+.nw-node [data-part="count"] { font-weight: 700; color: color-mix(in srgb, var(--c) 65%, #000); }
+.nw-node [data-part="lanes"] { display: none; }
+.nw-node::before { content: ""; position: absolute; left: var(--dial-x); top: var(--dial-y); width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
+  background: var(--c); box-shadow: 0 0 8px var(--c), 0 0 0 2px #120f2b;
+  transform: rotate(calc(var(--t) * 270deg - 135deg)) translateY(calc(var(--r) * -1)); }
+.nw-strip[data-mode="compressed"] .nw-node::before { transform: rotate(calc(var(--t) * 270deg - 135deg)) translateY(calc((var(--r) - var(--stack) * 17px) * -1)); }
+.nw-node[data-status="failed"] { --c: var(--mw-failed); } .nw-node[data-status="deferred"] { --c: var(--mw-belled); }
+.nw-node[data-status="pending"] { --c: #8b84b8; } .nw-node[data-status="manual"] { --c: var(--mw-manual); }
+.nw-node[data-alarm="true"]::before { width: 20px; height: 20px; margin: -10px 0 0 -10px; background: radial-gradient(circle, #fff 0 25%, var(--c) 30%); }
+/* Dots anchor to .nw-timeline, so nothing between may be positioned: the
+   generic [data-tip] rule makes nodes relative, which would turn every legend
+   chip into its own dial. (A contract-level trap: see CONTRACT.md.) */
+.nw-timeline .nw-strip, .nw-timeline .nw-node { position: static; }
+/* compressed: the dial alone, no legend */
+.nw-strip[data-mode="compressed"]::before { display: none; }
+.nw-strip[data-mode="compressed"] .nw-node { font-size: 0; padding: 0; background: none; box-shadow: none; }
+.nw-strip[data-mode="compressed"] .nw-node > :not([data-part="never"]) { display: none; }
+.nw-app[data-timeline-mode="compressed"] .nw-timeline { min-height: calc(var(--dial-y) + var(--dial) / 2 + 20px); }
+.nw-app[data-layout="stack"] .nw-timeline { --dial-x: 176px; }
+
+/* ---------- the log: a long till receipt with rubber-stamp filters ---------- */
+.nw-log { justify-self: start; width: 300px; background: var(--mw-paper); color: var(--mw-ink); font: 12px var(--mw-type); padding: 14px 14px 22px; rotate: 1.2deg;
+  -webkit-mask: linear-gradient(#000 0 0) top / 100% calc(100% - 10px) no-repeat, conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 16px 10px repeat-x;
+          mask: linear-gradient(#000 0 0) top / 100% calc(100% - 10px) no-repeat, conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 16px 10px repeat-x; }
+.nw-app[data-layout="stack"] .nw-log { width: 100%; rotate: -.6deg; }
+.nw-log [data-part="heading"] { text-align: center; font: 700 15px var(--mw-type); letter-spacing: .3em; text-transform: uppercase; border-bottom: 2px dashed var(--mw-ink); padding-bottom: 6px; margin-bottom: 8px; }
+.nw-log [data-part="filters"] { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 6px; margin-bottom: 8px; }
+.nw-log [data-part="filters"] label { display: inline-flex; align-items: center; gap: 3px; padding: 0 5px; border: 2px solid #b91c1c; border-radius: 3px; color: #b91c1c;
+  font: 700 10px var(--mw-type); text-transform: uppercase; letter-spacing: .06em; rotate: -2deg; cursor: pointer; }
+.nw-log [data-part="filters"] label:nth-child(even) { rotate: 1.5deg; }
+.nw-log [data-part="filters"] label .nw-icon { width: 11px; height: 11px; }
+.nw-log [data-part="filters"] input { position: absolute; opacity: 0; pointer-events: none; }
+.nw-log [data-part="filters"] label:not(:has(input:checked)) { border-color: #2a1f1255; color: #2a1f1255; text-decoration: line-through; }
+.nw-log [data-part="events"] { list-style: none; margin: 0; padding: 0; max-height: 330px; overflow: auto; }
+.nw-log .nw-day { padding: 6px 0 2px; text-align: center; font-weight: 700; letter-spacing: .25em; text-transform: uppercase; border-bottom: 1px dashed #2a1f12aa; }
+.nw-event { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; grid-template-areas: "time what lane" ". detail detail"; gap: 0 6px; padding: 4px 0; border-bottom: 1px dotted #2a1f1255; }
+.nw-event[hidden] { display: none; }
+.nw-event > .nw-icon { display: none; }
+.nw-event [data-part="time"] { grid-area: time; font-weight: 700; }
+.nw-event [data-part="what"] { grid-area: what; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nw-event [data-part="lane"] { grid-area: lane; text-transform: uppercase; }
+.nw-event[data-alarm="true"] [data-part="what"], .nw-event[data-status="failed"] [data-part="count"] { color: #b91c1c; font-weight: 700; }
+.nw-event [data-part="detail"] { grid-area: detail; display: flex; gap: 10px; font-size: 11px; }
+.nw-event [data-part="kept"]::before { content: "KEPT "; }
+.nw-event [data-part="est"] { font-weight: 700; }
+.nw-event [data-part="est"]::before { content: "≈ "; }
+.nw-event[data-level="over"] [data-part="est"] { color: #c2410c; }
+.nw-event [data-part="tail"] { opacity: .6; font-size: 10px; }
+.nw-event [data-part="tail"]::before { content: "#"; }
+.nw-event[data-reason="emergency"] [data-part="what"]::after { content: " ⚡"; }
+
+/* ---------- fixture-only test sheet ---------- */
+html[data-gallery="1"] .nw-app { grid-template-areas: "head head head" "alarms alarms alarms" "controls timeline log" "lanes lanes lanes" "gallery gallery gallery"; }
+html[data-gallery="1"] .nw-gallery { grid-area: gallery; display: grid; grid-template-columns: repeat(4, var(--mw-lane-w)); gap: 30px 14px; align-items: start; padding-top: 12px; }
+.nw-gallery > [data-part="heading"] { grid-column: 1 / -1; padding: 6px 12px; border-radius: 4px; font: 12px var(--mw-type); color: var(--mw-ink);
+  background: repeating-linear-gradient(-45deg, #ffe08a 0 10px, #2a1f12 10px 20px); }
+.nw-gallery > [data-part="heading"] { color: transparent; position: relative; }
+.nw-gallery > [data-part="heading"]::after { content: "TEST SHEET · every state once · not part of the app"; position: absolute; inset: 4px 50% auto auto; translate: 50% 0; color: var(--mw-ink); background: var(--mw-glow); padding: 0 8px; letter-spacing: .1em; }
+.nw-gallery > .nw-alarms { grid-column: span 2; }
+.nw-glyphs { display: flex; gap: 22px; align-items: center; justify-content: center; padding: 18px; background: #0f0c26; border-radius: 99px; }
+
+/* ---------- v0.7: activity CRT, empty states ---------- */
+.nw-timeline [data-part="activity"] { margin-top: 10px; height: 46px; padding: 6px 10px; border-radius: 12px / 30%;
+  background: repeating-linear-gradient(#0000 0 2px, #0004 2px 3px), radial-gradient(#0d2b0d, #020a02 80%); box-shadow: inset 0 0 0 2px #333, 0 0 0 2px #555; }
+.nw-timeline [data-part="activity"] svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.nw-timeline [data-part="activity"] [data-part="area"] { fill: rgb(157 255 138 / .14); }
+.nw-timeline [data-part="activity"] [data-part="line"] { fill: none; stroke: var(--mw-lcd); stroke-width: 2; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 3px var(--mw-lcd)); }
+.nw-timeline [data-part="activity"] [data-part="bars"] { display: none; }
+.nw-timeline [data-part="activity"] { position: relative; }
+.nw-timeline [data-part="activity"] [data-part="grid"] line { stroke: rgb(157 255 138 / .14); vector-effect: non-scaling-stroke; }
+.nw-timeline [data-part="activity"] [data-part="fill-top"] { stop-color: var(--mw-lcd); stop-opacity: .3; }
+.nw-timeline [data-part="activity"] [data-part="fill-bottom"] { stop-color: var(--mw-lcd); stop-opacity: 0; }
+.nw-timeline [data-part="activity"] [data-part="area"] { fill: url(#nw-activity-fill); }
+.nw-timeline [data-part="activity"] [data-part="sleep"] { position: absolute; top: 6px; bottom: 6px; left: calc(10px + var(--from) * (100% - 20px)); width: calc((var(--to) - var(--from)) * (100% - 20px));
+  display: grid; place-items: center; font: 700 9px var(--mw-mono); letter-spacing: .3em; text-transform: uppercase; color: rgb(157 255 138 / .45);
+  background: repeating-linear-gradient(-45deg, rgb(157 255 138 / .07) 0 2px, transparent 2px 7px); pointer-events: none; }
+.nw-timeline [data-part="activity"] [data-part="peak"] { position: absolute; left: calc(10px + var(--t) * (100% - 20px)); top: 1px; translate: -50% 0; font: 700 10px var(--mw-mono); color: var(--mw-lcd); text-shadow: 0 0 6px var(--mw-lcd); }
+.nw-app[data-timeline-mode="compressed"] .nw-timeline [data-part="activity"] { margin-top: calc(var(--dial) + 52px); }
+:is(.nw-timeline, .nw-log) [data-part="empty"][hidden] { display: none; }
+.nw-timeline [data-part="empty"] { position: absolute; left: 0; right: 0; top: calc(var(--dial-y) + var(--dial) / 2 + 30px); margin: 0; text-align: center; font: 13px var(--mw-type); color: #c9c2ef; }
+.nw-timeline[data-empty="true"] { min-height: calc(var(--dial-y) + var(--dial) / 2 + 70px); }
+.nw-log [data-part="empty"] { margin: 6px 0 0; text-align: center; font: 12px var(--mw-type); }
+.nw-log[data-empty="true"] [data-part="events"] { display: none; }
+
+/* =====================================================================
+   BRASSWORKS: the skeleton above, re-machined in brass
+   ===================================================================== */
+:root {
+  --bw-brush: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.8' numOctaves='2' seed='3'/%3E%3CfeColorMatrix values='0 0 0 0 0.25  0 0 0 0 0.16  0 0 0 0 0.02  0 0 0 .28 0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23b)'/%3E%3C/svg%3E");
+  --bw-brass: linear-gradient(165deg, #fff1bf 0%, #e7c06a 22%, #c7973f 48%, #f3d58a 70%, #b98a36 100%);
+  --bw-plate: var(--bw-brush), linear-gradient(170deg, #f4d98f 0%, #d9ad55 35%, #c39243 65%, #e6c172 100%);
+  --bw-pipe-v: linear-gradient(90deg, #6e521a 0%, #c99a45 22%, #fff0bf 42%, #d7a952 60%, #7a5a1e 100%);
+  --bw-pipe-h: linear-gradient(180deg, #6e521a 0%, #c99a45 22%, #fff0bf 42%, #d7a952 60%, #7a5a1e 100%);
+  --bw-glass: radial-gradient(circle at 40% 30%, #2a2a24 0, #0d0c08 70%);
+  --bw-ink: #3a2a08;
+  --bw-emboss: 0 1px 0 rgb(255 244 200 / .7);
+  --bw-bolts: radial-gradient(circle at 12px 12px, #fff6d0 0 2px, #6e521a 2.8px, transparent 3.4px), radial-gradient(circle at calc(100% - 12px) 12px, #fff6d0 0 2px, #6e521a 2.8px, transparent 3.4px),
+              radial-gradient(circle at 12px calc(100% - 12px), #fff6d0 0 2px, #6e521a 2.8px, transparent 3.4px), radial-gradient(circle at calc(100% - 12px) calc(100% - 12px), #fff6d0 0 2px, #6e521a 2.8px, transparent 3.4px);
+  --mw-paper: #f5e9c8;
+  --mw-lcd: #ffb347;
+  --mw-awake: #6dffae; --mw-belled: #ffb347; --mw-folding: #c9a2ff; --mw-sleeping: #8fb4d9;
+  --mw-orphaned: #ff7ab6; --mw-failed: #ff4b36; --mw-ok: #6dffae; --mw-manual: #8fd6ff;
+  --mw-font: "Copperplate", "Baskerville", serif;
+  --mw-type: "American Typewriter", "Courier New", monospace;
+}
+body { color: var(--bw-ink); }
+.nw-app { gap: 18px; filter: drop-shadow(0 16px 26px rgb(0 0 0 / .5)); }
+
+/* the riser: a big pipe up the left side of the whole machine */
+.nw-app { position: relative; }
+.nw-app::after { content: ""; position: absolute; z-index: -1; left: -16px; top: 22px; bottom: 60px; width: 22px; border-radius: 4px; background: var(--bw-pipe-v);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / .35); }
+.nw-app::before { content: ""; position: absolute; z-index: 1; left: -32px; top: 46%; width: 54px; height: 54px; border-radius: 50%;
+  background: radial-gradient(circle, var(--bw-ink) 0 4px, transparent 4.5px), repeating-conic-gradient(from 0deg, #fff0bf 0 5deg, #8a6524 5deg 60deg);
+  -webkit-mask: radial-gradient(circle, #000 0 7px, transparent 7.5px 19px, #000 19.5px 26px, transparent 26.5px), conic-gradient(from 0deg, #000 0 7deg, transparent 7deg 72deg, #000 72deg 79deg, transparent 79deg 144deg, #000 144deg 151deg, transparent 151deg 216deg, #000 216deg 223deg, transparent 223deg 288deg, #000 288deg 295deg, transparent 295deg);
+          mask: radial-gradient(circle, #000 0 7px, transparent 7.5px 19px, #000 19.5px 26px, transparent 26.5px), conic-gradient(from 0deg, #000 0 7deg, transparent 7deg 72deg, #000 72deg 79deg, transparent 79deg 144deg, #000 144deg 151deg, transparent 151deg 216deg, #000 216deg 223deg, transparent 223deg 288deg, #000 288deg 295deg, transparent 295deg);
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / .5)); }
+
+/* ---------- head: a brass plate, bolted, with an engraved name and a nixie clock ---------- */
+.nw-head { background: var(--bw-bolts), var(--bw-plate); border-radius: 26px;
+  box-shadow: inset 0 0 0 2px #fff0bf, inset 0 0 0 4px #8a6524, 0 4px 0 #5a4214; padding: 8px 10px 8px 16px; }
+.nw-head [data-part="title"] { font: 700 17px/1 var(--mw-font); letter-spacing: .28em; color: var(--bw-ink); text-shadow: var(--bw-emboss); }
+.nw-head [data-part="schedule"] { color: #5a4214; text-shadow: var(--bw-emboss); }
+.nw-head [data-part="clock"] { background: #120804; color: #ffb347; text-shadow: 0 0 4px #ff8a1a, 0 0 12px #ff5a00; border-radius: 12px; box-shadow: inset 0 0 0 2px #6e521a, inset 0 2px 6px #000; }
+.nw-head > button { width: 34px; height: 34px; border-radius: 50%; color: var(--bw-ink); background: var(--bw-brass); box-shadow: 0 2px 0 #5a4214, inset 0 0 0 1px #fff0bf; }
+.nw-head > button[aria-expanded="true"] { background: var(--bw-brass); box-shadow: inset 0 2px 4px rgb(0 0 0 / .5); }
+.nw-glyph { background: radial-gradient(circle at 35% 30%, #fff, #ffe08a 35%, #ff9a1a 70%); box-shadow: 0 0 0 3px #8a6524, 0 0 0 4px #fff0bf, 0 0 14px #ffb347; }
+.nw-glyph[data-phase="down"] { background: #3a3324; box-shadow: 0 0 0 3px #8a6524, 0 0 0 4px #fff0bf; }
+.nw-head [data-part="view-menu"] { background: #f5e9c8 repeating-linear-gradient(transparent 0 23px, #d9c79a 23px 24px); border-top-color: #b98a36; color: var(--bw-ink); }
+
+/* stubs feeding each panel from the head */
+.nw-controls::before, .nw-timeline::after, .nw-log::before { content: ""; position: absolute; z-index: -1; top: -20px; width: 12px; height: 22px; background: var(--bw-pipe-v); box-shadow: 0 0 0 1px rgb(0 0 0 / .3); }
+.nw-controls { position: relative; } .nw-log { position: relative; }
+.nw-controls::before { left: 46px; } .nw-timeline::after { left: 50%; } .nw-log::before { left: 30px; }
+
+/* ---------- the deck: a brass console with valve-cap buttons and a bolted gauge ---------- */
+.nw-controls { background: var(--bw-bolts), var(--bw-plate); border-radius: 22px;
+  box-shadow: inset 0 0 0 2px #fff0bf, inset 0 0 0 4px #8a6524, 0 4px 0 #5a4214; padding: 16px 14px 14px; }
+.nw-controls::after { content: ""; position: absolute; top: -14px; right: -12px; width: 46px; height: 46px; border-radius: 50%;
+  background: linear-gradient(#1a0f08 0 0) 50% 50% / 2px 16px no-repeat, radial-gradient(circle, #1a0f08 0 3px, transparent 3.5px),
+              repeating-conic-gradient(from 210deg, #3a2a08 0 1.5deg, transparent 1.5deg 20deg) 50% 50% / 34px 34px no-repeat, radial-gradient(circle, #f7ecd0 0 15px, transparent 15.5px), var(--bw-brass);
+  box-shadow: 0 0 0 2px #6e521a, 0 3px 4px rgb(0 0 0 / .5); rotate: 0deg; }
+.nw-controls [data-part="display"] { background: #120804; color: #ffb347; text-shadow: 0 0 5px #ff8a1a; box-shadow: inset 0 0 0 2px #6e521a, inset 0 3px 10px #000; border-radius: 12px; }
+.nw-controls [data-part="next"] { color: #c97a3a; }
+.nw-controls [data-part="counts"] li[data-state="failed"] { color: #ff8a6a; text-shadow: 0 0 6px #ff4b36; }
+.nw-controls [data-part="transport"] button { color: var(--bw-ink); background: var(--bw-brass); box-shadow: 0 4px 0 #5a4214, 0 0 0 3px #6e521a, inset 0 0 0 2px #fff0bf; }
+.nw-controls [data-part="primary"] { background: radial-gradient(circle at 35% 30%, #e6fff0, var(--mw-awake) 45%, #157a42 85%) !important;
+  box-shadow: 0 0 0 5px #c7973f, 0 0 0 7px #6e521a, 0 5px 0 7px #5a4214, 0 0 22px rgb(109 255 174 / .6) !important; color: #062012 !important; }
+.nw-controls[data-setup="true"] [data-part="primary"] { background: radial-gradient(circle at 35% 30%, #fff2d6, #ffb347 45%, #a55a10 85%) !important; box-shadow: 0 0 0 5px #c7973f, 0 0 0 7px #6e521a, 0 5px 0 7px #5a4214, 0 0 22px rgb(255 179 71 / .6) !important; }
+.nw-controls [data-part="transport"] button[data-danger="true"] { color: #fff; background: radial-gradient(circle at 35% 30%, #ffb0a0, #c4291a 60%, #6a1208); box-shadow: 0 4px 0 #5a4214, 0 0 0 3px #6e521a, 0 0 10px rgb(255 75 54 / .45); }
+.nw-controls [data-part="toggles"] button { color: var(--bw-ink); font-family: var(--mw-font); background: var(--bw-brass); border-radius: 14px; box-shadow: 0 2px 0 #5a4214, inset 0 0 0 1px #fff0bf; text-shadow: var(--bw-emboss); }
+.nw-controls :is([data-part="toggles"], [data-part="transport"]) button[aria-pressed="true"] { color: #ffcf6a; background: #1a0f08; text-shadow: 0 0 6px #ff9a1a; box-shadow: inset 0 0 0 2px #c7973f, inset 0 2px 6px #000; }
+
+/* ---------- the timeline: a great gauge face, smoked glass in a bolted brass bezel ---------- */
+.nw-timeline { background: var(--bw-bolts), var(--bw-plate); border: 0; border-radius: 26px;
+  box-shadow: inset 0 0 0 2px #fff0bf, inset 0 0 0 4px #8a6524, 0 4px 0 #5a4214; }
+.nw-timeline::before { border: 0; background: var(--bw-glass);
+  box-shadow: 0 0 0 10px #c7973f, 0 0 0 12px #fff0bf, 0 0 0 16px #8a6524, inset 0 0 0 32px transparent, inset 0 0 0 34px rgb(255 240 191 / .16), inset 0 6px 18px #000; }
+.nw-app[data-timeline-mode="compressed"] .nw-timeline::before { box-shadow: 0 0 0 10px #c7973f, 0 0 0 12px #fff0bf, 0 0 0 16px #8a6524, inset 0 0 0 14px transparent, inset 0 0 0 16px rgb(255 240 191 / .2), inset 0 6px 18px #000; }
+.nw-timeline [data-part="heading"] { color: #ffcf6a; text-shadow: 0 0 8px #ff8a1a; font-family: var(--mw-font); }
+.nw-timeline [data-part="heading"] span { color: #c9a774; text-shadow: none; }
+.nw-timeline [data-part="axis"] span { color: var(--bw-ink); text-shadow: var(--bw-emboss); font-weight: 700; }
+.nw-timeline [data-part="range"] { background: #120804; box-shadow: inset 0 0 0 2px #6e521a; border-radius: 12px; }
+.nw-timeline [data-part="range"] button { color: #7a5a2a; } .nw-timeline [data-part="range"] button[aria-checked="true"] { color: #ffb347; text-shadow: 0 0 6px #ff8a1a; }
+.nw-strip::before { color: var(--bw-ink); text-shadow: var(--bw-emboss); font-family: var(--mw-font); }
+.nw-node { background: #f5e9c8; box-shadow: 0 0 0 1px #8a6524, 1px 2px 0 rgb(0 0 0 / .4); }
+.nw-node::before { box-shadow: 0 0 10px var(--c), 0 0 0 2px #c7973f, 0 0 0 3px #3a2a08; }
+.nw-timeline [data-part="activity"] { background: #120804; box-shadow: inset 0 0 0 2px #6e521a, inset 0 3px 10px #000; border-radius: 14px; }
+.nw-timeline [data-part="activity"] [data-part="line"] { stroke: #ffb347; filter: drop-shadow(0 0 3px #ff8a1a); }
+.nw-timeline [data-part="activity"] { --mw-lcd: #ffb347; }
+
+/* ---------- the log: ticker tape off a brass roller ---------- */
+.nw-log { rotate: 0deg; margin-top: 14px; box-shadow: 0 6px 12px rgb(0 0 0 / .35); }
+.nw-log::after { content: ""; position: absolute; left: -10px; right: -10px; top: -16px; height: 22px; border-radius: 11px; background: var(--bw-pipe-h);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / .35), inset 10px 0 0 -4px #fff0bf, inset -10px 0 0 -4px #fff0bf; -webkit-mask: none; mask: none; }
+.nw-log [data-part="filters"] label { border-color: #8a6524; color: #5a4214; background: linear-gradient(#f7e2a8, #d8b260); }
+.nw-log [data-part="filters"] label:not(:has(input:checked)) { border-color: #c9b88a; color: #b8a77a; background: none; }
+
+/* ---------- lanes: bolted portholes off a manifold ---------- */
+.nw-lanes { position: relative; }
+.nw-lanes::before { content: ""; position: absolute; z-index: -1; left: -16px; right: -14px; top: -14px; height: 26px; border-radius: 13px; background: var(--bw-pipe-h); box-shadow: 0 0 0 1px rgb(0 0 0 / .35); }
+.nw-lane { position: relative; }
+.nw-lane::before { content: ""; position: absolute; z-index: -1; top: -6px; left: 50%; margin-left: -8px; width: 16px; height: 24px; background: var(--bw-pipe-v); }
+.nw-lane::after { content: ""; position: absolute; z-index: 3; top: -14px; left: calc(50% - 15px); width: 30px; height: 30px; border-radius: 50%;
+  background: radial-gradient(circle, var(--bw-ink) 0 3px, transparent 3.5px), repeating-conic-gradient(from 0deg, #fff0bf 0 5deg, #8a6524 5deg 60deg);
+  -webkit-mask: radial-gradient(circle, #000 0 4px, transparent 4.5px 10px, #000 10.5px 14px, transparent 14.5px), conic-gradient(from 0deg, #000 0 8deg, transparent 8deg 120deg, #000 120deg 128deg, transparent 128deg 240deg, #000 240deg 248deg, transparent 248deg);
+          mask: radial-gradient(circle, #000 0 4px, transparent 4.5px 10px, #000 10.5px 14px, transparent 14.5px), conic-gradient(from 0deg, #000 0 8deg, transparent 8deg 120deg, #000 120deg 128deg, transparent 128deg 240deg, #000 240deg 248deg, transparent 248deg);
+  filter: drop-shadow(0 2px 1px rgb(0 0 0 / .5)); }
+.nw-lane > header { background: var(--bw-glass); border: 0;
+  box-shadow: 0 0 0 9px #c7973f, 0 0 0 11px #fff0bf, 0 0 0 15px #8a6524, 0 6px 0 15px #5a4214, inset 0 8px 22px #000; }
+.nw-lane > header::after { content: ""; position: absolute; inset: -13px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, #fff6d0 0 1.6px, #6e521a 2.2px, transparent 2.8px) 0 0 / 100% 100%;
+  -webkit-mask: repeating-conic-gradient(from 0deg, #000 0 2deg, transparent 2deg 30deg); mask: repeating-conic-gradient(from 0deg, #000 0 2deg, transparent 2deg 30deg); opacity: 0; }
+.nw-lane [data-part="name"] { font-family: var(--mw-font); letter-spacing: .06em; }
+.nw-lane [data-part="model"] { color: #c9a774; font-family: "Baskerville", serif; font-style: italic; }
+.nw-lane [data-part="state"] { color: #120804; }
+.nw-lane [data-part="toggle"] { box-shadow: 0 2px 0 #5a4214, 0 0 0 2px #6e521a; }
+.nw-lane [data-part="mini"] { inset: 0; -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px)); mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px)); filter: drop-shadow(0 0 4px var(--state)); }
+
+/* drawers: brass instrument boxes hung on pipes */
+.nw-lane [data-part="body"] { margin-top: 34px; border: 0; border-radius: 20px; background: var(--bw-bolts), var(--bw-plate);
+  box-shadow: inset 0 0 0 2px #fff0bf, inset 0 0 0 4px #8a6524, 0 4px 0 #5a4214; padding: 14px 12px 12px; color: var(--bw-ink); }
+.nw-lane [data-part="body"]::before, .nw-lane [data-part="body"]::after { top: -36px; width: 10px; height: 36px; border-radius: 2px; background: var(--bw-pipe-v); box-shadow: 0 0 0 1px rgb(0 0 0 / .3); }
+.nw-lane [data-part="facts"] { color: #5a4214; text-shadow: var(--bw-emboss); }
+.nw-lane [data-part="next"] { color: #3a2a08; font-weight: 700; }
+/* instruments: a round pressure gauge beside a liquid vial */
+.nw-lane [data-part="meters"] { grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
+.nw-lane :is([data-part="context"], [data-part="throughput"]) { grid-template-columns: 1fr; justify-items: center; gap: 4px; }
+.nw-lane :is([data-part="context"], [data-part="throughput"]) > .nw-icon { display: none; }
+.nw-app .nw-lane [data-part="context"] [data-part="bar"] { position: relative; width: 74px; height: 74px; border-radius: 50%; overflow: visible;
+  background: repeating-conic-gradient(from 210deg, #3a2a08 0 1.4deg, transparent 1.4deg 30deg) 50% 50% / 60px 60px no-repeat,
+              conic-gradient(from 210deg at 50% 50%, transparent 0 240deg, #c4291a 240deg 300deg, transparent 300deg) 50% 50% / 60px 60px no-repeat,
+              radial-gradient(circle, #f7ecd0 0 29px, transparent 29.5px), var(--bw-brass);
+  box-shadow: 0 0 0 2px #6e521a, inset 0 0 0 2px #fff0bf, 0 3px 4px rgb(0 0 0 / .45); }
+.nw-app .nw-lane [data-part="context"] [data-part="bar"]::before { inset: auto; left: 50%; top: 50%; width: 2px; height: 26px; margin: -26px 0 0 -1px; translate: none; border-radius: 1px;
+  background: #1a0f08; box-shadow: none; transform-origin: 50% 100%; rotate: calc(-150deg + min(var(--fill), 1) * 300deg); }
+.nw-app .nw-lane [data-part="context"] [data-part="bar"]::after { content: ""; position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px; border-radius: 50%; background: var(--bw-brass); box-shadow: 0 0 0 1px #3a2a08; }
+.nw-app .nw-lane [data-part="throughput"] svg:not(.nw-icon) { width: 44px; height: 74px; padding: 8px 7px 7px; border-radius: 22px;
+  background: linear-gradient(90deg, rgb(255 255 255 / .12), transparent 35%, rgb(255 255 255 / .2) 65%, transparent), #0b1510;
+  box-shadow: 0 0 0 3px #c7973f, 0 0 0 4px #6e521a, inset 0 0 14px rgb(109 255 174 / .15); }
+.nw-lane [data-part="throughput"] polyline { stroke: var(--mw-awake); }
+.nw-lane :is([data-part="context"], [data-part="throughput"]) [data-part="value"] { padding: 1px 7px; border-radius: 8px; background: #120804; color: #ffb347; text-shadow: 0 0 5px #ff8a1a; box-shadow: inset 0 0 0 1px #6e521a; }
+/* the alarm: a red warning lamp on a brass plate */
+.nw-alert { rotate: 0deg; background: radial-gradient(circle at 22px 22px, #ff6a4a 0 7px, #c4291a 8px, rgb(255 75 54 / .25) 12px, transparent 30px), #2a0f08 !important;
+  border: 0; border-radius: 14px; box-shadow: inset 0 0 0 2px #c7973f, inset 0 0 0 4px #6e521a; color: #ffd0b8; padding-left: 14px; }
+.nw-alert > .nw-icon { color: transparent; }
+.nw-alert [data-part="cause"], .nw-alert [data-part="time"] { color: #e0b08a; }
+/* settings: a brass-framed card */
+.nw-lane [data-part="settings"], .nw-add [data-part="add-form"] { rotate: 0deg; border-top: 0; box-shadow: 0 0 0 3px #c7973f, 0 0 0 4px #6e521a; border-radius: 6px; }
+.nw-lane [data-part="settings"]::before, .nw-add [data-part="add-form"]::before { display: none; }
+
+/* the add slot: a brass valve cap */
+.nw-add > [data-part="add"] { box-shadow: 0 4px 0 #5a4214, 0 0 0 4px #6e521a, inset 0 0 0 2px #fff0bf; }
+
+/* stacked capsules */
+.nw-app[data-layout="stack"] .nw-lane::after { left: 34px; margin-left: -15px; }
+.nw-app[data-layout="stack"] .nw-lane::before { left: 34px; }
+
+/* =====================================================================
+   BRASSWORKS v3 (Ra, round 10): instruments built INTO the porthole, and a
+   timeline that keeps the machine's shape.
+   ===================================================================== */
+
+/* ---- the open porthole: body becomes part of the porthole itself ----
+   display: contents dissolves the drawer, so its parts become grid items of
+   the lane: meters and actions overlay the porthole, the rest hang below. */
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] { --port: 196px; display: grid; justify-items: center;
+  grid-template-areas: "port" "facts" "alert" "set"; }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] > header { grid-area: port; }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="body"] { display: contents; }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="body"]::before,
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="body"]::after { display: none; }
+
+/* context: a glass tube bent round the rim, filled with the lane's light */
+.nw-app .nw-lane [data-part="mini"] { inset: -10px; z-index: 1;
+  background:
+    radial-gradient(farthest-side, transparent calc(100% - 9px), rgb(255 255 255 / .35) calc(100% - 7px), transparent calc(100% - 5px)),
+    conic-gradient(from 210deg, var(--state) calc(min(var(--fill), 1) * 300deg), rgb(20 14 6 / .85) 0 300deg, transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 10px), #000 calc(100% - 9px)); mask: radial-gradient(farthest-side, transparent calc(100% - 10px), #000 calc(100% - 9px));
+  filter: drop-shadow(0 0 5px var(--state)); }
+.nw-app .nw-lane[data-state="sleeping"] [data-part="mini"], .nw-app .nw-lane[data-state="down"] [data-part="mini"] { filter: none; }
+
+/* meters inside the face: context reading | throughput in a straight glass tube | its reading */
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="meters"] { grid-area: port; z-index: 4; align-self: start; margin-top: calc(var(--port) * .6);
+  display: flex; align-items: center; gap: 4px; padding: 0; background: none; box-shadow: none; }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="context"] [data-part="bar"],
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] :is([data-part="context"], [data-part="throughput"]) > .nw-icon { display: none; }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] :is([data-part="context"], [data-part="throughput"]) { display: flex; align-items: center; gap: 4px; }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="throughput"] svg:not(.nw-icon) { width: 64px; height: 20px; padding: 3px 6px; border-radius: 10px;
+  background: linear-gradient(180deg, rgb(255 255 255 / .28), transparent 40%, rgb(255 255 255 / .08) 75%, transparent), #0b1510;
+  box-shadow: -3px 0 0 -1px #c7973f, 3px 0 0 -1px #c7973f, -5px 0 0 -1px #6e521a, 5px 0 0 -1px #6e521a, inset 0 0 8px rgb(109 255 174 / .2); }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] :is([data-part="context"], [data-part="throughput"]) [data-part="value"] { font-size: 10px; padding: 0 5px; }
+
+/* the valve bank: actions as knobs around the lower rim, the toggle in the middle */
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="actions"] { grid-area: port; z-index: 4; position: relative; width: var(--port); height: var(--port); padding: 0; pointer-events: none; }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="actions"] button { --a: 0deg; position: absolute; left: 50%; top: 50%; margin: -13px; width: 26px; height: 26px; pointer-events: auto;
+  transform: rotate(var(--a)) translateY(calc(var(--port) / 2 + 28px)) rotate(calc(var(--a) * -1)); }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="actions"] button:nth-child(1) { --a: 48deg; }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="actions"] button:nth-child(2) { --a: 32deg; }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="actions"] button:nth-child(3) { --a: 16deg; }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="actions"] button:nth-child(4) { --a: -16deg; }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="actions"] button:nth-child(5) { --a: -32deg; }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="actions"] button:nth-child(6) { --a: -48deg; }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="toggle"] { bottom: -30px; }
+
+/* below the porthole: an engraved tag, then the lamp plate and the settings card */
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="facts"] { grid-area: facts; margin-top: 66px; padding: 3px 10px; border-radius: 10px;
+  background: var(--bw-brass); box-shadow: 0 0 0 1px #6e521a, 0 2px 0 #5a4214; color: var(--bw-ink); font-size: 11px; text-shadow: var(--bw-emboss); }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="facts"] [data-part="next"] { display: none; }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] .nw-alert { grid-area: alert; position: relative; width: 100%; margin-top: 22px; }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] .nw-alert::before { content: ""; position: absolute; left: 50%; top: -24px; width: 10px; height: 24px; margin-left: -5px; background: var(--bw-pipe-v); }
+.nw-app:not([data-layout="stack"]) .nw-lane[data-open="true"] [data-part="settings"] { grid-area: set; width: 100%; margin-top: 14px; }
+
+/* ---- the core row keeps one height; the timeline stops growing ---- */
+.nw-timeline { --dial: 250px; --dial-x: 220px; --dial-y: 158px; height: 384px; min-height: 0; }
+.nw-app[data-timeline-mode] .nw-timeline [data-part="activity"] { position: absolute; left: 16px; right: 16px; top: calc(var(--dial-y) + var(--dial) / 2 + 30px); height: 58px; margin: 0; }
+/* no legend chips: the rings carry the events; a small engraved label marks each ring's start */
+.nw-strip[data-mode="expanded"] .nw-node { font-size: 0; padding: 0; background: none; box-shadow: none; }
+.nw-strip[data-mode="expanded"] .nw-node > * { display: none; }
+.nw-strip[data-mode="expanded"] { margin: 0 !important; }
+.nw-strip[data-mode="expanded"]::before { position: absolute; width: auto; content: attr(data-lane); font: 700 9px var(--mw-font); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--bw-ink); text-shadow: var(--bw-emboss); left: calc(var(--dial-x) - var(--r) * .707 - 46px); top: calc(var(--dial-y) + var(--r) * .707 - 6px); }
+.nw-timeline [data-part="empty"] { top: calc(var(--dial-y) + var(--dial) / 2 + 40px); }
+.nw-controls { align-self: stretch; }
+.nw-log { align-self: stretch; height: 0; min-height: calc(100% - 14px); display: flex; flex-direction: column; overflow: hidden; }
+/* Alone in its row the log has no neighbour to borrow a height from (Ra, 10/6): it sizes itself. */
+.nw-app:not([data-layout="stack"])[data-show-controls="false"][data-show-timeline="false"] .nw-log { height: auto; min-height: 0; }
+.nw-app:not([data-layout="stack"])[data-show-controls="false"][data-show-timeline="false"] .nw-log [data-part="events"] { max-height: 330px; }
+.nw-log [data-part="events"] { flex: 1; min-height: 0; max-height: none; }
+
+/* ring labels collided with the hour marks: the rings go unlabelled (outer = first lane), names live in the log */
+.nw-strip[data-mode="expanded"]::before { display: none; }
+/* the console fills its height: the readout window grows */
+.nw-controls { grid-template-rows: 1fr auto auto; }
+.nw-controls [data-part="display"] { align-content: center; gap: 8px; }
+
+/* v0.8: the skin group's heading, a label, not an item */
+.nw-head [data-part="view-menu"] :is([data-part="skin-heading"], [data-part="theme-heading"]) { display: flex; align-items: center; gap: 8px; padding: 4px 6px 2px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .75; }
+
+/* v0.9: the fold target (--target) as a brass notch on the context ring and the flat bar */
+.nw-app .nw-lane [data-part="mini"] { background: conic-gradient(from 210deg, transparent calc(min(var(--target, 1), 1) * 300deg - 2deg), #ffe2a0 0 calc(min(var(--target, 1), 1) * 300deg + 2deg), transparent 0),
+    radial-gradient(farthest-side, transparent calc(100% - 9px), rgb(255 255 255 / .35) calc(100% - 7px), transparent calc(100% - 5px)),
+    conic-gradient(from 210deg, var(--state) calc(min(var(--fill), 1) * 300deg), rgb(20 14 6 / .85) 0 300deg, transparent 0); }
+.nw-app[data-layout="stack"] .nw-lane [data-part="mini"], html[data-surface="popover"] .nw-app .nw-lane [data-part="mini"] { background: linear-gradient(90deg, transparent calc(min(var(--target, 1), 1) * 100% - 1px), #ffe2a0 0 calc(min(var(--target, 1), 1) * 100% + 1px), transparent 0),
+  linear-gradient(90deg, var(--state) calc(min(var(--fill), 1) * 100%), #ffffff1c 0); }
+
+/* v0.9.1: an acked app alarm dims like an acked lane alert (this screen only) */
+.nw-alarm[data-acked="true"] { rotate: -2deg; opacity: .55; }
+
+/* The Remove gate (Ra, 10/6) reads as a sentence, like the armed row, not a short field label. */
+.nw-lane [data-part="settings"] [data-part="confirm-remove"] > span { width: auto; flex: 1; }
+
+/* A disabled button in settings or the add form must LOOK disabled: the gated Remove (and, until
+   saving is wired, Save) read as armed while inert (Ra, 10/6). */
+.nw-app :is([data-part="settings"], [data-part="add-form"]) button[aria-disabled="true"] { filter: grayscale(1) brightness(.6); cursor: not-allowed; }
+
+/* Hub design (10/6): the persona leads the model line, quietly, and the
+   global-schedule row reads as a sentence like the armed row. */
+.nw-lane [data-part="model"] [data-part="persona"] { font-weight: 600; opacity: .85; }
+.nw-lane [data-part="settings"] [data-part="global-schedule"] > span { width: auto; flex: 1; }
+.nw-lane [data-part="settings"] input:disabled { opacity: .55; }
+
+/* App settings panel (10/6): the page places it (viewer chrome); the skin draws it. */
+.nw-settings { display: grid; gap: 12px; padding: 14px 16px; rotate: 0deg; font-size: 12.5px; }
+.nw-settings [data-part="heading"] { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; }
+.nw-settings [data-part="heading"] [data-part="close"] { margin-left: auto; border: 0; background: none; color: inherit; cursor: pointer; padding: 2px; opacity: .7; }
+.nw-settings [data-part="heading"] [data-part="close"]:hover { opacity: 1; }
+.nw-settings [data-part="schedule"] { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.nw-settings [data-part="schedule"] [data-part="label"] { font-weight: 600; }
+.nw-settings [data-part="schedule"] label { display: inline-flex; align-items: center; gap: 5px; }
+.nw-settings [data-part="tz"] { color: #2a1f12aa; font-size: 11.5px; }
+.nw-settings table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.nw-settings th { text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #2a1f12aa; padding: 0 6px 4px; }
+.nw-settings td { padding: 5px 6px; border-top: 1px solid #2a1f1233; }
+.nw-settings td input[type="number"] { width: 64px; }
+.nw-settings [data-part="doctor"] h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 12.5px; }
+.nw-settings [data-part="doctor"] ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.nw-settings [data-part="doctor"] li { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.nw-settings [data-part="doctor"] li[data-status="ok"] .nw-icon { color: #1f7a3d; }
+.nw-settings [data-part="doctor"] li[data-status="warn"] { color: #a8590a; }
+.nw-settings [data-part="doctor"] li[data-status="failed"] { color: #b91c1c; font-weight: 600; }
+.nw-settings [data-part="doctor"] li [data-part="fix"] { margin-left: auto; }
+.nw-settings [data-part="buttons"] { display: flex; justify-content: space-between; gap: 8px; }
+.nw-app :is(.nw-settings) button[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
+
+/* Check again: the nightshift's dry run, verbatim (10/6). */
+.nw-settings [data-part="preflight"] { margin: 8px 0 0; padding: 8px; max-height: 220px; overflow: auto; font: 11px/1.45 ui-monospace, monospace; white-space: pre-wrap; background: rgb(0 0 0 / .06); border-radius: 4px; }
+
+/* ---------- lane creation (10/6): Set up and Add agent's preview, on the same paper as settings ---------- */
+.nw-setup, .nw-add [data-part="preview"] {
+  position: relative; display: grid; gap: 10px; padding: 14px 16px; color: var(--mw-ink); font: 12.5px var(--mw-type);
+  background: var(--mw-paper) repeating-linear-gradient(transparent 0 23px, #9ec3e8 23px 24px); border-top: 3px solid #e06666; box-shadow: 2px 4px 0 #0007; }
+.nw-add [data-part="preview"] { gap: 6px; padding: 12px 10px 10px; font-size: 12px; }
+.nw-setup [data-part="heading"] { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; }
+.nw-setup [data-part="heading"] [data-part="close"] { margin-left: auto; border: 0; background: none; color: inherit; cursor: pointer; padding: 2px; opacity: .7; }
+.nw-setup [data-part="progress"] { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; counter-reset: step; font-size: 11.5px; color: #2a1f12aa; }
+.nw-setup [data-part="progress"] li { counter-increment: step; flex: 1; padding-top: 4px; border-top: 3px solid #2a1f1233; }
+.nw-setup [data-part="progress"] li::before { content: counter(step) ". "; }
+.nw-setup:is([data-step="who"], [data-step="import"]) [data-part="progress"] li[data-step="who"],
+.nw-setup[data-step="nights"] [data-part="progress"] li:is([data-step="who"], [data-step="nights"]),
+.nw-setup[data-step="preview"] [data-part="progress"] li { border-top-color: #e06666; }
+.nw-setup:is([data-step="who"], [data-step="import"]) [data-part="progress"] li[data-step="who"],
+.nw-setup[data-step="nights"] [data-part="progress"] li[data-step="nights"],
+.nw-setup[data-step="preview"] [data-part="progress"] li[data-step="preview"] { color: var(--mw-ink); font-weight: 700; }
+.nw-setup fieldset { gap: 8px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.nw-setup label { display: flex; align-items: center; gap: 8px; }
+.nw-setup label > span { width: 84px; flex: none; }
+.nw-setup label[data-part="about"] { align-items: flex-start; }
+.nw-setup :is(input:not([type="checkbox"]), select) { flex: 1; min-width: 0; padding: 1px 4px; border: 0; border-bottom: 2px solid var(--mw-ink); background: transparent; color: var(--mw-ink); font: 13px var(--mw-font); }
+.nw-setup textarea { flex: 1; min-width: 0; resize: vertical; padding: 3px 5px; border: 2px solid var(--mw-ink); border-radius: 2px; background: #fff6; color: var(--mw-ink); font: 13px/1.45 var(--mw-font); }
+.nw-setup input[type="number"] { flex: 0 0 64px; }
+.nw-setup :is([data-part="unit"], [data-part="armed"] > span) { width: auto; }
+.nw-setup [data-part="armed"] > span { flex: 1; }
+.nw-setup [data-part="schedule"] { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.nw-setup [data-part="schedule"] label { display: inline-flex; }
+.nw-setup :is([data-part="import-link"], [data-action="check-import"]) { justify-self: start; display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; padding: 2px 0; color: #b2382f; font: 700 12.5px var(--mw-type); cursor: pointer; text-decoration: underline; text-decoration-style: wavy; text-underline-offset: 3px; }
+.nw-setup [data-part="hint"] { margin: 0; line-height: 1.45; color: #2a1f12cc; }
+.nw-setup [data-part="found"] { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.nw-setup [data-part="found"]:empty { display: none; }
+.nw-setup [data-part="found"] li[data-status="ok"] .nw-icon { color: #1f7a3d; }
+.nw-setup [data-part="found"] li[data-status="missing"] { color: #2a1f12aa; }
+.nw-setup [data-part="found"] li[data-status="failed"] { color: #b91c1c; font-weight: 700; }
+.nw-setup [data-part="buttons"] { display: flex; justify-content: flex-end; gap: 6px; }
+.nw-setup [data-part="buttons"] [data-action="setup-back"] { margin-right: auto; }
+:is(.nw-setup, .nw-add) [data-part="error"] { margin: 0; padding: 5px 8px; color: #b91c1c; font-weight: 700; background: #b91c1c14; border-left: 3px solid #b91c1c; }
+:is(.nw-setup, .nw-add) [data-step="preview"] h4, .nw-add [data-part="preview"] h4 { margin: 0 0 4px; font-size: 13px; }
+:is(.nw-setup, .nw-add) [data-part="steps"] { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+:is(.nw-setup, .nw-add) [data-part="steps"] li { display: grid; grid-template-columns: 58px 1fr; gap: 0 8px; align-items: baseline; }
+:is(.nw-setup, .nw-add) [data-part="steps"] li span { grid-column: 2; color: #2a1f12bb; font-family: var(--mw-font); text-transform: none; }
+:is(.nw-setup, .nw-add) [data-part="steps"] code { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--mw-ink); }
+.nw-add [data-part="own-schedule"] { display: flex; flex-wrap: wrap; gap: 4px 12px; padding-left: 62px; }
+.nw-add [data-part="own-schedule"] label > span, .nw-add :is([data-part="global-schedule"], [data-part="unit"]) > span, .nw-add [data-part="unit"] { width: auto; }
+.nw-add input:disabled { opacity: .55; }
+.nw-add input[type="number"] { flex: 0 0 56px; }
+/* The add column sizes to the round + button; an open slot takes a lane's width so the form and its preview
+   have room (10/6). */
+.nw-app:not([data-layout="stack"]) .nw-lanes .nw-add[data-open="true"] { width: var(--mw-lane-w); }
+.nw-add[data-open="true"] [data-part="preview"] { width: 100%; box-sizing: border-box; }
+
+/* The test sheet's deck copy must not claim the app's "controls" area (it invented extra sheet columns). */
+.nw-gallery > .nw-controls { grid-area: auto; }
+
+/* Appearance radios in a one-look skin: shown, but plainly not active (10/6). */
+.nw-head [data-part="view-menu"] [data-view="theme"][aria-disabled="true"] { opacity: .45; cursor: default; }
+
+/* Layout options (View menu, 10/6): this skin has its own layout, so "log down the side" and the vertical
+   panels layout don't apply; the runtime shows them disabled. */
+:root { --nw-layouts: own; }
+
+/* The working/idle light (Ra, 10/7): the state label breathes while the agent runs inference, holds steady
+   when idle, and takes the bell colour when it's waiting on a person. */
+.nw-lane[data-activity="waiting"] [data-part="state"] { --state: var(--mw-belled); }
+.nw-lane[data-activity="working"] [data-part="state"] { animation: nw-working 1.3s ease-in-out infinite; }
+@keyframes nw-working { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .nw-lane[data-activity="working"] [data-part="state"] { animation: none; text-decoration: underline 2px; } }
+
+/* Tips flip below when they would run into the head bar (runtime sets data-tip-pos, 10/7). */
+[data-tip][data-tip-pos="below"]:hover::after { bottom: auto; top: calc(100% + 8px); }
+
+/* Persona rows (10/7): this skin keeps its own arrangement of lanes, so a persona's group dissolves into it
+   (its cards and add slot sit where they always did) and the name isn't shown here yet. */
+.nw-persona { display: contents; }
+.nw-persona > [data-part="persona-card"], .nw-add-persona { display: none; }
+
+/* Restore defaults (10/7): a brass tag like the filter chips. */
+.nw-log [data-part="filters"] [data-action="reset-log"] { display: inline-grid; place-items: center; padding: 0 5px; border: 2px solid #8a6524; border-radius: 3px; color: #5a4214; background: linear-gradient(#f7e2a8, #d8b260); rotate: 2deg; cursor: pointer; }
+.nw-log [data-part="filters"] [data-action="reset-log"] .nw-icon { width: 12px; height: 12px; }
