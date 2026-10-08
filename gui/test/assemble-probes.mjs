@@ -175,6 +175,34 @@ const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
   check('wake-failed outranks the spiral card', Lb?.alert?.kind === 'wake-failed', JSON.stringify(Lb?.alert?.kind ?? null));
 }
 
+// ---- stuck-state cards (Ra, 10/8): spiralwatch's `stuck` episodes become
+// lane alerts; a clear or a fold ends them; the most urgent open cause wins;
+// wake failures and spirals outrank them; the log names the cause.
+{
+  const ev = (rows) => rows.map((r) => JSON.stringify(r)).join('\n');
+  const io = (events) => ({
+    readText: (p) => p === '/ev' ? events : p === '/armed' ? 'fable' : null,
+    readDir: () => [], stat: () => null, readTail: () => null,
+    livePids: () => [], psCommand: () => null, now: () => NOW,
+  });
+  const stuck = (cause, agoMin, extra = {}) => ({ at: iso(agoMin * 60e3), kind: 'stuck', cause, lane: 'fable', session: 'sess-x', alarm: true, ...extra });
+  const alertOf = (rows) => assemble(cfg, io(ev(rows)), '8h').LANES.find((x) => x.id === 'fable')?.alert ?? null;
+  const off = alertOf([stuck('offline', 20)]);
+  check('a stuck episode raises its card', off?.kind === 'stuck-offline' && off.title === "Can't reach the API" && off.at[0] === iso(20 * 60e3), JSON.stringify(off));
+  const login = alertOf([stuck('login', 20)]);
+  check('a fix that happens in the window offers to open it', login?.fixes?.[0]?.[1] === 'open-terminal', JSON.stringify(login?.fixes));
+  check('a clear ends the episode', alertOf([stuck('offline', 20), { at: iso(5 * 60e3), kind: 'stuck-cleared', cause: 'offline', lane: 'fable' }]) == null, 'card stayed');
+  check('a fold ends every episode', alertOf([stuck('offline', 20), stuck('context', 15, { ratio: 0.9 }), { at: iso(5 * 60e3), kind: 'folded', lane: 'fable', tail: 't' }]) == null, 'card stayed');
+  const urgent = alertOf([stuck('context', 30, { ratio: 0.9 }), stuck('login', 20)]);
+  check('the most urgent open cause wins (login over context)', urgent?.kind === 'stuck-login', JSON.stringify(urgent?.kind));
+  const cleared = alertOf([stuck('context', 30, { ratio: 0.9 }), stuck('login', 20), { at: iso(5 * 60e3), kind: 'stuck-cleared', cause: 'login', lane: 'fable' }]);
+  check('clearing the urgent one shows the next (context)', cleared?.kind === 'stuck-context' && /90%/.test(cleared.cause), JSON.stringify(cleared));
+  const spiralFirst = alertOf([stuck('offline', 20), { at: iso(10 * 60e3), kind: 'spiral-alarm', lane: 'fable', session: 'sess-x', errors: 3, windowMin: 60, alarm: true }]);
+  check('a spiral outranks a stuck card', spiralFirst?.kind === 'spiral-alarm', JSON.stringify(spiralFirst?.kind));
+  const tips = assemble(cfg, io(ev([stuck('offline', 20), { at: iso(5 * 60e3), kind: 'stuck-cleared', cause: 'offline', lane: 'fable' }])), '8h').LOG.flatMap(([, rows]) => rows.map((r) => JSON.stringify(r)));
+  check('the log names the cause both ways', tips.some((t) => t.includes('Stuck (offline)')) && tips.some((t) => t.includes('Recovered (offline)')), JSON.stringify(tips).slice(0, 300));
+}
+
 // ---- the midnight hour reads 00, never 24 (en-US with hour12:false wrote "24:32"; Ra saw it in the log, 10/7)
 {
   const io = { readText: (p) => p === '/ev' ? JSON.stringify({ at: '2026-10-07T07:32:00Z', kind: 'daemon-alive', armed: ['fable'] }) : null,

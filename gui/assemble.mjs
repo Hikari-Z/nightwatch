@@ -227,8 +227,20 @@ function transcriptStats(cfg, io, sid) {
 }
 
 // events.jsonl → lane states, night strip, log, alarms
-const KIND_MAP = { 'fold-requested': 'bell', 'fold-request-met': 'fold', 'fold-forced': 'fold', 'bell-rung': 'bell', folded: 'fold', 'panel-closed': 'close', 'wake-launched': 'launch', 'wake-exec': 'launch', 'wake-confirmed': 'wake', 'wake-failed': 'wake-failed', 'already-awake': 'wake', 'stale-receipt': 'wake-failed', 'orphan-fold-done': 'fold', 'orphan-fold-failed': 'wake-failed', 'daemon-up': 'heartbeat', 'daemon-alive': 'heartbeat', 'daemon-down': 'wake-failed', 'bell-failed': 'wake-failed', 'spiral-alarm': 'wake-failed' };
-const TIP = { 'fold-requested': 'Fold requested (bell + deadline)', 'fold-request-met': 'Fold request met — refreshing', 'fold-forced': 'Fold FORCED at deadline — refreshing', 'bell-rung': 'Bell rung (spool note)', folded: 'Folded', 'panel-closed': 'Panel closed, slept and quiet', 'wake-launched': 'Wake launched', 'wake-exec': 'Wake reached exec', 'wake-confirmed': 'Wake confirmed (registry)', 'wake-failed': 'Wake failed', 'already-awake': 'Already awake', 'stale-receipt': 'Stale sleep receipt', 'orphan-fold-done': 'Orphan fold', 'orphan-fold-failed': 'Orphan fold FAILED', 'daemon-up': 'Nightshift up', 'daemon-alive': 'Nightshift alive', 'daemon-down': 'Nightshift DOWN', 'bell-failed': 'Bell FAILED', 'spiral-alarm': 'API error spiral' };
+// Stuck states, most urgent first (spiralwatch's `stuck` events, Ra 10/8).
+// `window`: the fix happens in the lane's own window (a /login, a prompt).
+const STUCK_ORDER = ['login', 'usage-limit', 'offline', 'waiting', 'classifier', 'context', 'slept'];
+const STUCK_CARD = {
+  login: { title: 'Logged out', window: true, cause: () => 'The session says its login expired. It can\'t do anything until someone runs /login in its window.' },
+  'usage-limit': { title: 'Usage limit reached', window: false, cause: () => 'Stopped until the usage limit resets, or until its model is switched (/model).' },
+  offline: { title: 'Can\'t reach the API', window: false, cause: () => 'Connection or DNS failure. It retries on its own once the network is back.' },
+  waiting: { title: 'Waiting on you', window: true, cause: (e) => `Waiting for ${Math.round((e.forMs ?? 0) / 60000)} minutes on a permission prompt or a question in its window.` },
+  classifier: { title: 'Classifier stops', window: false, cause: (e) => `${e.count} tool calls denied by the auto mode classifier in 30 minutes${e.reason ? ` (latest: ${e.reason})` : ''}. It may be circling something.` },
+  context: { title: 'Context nearly full', window: false, cause: (e) => `At ${Math.round((e.ratio ?? 0) * 100)}% of its context window. Worth a fold at its next seam.` },
+  slept: { title: 'Cut off by sleep', window: true, cause: () => 'This machine went to sleep mid-reply. A short poke in its window resumes it.' },
+};
+const KIND_MAP = { 'fold-requested': 'bell', 'fold-request-met': 'fold', 'fold-forced': 'fold', 'bell-rung': 'bell', folded: 'fold', 'panel-closed': 'close', 'wake-launched': 'launch', 'wake-exec': 'launch', 'wake-confirmed': 'wake', 'wake-failed': 'wake-failed', 'already-awake': 'wake', 'stale-receipt': 'wake-failed', 'orphan-fold-done': 'fold', 'orphan-fold-failed': 'wake-failed', 'daemon-up': 'heartbeat', 'daemon-alive': 'heartbeat', 'daemon-down': 'wake-failed', 'bell-failed': 'wake-failed', 'spiral-alarm': 'wake-failed', stuck: 'wake-failed', 'stuck-cleared': 'wake' };
+const TIP = { 'fold-requested': 'Fold requested (bell + deadline)', 'fold-request-met': 'Fold request met — refreshing', 'fold-forced': 'Fold FORCED at deadline — refreshing', 'bell-rung': 'Bell rung (spool note)', folded: 'Folded', 'panel-closed': 'Panel closed, slept and quiet', 'wake-launched': 'Wake launched', 'wake-exec': 'Wake reached exec', 'wake-confirmed': 'Wake confirmed (registry)', 'wake-failed': 'Wake failed', 'already-awake': 'Already awake', 'stale-receipt': 'Stale sleep receipt', 'orphan-fold-done': 'Orphan fold', 'orphan-fold-failed': 'Orphan fold FAILED', 'daemon-up': 'Nightshift up', 'daemon-alive': 'Nightshift alive', 'daemon-down': 'Nightshift DOWN', 'bell-failed': 'Bell FAILED', 'spiral-alarm': 'API error spiral', stuck: 'Stuck', 'stuck-cleared': 'Recovered' };
 
 const RANGE_HOURS = { '8h': 8, '24h': 24, '3d': 72, '7d': 168 };
 const RANGE_LABEL = { '8h': 'Last 8 hours', '24h': 'Last 24 hours', '3d': 'Last 3 days', '7d': 'Last 7 days' };
@@ -363,6 +375,31 @@ export function assemble(cfg, io, range = '8h') {
             ],
           };
         }
+      }
+    }
+    // Stuck states (Ra, 10/8): spiralwatch tells each one as an episode —
+    // `stuck` when it starts, `stuck-cleared` when it ends — and a fold,
+    // re-wake or closed panel ends them all. The lane shows its most urgent
+    // open episode; wake failures and spirals outrank them.
+    if (!alert) {
+      const open = new Map();
+      for (const e of laneEvents) {
+        if (e.kind === 'stuck') open.set(e.cause, e);
+        else if (e.kind === 'stuck-cleared') open.delete(e.cause);
+        else if (['folded', 'wake-confirmed', 'panel-closed'].includes(e.kind)) open.clear();
+      }
+      const pick = STUCK_ORDER.map((c) => open.get(c)).find((e) => e && nowMs - Date.parse(e.at) < 12 * 3600_000);
+      if (pick) {
+        const how = STUCK_CARD[pick.cause];
+        alert = {
+          kind: `stuck-${pick.cause}`,
+          at: [pick.at, hm(pick.at)],
+          title: how.title,
+          cause: how.cause(pick),
+          fixes: how.window
+            ? [['terminal', 'open-terminal', 'Open its window', 'Bring the lane\'s Terminal window forward'], ['log', 'show-log', 'Show log', 'Open the log at this alert']]
+            : [['log', 'show-log', 'Show log', 'Open the log at this alert']],
+        };
       }
     }
     // ONE session id for the label AND the stats. A hook-registered session
