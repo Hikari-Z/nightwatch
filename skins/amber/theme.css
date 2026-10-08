@@ -119,12 +119,15 @@ input[type="checkbox"] { accent-color: #8a8272; }
 .nw-controls [data-part="next"] { color: var(--nw-ink-2); font-size: 11.5px; } .nw-controls [data-part="next"] time { color: var(--am-hi); text-shadow: 0 0 8px var(--am-glow); }
 .nw-controls [data-part="counts"] li::before { border-radius: 1px; width: 3px; height: 10px; box-shadow: 0 0 6px var(--c); }
 .nw-controls [data-part="counts"] b { color: var(--nw-ink); }
-.nw-controls [data-part="transport"] button { border-radius: 2px; border: 0; background: var(--ob-gloss); box-shadow: var(--ob-edge), 0 2px 4px rgb(0 0 0 / .6); color: var(--nw-ink); }
+/* No black drop shadow under the transport's buttons (Ra, 10/7): it made the glowing primary look smaller beside
+   them; the log's buttons do without one and read fine. */
+.nw-controls [data-part="transport"] button { border-radius: 2px; border: 0; background: var(--ob-gloss); box-shadow: var(--ob-edge); color: var(--nw-ink); }
 .nw-controls [data-part="primary"] { background: var(--ob-gloss) !important; color: var(--am-hi) !important; font: 500 12px var(--nw-cond) !important; text-transform: uppercase; letter-spacing: .16em;
-  box-shadow: var(--ob-edge), 0 2px 4px rgb(0 0 0 / .6), inset 0 -2px 0 -1px var(--am) !important; }
-/* The primary is one of the transport's buttons (Ra, 10/7: it read smaller and rounder, with no hover): the same
-   drop shadow as its neighbours, its amber underline as the only accent, and the same hover they have. */
-.nw-controls [data-part="primary"]:hover { background: var(--nw-hover) !important; }
+  box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--am), 0 8px 16px -10px var(--am) !important; }
+/* Hovered, the primary keeps its glow, and the glow and its label turn red (Ra, 10/7; a hotter amber was too close to
+   the resting amber to read), instead of the flat hover the plain buttons use. */
+.nw-controls [data-part="primary"]:hover { --am-hover: #ff5a3c; color: var(--am-hover) !important;
+  box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--am-hover), 0 8px 18px -8px var(--am-hover) !important; }
 .nw-controls[data-setup="true"] [data-part="primary"] { color: #fff2d6 !important; }
 .nw-controls :is([data-part="toggles"], [data-part="transport"]) button[aria-pressed="true"] { color: var(--am-hi); background: transparent; box-shadow: inset 0 -2px 0 -1px var(--am); }
 
