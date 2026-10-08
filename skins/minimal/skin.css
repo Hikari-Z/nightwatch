@@ -731,3 +731,7 @@ html[data-gallery="1"] .nw-gallery { grid-area: gallery; display: grid; grid-tem
 .nw-log:is([data-lane-only]):not([data-lane-only=""]) [data-part="heading"]::after { content: " · " attr(data-lane-label); text-transform: none; letter-spacing: 0; color: var(--nw-ink); }
 /* The session row sits above the settings' own controls: one button, left-aligned. */
 [data-part="settings"] [data-part="session-row"] { display: flex; }
+
+/* Settings are per persona (Ra, 10/7): the gear on each persona card opens them, so the head's Settings menu drops
+   its "Schedule and health check…" entry here. Skins that hide persona cards (Moonlamp, Brassworks) keep it. */
+.nw-head [data-part="settings-entry"] { display: none; }

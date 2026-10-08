@@ -43,7 +43,7 @@
   const host = () => window.NW_HOST && typeof window.NW_HOST.act === 'function' ? window.NW_HOST : null;
   // App-level settings has no panel in the phase-1 page yet; it reads as
   // not-yet rather than broken.
-  const NOT_YET = new Set(['persona-settings', 'add-persona']); // app-settings has its panel now (10/6); persona ones wait for the multi-persona paths (10/7)
+  const NOT_YET = new Set(['add-persona']); // settings are per persona now (10/7); Add persona waits for its flow
 
   // A host wires actions one at a time (NW_HOST.can); everything it can't do
   // yet, or everything at all in a plain browser tab, stays read-only. A
@@ -164,7 +164,7 @@
   // name plus the hub it lives in. No hub: the app's own (single-hub) hub.
   function laneRef(el) {
     const laneEl = el?.closest('[data-lane]');
-    return { lane: laneEl ? (laneEl.dataset.name ?? laneEl.dataset.lane) : null, hub: el?.closest('.nw-persona')?.dataset.hub ?? null };
+    return { lane: laneEl ? (laneEl.dataset.name ?? laneEl.dataset.lane) : null, hub: el?.closest('.nw-persona, .nw-settings')?.dataset.hub ?? null };
   }
   async function syncTerminals() {
     const h = host(); if (!h || !canDo('terminal-state')) return;
@@ -504,10 +504,16 @@
         const lane = btn.closest('.nw-lane'); if (lane) setLaneOpen(lane, lane.dataset.open !== 'true');
         break;
       }
-      case 'app-settings': case 'close-settings': {
-        const p = $('.nw-app > .nw-settings'); if (!p) break;
-        const open = a === 'app-settings' ? p.dataset.open !== 'true' : false;
-        p.dataset.open = String(open);
+      // Settings are per persona (Ra, 10/7): the gear on a persona's card opens
+      // that persona's panel. The head's entry (shown only by skins without
+      // persona cards) opens the first persona's.
+      case 'persona-settings': case 'app-settings': case 'close-settings': {
+        const panels = $$('.nw-app > .nw-settings');
+        const want = a === 'close-settings' ? null
+          : a === 'persona-settings' ? panels.find((p) => p.dataset.persona === btn.closest('.nw-persona')?.dataset.persona)
+          : panels[0];
+        const open = !!want && want.dataset.open !== 'true';
+        for (const p of panels) p.dataset.open = String(open && p === want);
         setMenu(false);
         break;
       }

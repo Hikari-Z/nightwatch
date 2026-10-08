@@ -46,7 +46,9 @@ export function mergeSnapshots(parts) {
   // Persona ids unique across hubs (two hubs could share a folder name).
   const seen = new Map();
   const tagged = parts.map(({ root, snap }) => {
-    const p = { ...snap.PERSONAS[0], hub: root };
+    // Each persona carries its own schedule and nightshift status: its settings
+    // panel shows them (the head shows the primary hub's schedule, the worst status).
+    const p = { ...snap.PERSONAS[0], hub: root, schedule: snap.SCHEDULE, daemon: snap.DAEMON };
     const n = (seen.get(p.id) ?? 0) + 1; seen.set(p.id, n);
     if (n > 1) p.id = `${p.id}-${n}`;
     return { root, snap, persona: p };

@@ -109,11 +109,23 @@ await click('.nw-app > .nw-lanes .nw-lane[data-lane="fable"] [data-action="lane-
 await ev(`(()=>{const p=document.querySelector('${FS}');p.querySelector('input[type="number"]').value='300';const t=p.querySelector('[data-schedule-toggle]');t.click();p.querySelector('[data-part="sleep"] input').value='03:00';p.querySelector('[data-part="wake"] input').value='09:00'})()`);
 await click(`${FS} [data-action="save-lane"]`); await sleep(150);
 await check('save-lane sends the panel', 'window.__data.at(-1)', { targetK: 300, inherit: false, sleep: '03:00', wake: '09:00', armed: true });
-await ev(`document.querySelector('.nw-head [data-part="view-menu"][data-menu="app"] [data-action="app-settings"]').click()`);
-await click('.nw-app > .nw-settings [data-action="save-settings"]'); await sleep(150);
-await check('save-settings sends schedule + every lane row', `(()=>{const d=window.__data.at(-1);return [d.sleep,d.wake,d.lanes.map(l=>[l.id,l.targetK,l.armed])]})()`,
-  ['02:00', '08:00', [['fable', 250, true], ['opus', 250, true], ['scout', 120, false], ['scribe', 200, true]]]);
-await ev(`document.querySelector('.nw-app > .nw-settings [data-action="close-settings"]').click()`);
+// Settings are per persona (Ra, 10/7): each persona card's gear opens that persona's panel, which saves only its lanes.
+const OPEN = `[...document.querySelectorAll('.nw-app > .nw-settings')].filter(p=>p.dataset.open==='true').map(p=>p.dataset.persona)`;
+await check('one settings panel per persona', `[...document.querySelectorAll('.nw-app > .nw-settings')].map(p=>p.dataset.persona)`, ['weft', 'lark']);
+await click('.nw-app > .nw-lanes .nw-persona[data-persona="weft"] [data-action="persona-settings"]');
+await check("Weft's gear opens Weft's panel, and only it", OPEN, ['weft']);
+await click('.nw-app > .nw-settings[data-persona="weft"] [data-action="save-settings"]'); await sleep(150);
+await check("Weft's panel saves its schedule and only Weft's lanes", `(()=>{const d=window.__data.at(-1);return [d.sleep,d.wake,d.lanes.map(l=>[l.id,l.targetK,l.armed])]})()`,
+  ['02:00', '08:00', [['fable', 250, true], ['opus', 250, true], ['scribe', 200, true]]]);
+await click('.nw-app > .nw-lanes .nw-persona[data-persona="lark"] [data-action="persona-settings"]');
+await check("Lark's gear swaps to Lark's panel", OPEN, ['lark']);
+await click('.nw-app > .nw-settings[data-persona="lark"] [data-action="save-settings"]'); await sleep(150);
+await check("Lark's panel saves only Lark's lane", `window.__data.at(-1).lanes.map(l=>[l.id,l.targetK,l.armed])`, [['scout', 120, false]]);
+await ev(`document.querySelector('.nw-app > .nw-settings[data-persona="lark"] [data-action="close-settings"]').click()`);
+await check('close shuts it', OPEN, []);
+// (the doctor checks below use the first panel, Weft's)
+await click('.nw-app > .nw-lanes .nw-persona[data-persona="weft"] [data-action="persona-settings"]');
+await ev(`document.querySelector('.nw-app > .nw-settings[data-persona="weft"] [data-action="close-settings"]').click()`);
 await check('nightly reads ON from armed lanes', `document.querySelector('.nw-controls [data-action="toggle-nightly"]').getAttribute('aria-pressed')`, 'true');
 await click('.nw-controls [data-action="toggle-nightly"]');
 await check('turning nightly off asks first', `document.querySelector('.nw-app > .nw-confirm [data-part="title"]')?.textContent.trim()`, 'Turn the nightly cycle off?');

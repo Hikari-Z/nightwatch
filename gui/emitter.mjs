@@ -690,45 +690,59 @@ function log(ctx) {
 }
 
 function settings(ctx) {
-  // App settings (Ra, 10/6): everything from the snapshot, nothing frozen.
-  // The health check is derived from facts the head and cards already show,
-  // so the panel can never disagree with them. Saving waits for config set.
-  const sc = ctx.SCHEDULE;
-  const lanes = ctx.LANES.map((L) => {
+  // Settings, one panel per persona (Ra, 10/7: "per persona"; the gear on the
+  // persona's card opens it): that persona's schedule, its lanes' targets and
+  // nightly switches, and its own nightshift's health. Everything from the
+  // snapshot, nothing frozen; the health check is derived from facts the head
+  // and cards already show, so the panel can never disagree with them.
+  const groups = new Map();
+  for (const L of ctx.LANES) {
+    const p = L.persona ?? { id: 'persona', name: 'Persona' };
+    if (!groups.has(p.id)) groups.set(p.id, { p, lanes: [] });
+    groups.get(p.id).lanes.push(L);
+  }
+  if (!groups.size) return settings_panel(ctx, null, []);
+  return [...groups.values()].map(({ p, lanes }) => settings_panel(ctx, p, lanes)).join('');
+}
+
+function settings_panel(ctx, p, lanesOf) {
+  const sc = p?.schedule ?? ctx.SCHEDULE;
+  const D = p?.daemon ?? ctx.DAEMON;
+  const lanes = lanesOf.map((L) => {
     const own = L.schedule && L.schedule.inherit === false;
-    return `<tr data-lane="${esc(L.id)}"><td>${L.persona ? `<span data-part="persona">${esc(L.persona.name)}</span> · ` : ''}${esc(laneName(L))}</td>` +
+    return `<tr data-lane="${esc(L.id)}"><td>${esc(laneName(L))}</td>` +
       `<td>${esc(L.model)}</td>` +
       `<td><input type="number" value="${Math.floor(L.target / 1000)}" aria-label="${esc(laneName(L))} fold target (k tokens)"> k</td>` +
-      `<td>${own ? `own ${esc(L.schedule.sleep)}–${esc(L.schedule.wake)}` : 'global'}</td>` +
+      `<td>${own ? `own ${esc(L.schedule.sleep)}–${esc(L.schedule.wake)}` : 'shared'}</td>` +
       `<td><input type="checkbox"${(L.armed ?? true) ? ' checked' : ''} aria-label="${esc(laneName(L))} armed"></td></tr>`;
   }).join('');
   const items = [];
-  const D = ctx.DAEMON;
   items.push(D.down
-    ? `<li data-status="failed">${icon('warn')} ${esc(glyph_tip(ctx))}` +
+    ? `<li data-status="failed">${icon('warn')} ${esc(daemon_tip(D))}` +
       `<button type="button" data-action="restart-daemon" data-part="fix">${icon('retry')}<span>Restart it</span></button></li>`
-    : `<li data-status="ok">${icon('check')} ${esc(glyph_tip(ctx))}</li>`);
+    : `<li data-status="ok">${icon('check')} ${esc(daemon_tip(D))}</li>`);
   let laneTrouble = 0;
-  for (const L of ctx.LANES) {
+  for (const L of lanesOf) {
     if (!L.alert) continue;
     laneTrouble++;
     const fix = L.alert.fixes?.[0];
-    items.push(`<li data-status="failed" data-lane="${esc(L.id)}">${icon('warn')} ${esc(L.label ?? laneName(L))}: ${esc(L.alert.title)}` +
+    items.push(`<li data-status="failed" data-lane="${esc(L.id)}">${icon('warn')} ${esc(laneName(L))}: ${esc(L.alert.title)}` +
       (fix ? `<button type="button" data-action="${fix[1]}" data-part="fix">${icon(fix[0])}<span>${esc(fix[2])}</span></button>` : '') + `</li>`);
   }
-  for (const L of ctx.LANES) {
+  for (const L of lanesOf) {
     // Size only matters against the WINDOW (the fold target is where the
     // nightly fold trims back TO, not a line to act at — Ra, 10/7).
     const w = L.window || WINDOWS[L.model] || 0;
     if (!(w && L.ctx / w >= 0.9)) continue;
     laneTrouble++;
-    items.push(`<li data-status="warn" data-lane="${esc(L.id)}">${icon('gauge')} ${esc(L.label ?? laneName(L))} is at ${pyRound(L.ctx / w * 100)}% of its context window — a Fold now would trim it to ~${k(L.target)}</li>`);
+    items.push(`<li data-status="warn" data-lane="${esc(L.id)}">${icon('gauge')} ${esc(laneName(L))} is at ${pyRound(L.ctx / w * 100)}% of its context window — a Fold now would trim it to ~${k(L.target)}</li>`);
   }
   if (!laneTrouble) items.push(`<li data-status="ok">${icon('check')} No lane needs a hand</li>`);
+  const who = p ? esc(p.name) : 'Settings';
   return `
-  <section class="nw-settings" aria-label="settings" data-open="false" role="dialog">
-    <h3 data-part="heading">${icon('gear')} Settings<button type="button" data-action="close-settings" data-part="close" aria-label="Close settings">${icon('x')}</button></h3>
-    <div data-part="schedule"><span data-part="label">Global nightshift</span>
+  <section class="nw-settings"${p ? ` data-persona="${esc(p.id)}"` : ''}${p?.hub ? ` data-hub="${esc(p.hub)}"` : ''} aria-label="${p ? `${who} settings` : 'settings'}" data-open="false" role="dialog">
+    <h3 data-part="heading">${icon('gear')} ${who}<button type="button" data-action="close-settings" data-part="close" aria-label="Close settings">${icon('x')}</button></h3>
+    <div data-part="schedule"><span data-part="label">Nightshift</span>
       <label>${icon('moon')} Sleep <input type="time" value="${esc(sc.sleep)}"></label>
       <label>${icon('sun')} Wake <input type="time" value="${esc(sc.wake)}"></label>
       <span data-part="tz">${esc(ctx.TZ ?? '')}</span>
@@ -779,8 +793,8 @@ function view_menu(ctx) {
 // neither layout nor skin, so the deck keeps three buttons.
 function app_menu() {
   return `<menu data-part="view-menu" data-menu="app" role="menu" aria-label="Settings">
-      <li role="none"><button type="button" role="menuitem" data-action="app-settings">${icon('gear')}<span>Schedule and health check…</span></button></li>
-      <li role="separator"></li>
+      <li role="none" data-part="settings-entry"><button type="button" role="menuitem" data-action="app-settings">${icon('gear')}<span>Schedule and health check…</span></button></li>
+      <li role="separator" data-part="settings-entry"></li>
       <li role="none"><label role="menuitemcheckbox" data-view="on-top"><input type="checkbox" data-view-toggle="on-top">${icon('pin')}<span>Keep on top</span></label></li>
     </menu>`;
 }
@@ -888,8 +902,8 @@ function app_alarms(ctx) {
   }).join('');
 }
 
-function glyph_tip(ctx) {
-  const D = ctx.DAEMON;
+function glyph_tip(ctx) { return daemon_tip(ctx.DAEMON); }
+function daemon_tip(D) {
   if (D.down) return D.lastAliveHm ? `NIGHTSHIFT DOWN — no heartbeat since ${D.lastAliveHm}` : 'NIGHTSHIFT DOWN — no heartbeat yet';
   return `Nightshift running · last heartbeat ${D.lastAliveHm}`;
 }
@@ -1028,7 +1042,7 @@ ${sprite()}
   <header class="nw-head" data-tauri-drag-region>
     <span class="nw-glyph" data-phase="${ctx.DAEMON.phase}" role="img" aria-label="${ALARM_ARIA[ctx.DAEMON.phase]}" data-tip="${glyph_tip(ctx)}"></span>
     <h1 data-part="title">Nightwatch</h1>
-    <span data-part="schedule" data-tip="Tonight's schedule: the sleep-bell rings at ${ctx.SCHEDULE.sleep} and lanes wake at ${ctx.SCHEDULE.wake}. Change it in Settings.">${icon('moon')}<time datetime="${ctx.SCHEDULE.sleep}">${ctx.SCHEDULE.sleep}</time>${icon('sun')}<time datetime="${ctx.SCHEDULE.wake}">${ctx.SCHEDULE.wake}</time></span>
+    <span data-part="schedule" data-tip="Tonight's schedule: the sleep-bell rings at ${ctx.SCHEDULE.sleep} and lanes wake at ${ctx.SCHEDULE.wake}. Change it in a persona's settings (the gear on its card).">${icon('moon')}<time datetime="${ctx.SCHEDULE.sleep}">${ctx.SCHEDULE.sleep}</time>${icon('sun')}<time datetime="${ctx.SCHEDULE.wake}">${ctx.SCHEDULE.wake}</time></span>
     <time data-part="clock" datetime="${ctx.NOW}">${hmLocal(ctx.NOW, ctx.TZ)}</time>
     <button type="button" data-action="look-menu" data-part="menu-button" data-menu="look" aria-haspopup="menu" aria-expanded="false" aria-label="Look" data-tip="Appearance and skin">${icon('palette')}</button>
     <button type="button" data-action="view-menu" data-part="menu-button" aria-haspopup="menu" aria-expanded="false" aria-label="View" data-tip="Show or hide panels">${icon('panels')}</button>

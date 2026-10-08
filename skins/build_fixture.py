@@ -34,10 +34,13 @@ ALARM_ARIA = {"day": "day; the watch is running", "night": "night; the watch is 
               "down": "the nightshift is not running"}
 
 def glyph_tip():
-    if DAEMON["down"]:
-        return (f"NIGHTSHIFT DOWN — no heartbeat since {DAEMON['lastAliveHm']}"
-                if DAEMON.get("lastAliveHm") else "NIGHTSHIFT DOWN — no heartbeat yet")
-    return f"Nightshift running · last heartbeat {DAEMON['lastAliveHm']}"
+    return daemon_tip(DAEMON)
+
+def daemon_tip(D):
+    if D["down"]:
+        return (f"NIGHTSHIFT DOWN — no heartbeat since {D['lastAliveHm']}"
+                if D.get("lastAliveHm") else "NIGHTSHIFT DOWN — no heartbeat yet")
+    return f"Nightshift running · last heartbeat {D['lastAliveHm']}"
 
 def app_alarms():
     out = ""
@@ -714,46 +717,60 @@ def log():
   </section>'''
 
 def settings():
-    # App settings (Ra, 10/6): everything from the snapshot, nothing frozen.
-    # The health check is derived from facts the head and cards already show,
-    # so the panel can never disagree with them. Saving waits for config set.
-    sc = SCHEDULE
-    rows = ""
+    # Settings, one panel per persona (Ra, 10/7: "per persona"; the gear on the
+    # persona's card opens it): that persona's schedule, its lanes' targets and
+    # nightly switches, and its own nightshift's health. Everything from the
+    # snapshot, nothing frozen; the health check is derived from facts the head
+    # and cards already show, so the panel can never disagree with them.
+    groups = {}
     for L in LANES:
+        p = L.get("persona") or {"id": "persona", "name": "Persona"}
+        groups.setdefault(p["id"], (p, []))[1].append(L)
+    if not groups:
+        return settings_panel(None, [])
+    return "".join(settings_panel(p, lanes) for p, lanes in groups.values())
+
+def settings_panel(p, lanes_of):
+    sc = (p or {}).get("schedule") or SCHEDULE
+    D = (p or {}).get("daemon") or DAEMON
+    rows = ""
+    for L in lanes_of:
         own = bool(L.get("schedule")) and L["schedule"].get("inherit") is False
-        persona = f'<span data-part="persona">{esc(L["persona"]["name"])}</span> · ' if L.get("persona") else ""
-        sched = f'own {esc(L["schedule"]["sleep"])}–{esc(L["schedule"]["wake"])}' if own else "global"
-        rows += (f'<tr data-lane="{esc(L["id"])}"><td>{persona}{esc(lane_name(L))}</td>'
+        sched = f'own {esc(L["schedule"]["sleep"])}–{esc(L["schedule"]["wake"])}' if own else "shared"
+        rows += (f'<tr data-lane="{esc(L["id"])}"><td>{esc(lane_name(L))}</td>'
                  f'<td>{esc(L["model"])}</td>'
                  f'<td><input type="number" value="{L["target"]//1000}" aria-label="{esc(lane_name(L))} fold target (k tokens)"> k</td>'
                  f'<td>{sched}</td>'
                  f'<td><input type="checkbox"{" checked" if L.get("armed", True) else ""} aria-label="{esc(lane_name(L))} armed"></td></tr>')
     items = []
-    if DAEMON["down"]:
-        items.append(f'<li data-status="failed">{icon("warn")} {esc(glyph_tip())}'
+    if D["down"]:
+        items.append(f'<li data-status="failed">{icon("warn")} {esc(daemon_tip(D))}'
                      f'<button type="button" data-action="restart-daemon" data-part="fix">{icon("retry")}<span>Restart it</span></button></li>')
     else:
-        items.append(f'<li data-status="ok">{icon("check")} {esc(glyph_tip())}</li>')
+        items.append(f'<li data-status="ok">{icon("check")} {esc(daemon_tip(D))}</li>')
     trouble = 0
-    for L in LANES:
+    for L in lanes_of:
         if not L.get("alert"): continue
         trouble += 1
         fixes = L["alert"].get("fixes") or []
         fix = (f'<button type="button" data-action="{fixes[0][1]}" data-part="fix">{icon(fixes[0][0])}<span>{esc(fixes[0][2])}</span></button>'
                if fixes else "")
-        items.append(f'<li data-status="failed" data-lane="{esc(L["id"])}">{icon("warn")} {esc(L.get("label") or lane_name(L))}: {esc(L["alert"]["title"])}{fix}</li>')
-    for L in LANES:
+        items.append(f'<li data-status="failed" data-lane="{esc(L["id"])}">{icon("warn")} {esc(lane_name(L))}: {esc(L["alert"]["title"])}{fix}</li>')
+    for L in lanes_of:
         # Size only matters against the WINDOW (fold target = fold-TO; Ra, 10/7).
         w = L.get("window") or WINDOWS.get(L["model"]) or 0
         if not (w and L["ctx"] / w >= 0.9): continue
         trouble += 1
-        items.append(f'<li data-status="warn" data-lane="{esc(L["id"])}">{icon("gauge")} {esc(L.get("label") or lane_name(L))} is at {round(L["ctx"]/w*100)}% of its context window — a Fold now would trim it to ~{k(L["target"])}</li>')
+        items.append(f'<li data-status="warn" data-lane="{esc(L["id"])}">{icon("gauge")} {esc(lane_name(L))} is at {round(L["ctx"]/w*100)}% of its context window — a Fold now would trim it to ~{k(L["target"])}</li>')
     if not trouble:
         items.append(f'<li data-status="ok">{icon("check")} No lane needs a hand</li>')
+    who = esc(p["name"]) if p else "Settings"
+    attrs = (f' data-persona="{esc(p["id"])}"' if p else "") + (f' data-hub="{esc(p["hub"])}"' if p and p.get("hub") else "")
+    label = f"{who} settings" if p else "settings"
     return f"""
-  <section class="nw-settings" aria-label="settings" data-open="false" role="dialog">
-    <h3 data-part="heading">{icon("gear")} Settings<button type="button" data-action="close-settings" data-part="close" aria-label="Close settings">{icon("x")}</button></h3>
-    <div data-part="schedule"><span data-part="label">Global nightshift</span>
+  <section class="nw-settings"{attrs} aria-label="{label}" data-open="false" role="dialog">
+    <h3 data-part="heading">{icon("gear")} {who}<button type="button" data-action="close-settings" data-part="close" aria-label="Close settings">{icon("x")}</button></h3>
+    <div data-part="schedule"><span data-part="label">Nightshift</span>
       <label>{icon("moon")} Sleep <input type="time" value="{esc(sc["sleep"])}"></label>
       <label>{icon("sun")} Wake <input type="time" value="{esc(sc["wake"])}"></label>
       <span data-part="tz">{esc(TZ or "")}</span>
@@ -812,8 +829,8 @@ def view_menu():
 # neither layout nor skin, so the deck keeps three buttons.
 def app_menu():
     return f'''<menu data-part="view-menu" data-menu="app" role="menu" aria-label="Settings">
-      <li role="none"><button type="button" role="menuitem" data-action="app-settings">{icon("gear")}<span>Schedule and health check…</span></button></li>
-      <li role="separator"></li>
+      <li role="none" data-part="settings-entry"><button type="button" role="menuitem" data-action="app-settings">{icon("gear")}<span>Schedule and health check…</span></button></li>
+      <li role="separator" data-part="settings-entry"></li>
       <li role="none"><label role="menuitemcheckbox" data-view="on-top"><input type="checkbox" data-view-toggle="on-top">{icon("pin")}<span>Keep on top</span></label></li>
     </menu>'''
 
@@ -979,7 +996,7 @@ def page():
   <header class="nw-head" data-tauri-drag-region>
     <span class="nw-glyph" data-phase="{DAEMON["phase"]}" role="img" aria-label="{ALARM_ARIA[DAEMON["phase"]]}" data-tip="{glyph_tip()}"></span>
     <h1 data-part="title">Nightwatch</h1>
-    <span data-part="schedule" data-tip="Tonight's schedule: the sleep-bell rings at {SCHEDULE["sleep"]} and lanes wake at {SCHEDULE["wake"]}. Change it in Settings.">{icon("moon")}<time datetime="{SCHEDULE["sleep"]}">{SCHEDULE["sleep"]}</time>{icon("sun")}<time datetime="{SCHEDULE["wake"]}">{SCHEDULE["wake"]}</time></span>
+    <span data-part="schedule" data-tip="Tonight's schedule: the sleep-bell rings at {SCHEDULE["sleep"]} and lanes wake at {SCHEDULE["wake"]}. Change it in a persona's settings (the gear on its card).">{icon("moon")}<time datetime="{SCHEDULE["sleep"]}">{SCHEDULE["sleep"]}</time>{icon("sun")}<time datetime="{SCHEDULE["wake"]}">{SCHEDULE["wake"]}</time></span>
     <time data-part="clock" datetime="{NOW}">{local(NOW):%H:%M}</time>
     <button type="button" data-action="look-menu" data-part="menu-button" data-menu="look" aria-haspopup="menu" aria-expanded="false" aria-label="Look" data-tip="Appearance and skin">{icon("palette")}</button>
     <button type="button" data-action="view-menu" data-part="menu-button" aria-haspopup="menu" aria-expanded="false" aria-label="View" data-tip="Show or hide panels">{icon("panels")}</button>

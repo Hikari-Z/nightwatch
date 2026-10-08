@@ -86,7 +86,7 @@
   <header class="nw-head" data-tauri-drag-region>
     <span class="nw-glyph" data-phase="day" role="img" aria-label="day; the watch is running" data-tip="Nightshift running · last heartbeat 12:41"></span>
     <h1 data-part="title">Nightwatch</h1>
-    <span data-part="schedule" data-tip="Tonight's schedule: the sleep-bell rings at 02:00 and lanes wake at 08:00. Change it in Settings."><svg class="nw-icon" data-icon="moon" aria-hidden="true"><use href="#i-moon"/></svg><time datetime="02:00">02:00</time><svg class="nw-icon" data-icon="sun" aria-hidden="true"><use href="#i-sun"/></svg><time datetime="08:00">08:00</time></span>
+    <span data-part="schedule" data-tip="Tonight's schedule: the sleep-bell rings at 02:00 and lanes wake at 08:00. Change it in a persona's settings (the gear on its card)."><svg class="nw-icon" data-icon="moon" aria-hidden="true"><use href="#i-moon"/></svg><time datetime="02:00">02:00</time><svg class="nw-icon" data-icon="sun" aria-hidden="true"><use href="#i-sun"/></svg><time datetime="08:00">08:00</time></span>
     <time data-part="clock" datetime="2026-10-05T13:10-07:00">13:10</time>
     <button type="button" data-action="look-menu" data-part="menu-button" data-menu="look" aria-haspopup="menu" aria-expanded="false" aria-label="Look" data-tip="Appearance and skin"><svg class="nw-icon" data-icon="palette" aria-hidden="true"><use href="#i-palette"/></svg></button>
     <button type="button" data-action="view-menu" data-part="menu-button" aria-haspopup="menu" aria-expanded="false" aria-label="View" data-tip="Show or hide panels"><svg class="nw-icon" data-icon="panels" aria-hidden="true"><use href="#i-panels"/></svg></button>
@@ -112,8 +112,8 @@
       <li role="none" data-part="skin-heading"><svg class="nw-icon" data-icon="panels" aria-hidden="true"><use href="#i-panels"/></svg><span>Skin</span></li><li role="none"><label role="menuitemradio" data-view="skin" data-value="minimal"><input type="radio" name="skin" value="minimal"><span>Minimal</span></label></li><li role="none"><label role="menuitemradio" data-view="skin" data-value="glass"><input type="radio" name="skin" value="glass"><span>Glass</span></label></li><li role="none"><label role="menuitemradio" data-view="skin" data-value="amber"><input type="radio" name="skin" value="amber"><span>Amber</span></label></li><li role="none"><label role="menuitemradio" data-view="skin" data-value="metal"><input type="radio" name="skin" value="metal"><span>Brushed Metal</span></label></li><li role="none"><label role="menuitemradio" data-view="skin" data-value="wacky"><input type="radio" name="skin" value="wacky"><span>Moonlamp</span></label></li><li role="none"><label role="menuitemradio" data-view="skin" data-value="steampunk"><input type="radio" name="skin" value="steampunk"><span>Brassworks</span></label></li>
     </menu>
     <menu data-part="view-menu" data-menu="app" role="menu" aria-label="Settings">
-      <li role="none"><button type="button" role="menuitem" data-action="app-settings"><svg class="nw-icon" data-icon="gear" aria-hidden="true"><use href="#i-gear"/></svg><span>Schedule and health check…</span></button></li>
-      <li role="separator"></li>
+      <li role="none" data-part="settings-entry"><button type="button" role="menuitem" data-action="app-settings"><svg class="nw-icon" data-icon="gear" aria-hidden="true"><use href="#i-gear"/></svg><span>Schedule and health check…</span></button></li>
+      <li role="separator" data-part="settings-entry"></li>
       <li role="none"><label role="menuitemcheckbox" data-view="on-top"><input type="checkbox" data-view-toggle="on-top"><svg class="nw-icon" data-icon="pin" aria-hidden="true"><use href="#i-pin"/></svg><span>Keep on top</span></label></li>
     </menu>
   </header>
@@ -347,17 +347,32 @@
     <p data-part="empty" hidden>Nothing yet. Every bell, fold and wake will be written here.</p>
   </section>
   
-  <section class="nw-settings" aria-label="settings" data-open="false" role="dialog">
-    <h3 data-part="heading"><svg class="nw-icon" data-icon="gear" aria-hidden="true"><use href="#i-gear"/></svg> Settings<button type="button" data-action="close-settings" data-part="close" aria-label="Close settings"><svg class="nw-icon" data-icon="x" aria-hidden="true"><use href="#i-x"/></svg></button></h3>
-    <div data-part="schedule"><span data-part="label">Global nightshift</span>
+  <section class="nw-settings" data-persona="weft" aria-label="Weft settings" data-open="false" role="dialog">
+    <h3 data-part="heading"><svg class="nw-icon" data-icon="gear" aria-hidden="true"><use href="#i-gear"/></svg> Weft<button type="button" data-action="close-settings" data-part="close" aria-label="Close settings"><svg class="nw-icon" data-icon="x" aria-hidden="true"><use href="#i-x"/></svg></button></h3>
+    <div data-part="schedule"><span data-part="label">Nightshift</span>
       <label><svg class="nw-icon" data-icon="moon" aria-hidden="true"><use href="#i-moon"/></svg> Sleep <input type="time" value="02:00"></label>
       <label><svg class="nw-icon" data-icon="sun" aria-hidden="true"><use href="#i-sun"/></svg> Wake <input type="time" value="08:00"></label>
       <span data-part="tz">America/Los_Angeles</span>
     </div>
-    <table data-part="lanes"><thead><tr><th>lane</th><th>model</th><th>fold target</th><th>schedule</th><th>armed</th></tr></thead><tbody><tr data-lane="fable"><td><span data-part="persona">Weft</span> · fable</td><td>Fable 5</td><td><input type="number" value="250" aria-label="fable fold target (k tokens)"> k</td><td>global</td><td><input type="checkbox" checked aria-label="fable armed"></td></tr><tr data-lane="opus"><td><span data-part="persona">Weft</span> · opus</td><td>Opus 5.5</td><td><input type="number" value="250" aria-label="opus fold target (k tokens)"> k</td><td>global</td><td><input type="checkbox" checked aria-label="opus armed"></td></tr><tr data-lane="scout"><td><span data-part="persona">Lark</span> · scout</td><td>Haiku 4.5</td><td><input type="number" value="120" aria-label="scout fold target (k tokens)"> k</td><td>own 12:00–18:00</td><td><input type="checkbox" aria-label="scout armed"></td></tr><tr data-lane="scribe"><td><span data-part="persona">Weft</span> · scribe</td><td>Sonnet 5.5</td><td><input type="number" value="200" aria-label="scribe fold target (k tokens)"> k</td><td>global</td><td><input type="checkbox" checked aria-label="scribe armed"></td></tr></tbody></table>
+    <table data-part="lanes"><thead><tr><th>lane</th><th>model</th><th>fold target</th><th>schedule</th><th>armed</th></tr></thead><tbody><tr data-lane="fable"><td>fable</td><td>Fable 5</td><td><input type="number" value="250" aria-label="fable fold target (k tokens)"> k</td><td>shared</td><td><input type="checkbox" checked aria-label="fable armed"></td></tr><tr data-lane="opus"><td>opus</td><td>Opus 5.5</td><td><input type="number" value="250" aria-label="opus fold target (k tokens)"> k</td><td>shared</td><td><input type="checkbox" checked aria-label="opus armed"></td></tr><tr data-lane="scribe"><td>scribe</td><td>Sonnet 5.5</td><td><input type="number" value="200" aria-label="scribe fold target (k tokens)"> k</td><td>shared</td><td><input type="checkbox" checked aria-label="scribe armed"></td></tr></tbody></table>
     <div data-part="doctor">
       <h4><svg class="nw-icon" data-icon="check" aria-hidden="true"><use href="#i-check"/></svg> Health check</h4>
       <ul><li data-status="ok"><svg class="nw-icon" data-icon="check" aria-hidden="true"><use href="#i-check"/></svg> Nightshift running · last heartbeat 12:41</li><li data-status="failed" data-lane="scribe"><svg class="nw-icon" data-icon="warn" aria-hidden="true"><use href="#i-warn"/></svg> scribe: Morning wake failed<button type="button" data-action="restore-checkpoint" data-part="fix"><svg class="nw-icon" data-icon="restore" aria-hidden="true"><use href="#i-restore"/></svg><span>Restore checkpoint</span></button></li></ul>
+    </div>
+    <div data-part="buttons"><button type="button" data-action="run-doctor"><svg class="nw-icon" data-icon="retry" aria-hidden="true"><use href="#i-retry"/></svg><span>Check again</span></button>
+      <button type="button" data-action="save-settings" data-primary="true"><svg class="nw-icon" data-icon="check" aria-hidden="true"><use href="#i-check"/></svg><span>Save</span></button></div>
+  </section>
+  <section class="nw-settings" data-persona="lark" aria-label="Lark settings" data-open="false" role="dialog">
+    <h3 data-part="heading"><svg class="nw-icon" data-icon="gear" aria-hidden="true"><use href="#i-gear"/></svg> Lark<button type="button" data-action="close-settings" data-part="close" aria-label="Close settings"><svg class="nw-icon" data-icon="x" aria-hidden="true"><use href="#i-x"/></svg></button></h3>
+    <div data-part="schedule"><span data-part="label">Nightshift</span>
+      <label><svg class="nw-icon" data-icon="moon" aria-hidden="true"><use href="#i-moon"/></svg> Sleep <input type="time" value="02:00"></label>
+      <label><svg class="nw-icon" data-icon="sun" aria-hidden="true"><use href="#i-sun"/></svg> Wake <input type="time" value="08:00"></label>
+      <span data-part="tz">America/Los_Angeles</span>
+    </div>
+    <table data-part="lanes"><thead><tr><th>lane</th><th>model</th><th>fold target</th><th>schedule</th><th>armed</th></tr></thead><tbody><tr data-lane="scout"><td>scout</td><td>Haiku 4.5</td><td><input type="number" value="120" aria-label="scout fold target (k tokens)"> k</td><td>own 12:00–18:00</td><td><input type="checkbox" aria-label="scout armed"></td></tr></tbody></table>
+    <div data-part="doctor">
+      <h4><svg class="nw-icon" data-icon="check" aria-hidden="true"><use href="#i-check"/></svg> Health check</h4>
+      <ul><li data-status="ok"><svg class="nw-icon" data-icon="check" aria-hidden="true"><use href="#i-check"/></svg> Nightshift running · last heartbeat 12:41</li><li data-status="ok"><svg class="nw-icon" data-icon="check" aria-hidden="true"><use href="#i-check"/></svg> No lane needs a hand</li></ul>
     </div>
     <div data-part="buttons"><button type="button" data-action="run-doctor"><svg class="nw-icon" data-icon="retry" aria-hidden="true"><use href="#i-retry"/></svg><span>Check again</span></button>
       <button type="button" data-action="save-settings" data-primary="true"><svg class="nw-icon" data-icon="check" aria-hidden="true"><use href="#i-check"/></svg><span>Save</span></button></div>

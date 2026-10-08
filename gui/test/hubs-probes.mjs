@@ -68,6 +68,10 @@ check("config file: Set up's name first, else our legacy hub's",
   check('page: the cards are keyed apart but both read "main"', J(cards) === J([['lark/main', 'main', 'main'], ['wren/main', 'main', 'main']]), J(cards));
   const strips = [...html.matchAll(/class="nw-strip" data-lane="([^"]+)" data-label="([^"]+)"/g)].map((x) => x[2]);
   check('page: timeline rows say whose lane they are', J(strips) === J(['Lark · main', 'Wren · main']), J(strips));
+  const b2 = { ...b, SCHEDULE: { sleep: '03:30', wake: '09:15' } };
+  const html2 = renderPage(mergeSnapshot(FIXTURE, mergeSnapshots([{ root: '/hub/lark', snap: a }, { root: '/hub/wren', snap: b2 }])));
+  const panels = [...html2.matchAll(/<section class="nw-settings" data-persona="([^"]+)" data-hub="([^"]+)"[\s\S]*?Sleep <input type="time" value="([^"]+)"/g)].map((x) => [x[1], x[2], x[3]]);
+  check('page: one settings panel per persona, with its hub and its own schedule', J(panels) === J([['lark', '/hub/lark', '02:00'], ['wren', '/hub/wren', '03:30']]), J(panels));
   const logLanes = [...html.matchAll(/<span data-part="lane">([^<]+)<\/span>/g)].map((x) => x[1]);
   check('page: log rows say whose lane they are, nightshift included', ['Wren · main', 'Lark · main', 'Lark · nightshift'].every((l) => logLanes.includes(l)), J(logLanes));
 }
