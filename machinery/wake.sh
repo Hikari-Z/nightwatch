@@ -151,10 +151,10 @@ SWITCHBOARD_LANE="$(node -e "import('file://$WAKECYCLE_DIR/config.mjs').then(m=>
 # The doorbell is hub infrastructure, never app machinery: look beside the
 # hub (weftRoot), not beside this script.
 WATCHER="${WEFTROOT:-$WAKECYCLE_DIR/..}/doorbell/inbox-watcher.sh"
-python3 - "$NEXT" "$SWITCHBOARD_LANE" "$WATCHER" >> "$HEAD" << 'PYEOF'
+python3 - "$NEXT" "$SWITCHBOARD_LANE" "$WATCHER" "$WAKECYCLE_DIR" >> "$HEAD" << 'PYEOF'
 import json, os, sys
 nw = json.load(open(sys.argv[1]))
-switchboard, watcher = sys.argv[2], sys.argv[3]
+switchboard, watcher, machinery = sys.argv[2], sys.argv[3], sys.argv[4]
 lane = nw.get('lane', '')
 print('\n---\n\n## Standing wake duties\n')
 if os.path.exists(watcher):
@@ -169,8 +169,12 @@ if os.path.exists(watcher):
         print('  forwards from the switchboard (' + switchboard + ') session.')
     print('- Sweep DM channels and the work channels for anything that arrived while asleep.')
 else:
-    print('- Check Nightwatch for the state of the house. Your person can see from it')
-    print("  whether you are awake, and the nightshift rings the bell at day's end.")
+    print('- The nightshift rings your bell by leaving a note in your spool. Arm the')
+    print('  bell-watcher as a background task (run_in_background, timeout 7200000):')
+    print('  `WEFT_CONFIG=' + os.environ.get('WEFT_CONFIG', '<your hub config>') + ' sh ' + machinery + '/bell-watcher.sh ' + lane + '`')
+    print('  It exits when a note lands — the task notification is your bell. Read the')
+    print('  note, do what it says, delete the file, re-arm. Re-arm on the 2h cap too.')
+    print('- Your person can see from Nightwatch whether you are awake or asleep.')
 if nw.get('emergency'):
     print('\n---\n\n## Emergency wake — read this first\n')
     print(f"This is an emergency wake of the {nw.get('lane','?')} lane, slept at {nw.get('sleptAt','?')} from session {nw.get('from','?')}.")
