@@ -993,7 +993,9 @@ async function rehearse() {
     check('bell-note', 'names the belled session explicitly', note.includes('--session sid-12345678-abcd'), note.slice(0, 200));
     check('bell-note', 'quotes the machinery sleep.mjs path', note.includes(`node "${join(MACHINERY_DIR, 'sleep.mjs')}"`));
     check('bell-note', 'carries this hub\'s config when one exists', !CFG_FILE || note.includes(`WEFT_CONFIG="${CFG_FILE}"`));
-    check('bell-note', 'never runs another house\'s machinery', !note.includes('weft/wakecycle/'), note.slice(0, 200));
+    // (A 'never names another house' negative was dropped: under Weft's
+    // sealed layout MACHINERY_DIR legitimately IS weft/wakecycle, so the
+    // positive exact-path check above is the honest form of the claim.)
   }
   console.log(failures === 0 ? 'REHEARSAL CLEAN' : `REHEARSAL: ${failures} failure(s)`);
   if (failures) process.exitCode = 1;

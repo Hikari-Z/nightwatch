@@ -245,7 +245,7 @@ if (!existsSync(join(CFG.paths.transcripts, `${sessionId}.jsonl`))) {
   const registered = existsSync(join(WEFT, 'wakecycle', `lane.${sessionId}`));
   if (registered) {
     console.error(`sleep.mjs: session ${sessionId.slice(0, 8)} has no transcript — a zero-turn day. Nothing to fold; writing a fresh-start receipt (the morning wakes a new session).`);
-    const receipt = { lane, firstWake: true, sleptAt: new Date().toISOString(), reason: 'zero-turn-day', from: sessionId };
+    const receipt = { lane, firstWake: true, checkpoint: CHECKPOINT, createdAt: new Date().toISOString(), sleptAt: new Date().toISOString(), reason: 'zero-turn-day', from: sessionId };
     writeFileSync(join(WEFT, 'wakecycle', `next-wake.${lane}.json`), JSON.stringify(receipt, null, 2) + '\n');
     process.exit(0);
   }

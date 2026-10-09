@@ -87,7 +87,10 @@ fi
 # confirmation, no --resume (design: nightwatch_lane_creation.md).
 FIRSTWAKE=$(python3 -c "import json;print('1' if json.load(open('$NEXT')).get('firstWake') else '')")
 SID=$(python3 -c "import json;print(json.load(open('$NEXT')).get('sessionId',''))")
-CP=$(python3 -c "import json;print(json.load(open('$NEXT'))['checkpoint'])")
+# .get, not [], so a malformed receipt reaches the LOUD checkpoint-missing
+# guard below instead of set -e eating the python KeyError before any log
+# line (opus's f255395 read, 10/9 — the 10/5 silent-no-show shape).
+CP=$(python3 -c "import json;print(json.load(open('$NEXT')).get('checkpoint',''))")
 [ -n "$FIRSTWAKE" ] || [ -n "$SID" ] || { echo "next-wake.$LANE.json has neither sessionId nor firstWake"; exit 1; }
 # Already-awake guard (10/6, with the app's Wake button making hand-runs
 # easy): a second resume of the same tail mints a second session on one
