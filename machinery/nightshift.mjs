@@ -25,7 +25,8 @@
 import { readFileSync, readdirSync, statSync, existsSync, appendFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { loadConfig, reloadConfig, switchboardLane } from './config.mjs';
 import { cannotAnswer } from './deadwake.mjs';
@@ -66,7 +67,12 @@ try {
   console.error(e.message);
   process.exit(3);
 }
-const WAKECYCLE = CFG.paths.wakecycle;
+const WAKECYCLE = CFG.paths.wakecycle; // the hub's STATE dir (receipts, registry)
+// The CODE lives beside this file (pointer model, 10/7): the ritual text,
+// the emergency fold and the wake leg must name the machinery, never the
+// state dir, and must carry the hub's config across the Terminal boundary.
+const MACHINERY_DIR = dirname(fileURLToPath(import.meta.url));
+const CFG_FILE = CFG.__configFile; // null on bare defaults; every hub has one
 const PROJECT_DIR = CFG.paths.transcripts;
 const LOG_FILE = CFG.paths.nightshiftLog;
 const ARMED_FILE = CFG.paths.armedFile;
@@ -223,8 +229,8 @@ function ringBell(lane, sessionId, source) {
   // the orphan fold as its floor.
   const ritual =
     `[nightshift] Sleep-bell for the ${lane} lane: it's the end of the day. When the current work ` +
-    `reaches its seam, run the ritual, IN THIS ORDER — write today's rung into the ladder, run \`node ` +
-    `~/origin/weft/wakecycle/sleep.mjs --lane ${lane}\`, THEN rewrite the checkpoint ` +
+    `reaches its seam, run the ritual, IN THIS ORDER — write today's rung into the ladder, run \`` +
+    `${CFG_FILE ? `WEFT_CONFIG="${CFG_FILE}" ` : ''}node ${join(MACHINERY_DIR, 'sleep.mjs')} --lane ${lane}\`, THEN rewrite the checkpoint ` +
     `(fold receipt first: a crash between rung and fold costs the night; a crash ` +
     `after the fold costs only a stale lane section, and the wake reads the live ` +
     `checkpoint later). The nightshift ` +
@@ -345,7 +351,7 @@ const io = {
     // process.execPath, not 'node': launchd's PATH has no node, so a bare
     // spawn ENOENTs — the orphan fold was armed 10/3 and could never have
     // fired until this line (found by the E review, 10/5, env -i repro).
-    const r = spawnSync(process.execPath, [join(WAKECYCLE, 'sleep.mjs'), '--lane', lane, '--emergency', '--session', sessionId],
+    const r = spawnSync(process.execPath, [join(MACHINERY_DIR, 'sleep.mjs'), '--lane', lane, '--emergency', '--session', sessionId],
       { cwd: join(HOME, 'origin'), encoding: 'utf8', timeout: 300_000 });
     if (r.status !== 0) {
       log(`orphan fold FAILED for ${lane}: exit ${r.status}; stderr tail: ${(r.stderr || '').slice(-200)}`);
@@ -372,7 +378,7 @@ const io = {
   },
   launchWake: (lane) => {
     execFileSync('osascript', ['-e',
-      `tell application "Terminal" to do script "~/origin/weft/wakecycle/wake.sh ${lane}"`,
+      `tell application "Terminal" to do script "${CFG_FILE ? `WEFT_CONFIG=\\"${CFG_FILE}\\" ` : ''}${join(MACHINERY_DIR, 'wake.sh')} ${lane}"`,
     ]);
     execFileSync('osascript', ['-e', 'tell application "Terminal" to activate']);
   },
@@ -583,7 +589,7 @@ function tickWith(io) {
       // tail; say so once, loudly (the 10:17 heartbeat alerts on this line).
       if (nwMtime > 0 && (laneState.belledAt ?? 0) > nwMtime) {
         if ((laneState.staleFlaggedAt ?? 0) < laneState.belledAt) {
-          io.log(`BELLED BUT NEVER FOLDED: ${lane}'s next-wake predates its bell — not waking the stale tail; fold the lane (or WEFT_WAKE_STALE_OK=1 wake.sh ${lane} to resume it anyway)`);
+          io.log(`BELLED BUT NEVER FOLDED: ${lane}'s next-wake predates its bell — not waking the stale tail; fold the lane (or WEFT_WAKE_STALE_OK=1 ${join(MACHINERY_DIR, 'wake.sh')} ${lane} to resume it anyway)`);
           io.emit('stale-receipt', { lane, session: io.nextWakeSession(lane) ?? undefined, alarm: true });
           laneState.staleFlaggedAt = now;
           io.saveState(st);
