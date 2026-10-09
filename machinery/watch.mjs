@@ -289,36 +289,62 @@ function stuckCauses(now, s, entries) {
 
 // ── wake cost (fix 4) ────────────────────────────────────────────────────
 const COST_LOOKBACK_MS = 3 * 24 * 3600_000;
+/**
+ * The file's first `maxLines` complete lines, read in chunks with no byte cap:
+ * one transcript entry can be hundreds of KB (a screenshot in a tail's first
+ * entries; 448KB measured by Fable on 10/9), and a fixed window would cut it
+ * mid-line and silently never cost that wake.
+ */
+function headLines(path, maxLines) {
+  let fd;
+  try { fd = openSync(path, 'r'); } catch { return []; }
+  try {
+    const out = [];
+    const chunk = Buffer.alloc(1024 * 1024);
+    let carry = Buffer.alloc(0);
+    let pos = 0;
+    while (out.length < maxLines) {
+      const n = readSync(fd, chunk, 0, chunk.length, pos);
+      if (n === 0) { if (carry.length) out.push(carry.toString('utf8')); break; }
+      pos += n;
+      let buf = Buffer.concat([carry, chunk.subarray(0, n)]);
+      let nl;
+      while (out.length < maxLines && (nl = buf.indexOf(10)) !== -1) { out.push(buf.subarray(0, nl).toString('utf8')); buf = buf.subarray(nl + 1); }
+      carry = Buffer.from(buf);
+    }
+    return out;
+  } finally { closeSync(fd); }
+}
+// The harness writes a few uuid-less metadata lines before the first entry
+// (last-prompt, ai-title, mode…), and a forked wake puts the tail's first
+// entry within its first handful of lines (index 4 on fae38e0a, 10/9).
+const HEAD_LINES = 64;
 const firstUuid = (path) => {
-  let fd;
-  try { fd = openSync(path, 'r'); } catch { return null; }
-  try {
-    const buf = Buffer.alloc(256 * 1024);
-    const n = readSync(fd, buf, 0, buf.length, 0);
-    for (const l of buf.subarray(0, n).toString('utf8').split('\n')) { try { const u = JSON.parse(l).uuid; if (u) return u; } catch {} }
-    return null;
-  } finally { closeSync(fd); }
+  for (const l of headLines(path, HEAD_LINES)) { try { const u = JSON.parse(l).uuid; if (u) return u; } catch {} }
+  return null;
 };
-const headHas = (path, needle) => {
-  let fd;
-  try { fd = openSync(path, 'r'); } catch { return false; }
-  try {
-    const buf = Buffer.alloc(512 * 1024);
-    const n = readSync(fd, buf, 0, buf.length, 0);
-    return buf.subarray(0, n).includes(needle);
-  } finally { closeSync(fd); }
-};
+const headHas = (path, uuid) => headLines(path, HEAD_LINES).some((l) => { try { return JSON.parse(l).uuid === uuid; } catch { return false; } });
 const usageTokens = (u) => (u?.input_tokens ?? 0) + (u?.cache_read_input_tokens ?? 0) + (u?.cache_creation_input_tokens ?? 0);
 
 function wakeCostCheck(now) {
   let rows = [];
   try { rows = readFileSync(P.folds, 'utf8').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean); } catch { return; }
   const costed = new Set(state.costed);
+  // A tail some agent's wake receipt still names stays eligible however old
+  // its fold (a vacation hold, a long-disarmed agent); the lookback only
+  // retires tails that a later fold has replaced (Fable's read, 10/9).
+  const current = new Set();
+  try {
+    for (const f of readdirSync(P.wakecycle)) {
+      if (!/^next-wake\..+\.json$/.test(f)) continue;
+      try { const id = JSON.parse(readFileSync(join(P.wakecycle, f), 'utf8')).sessionId; if (id) current.add(id); } catch {}
+    }
+  } catch {}
   let registry = [];
   try { registry = readdirSync(P.wakecycle).filter((f) => f.startsWith('lane.')).map((f) => ({ sid: f.slice(5), mtime: statSync(join(P.wakecycle, f)).mtimeMs, file: join(P.wakecycle, f) })); } catch { return; }
   for (const row of rows) {
     const foldAt = Date.parse(row.at);
-    if (!row.tail || costed.has(row.tail) || !(now - foldAt < COST_LOOKBACK_MS)) continue;
+    if (!row.tail || costed.has(row.tail) || !(current.has(row.tail) || now - foldAt < COST_LOOKBACK_MS)) continue;
     const tailPath = join(P.transcripts, `${row.tail}.jsonl`);
     const anchor = firstUuid(tailPath);
     if (!anchor) continue;

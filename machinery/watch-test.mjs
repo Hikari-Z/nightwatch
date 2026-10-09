@@ -142,6 +142,30 @@ check('and lands as a wake-cost event', lines(EVENTS).slice(eventsBefore).filter
 tick();
 check('a second tick records nothing twice', lines(join(root, 'ladder', 'wake-costs.jsonl')).length, 1);
 
+// A 600KB first entry (a screenshot in the tail's head) is read whole, not
+// cut at a byte window (Fable's measurement: 448KB in a real transcript).
+const shot = 'iVBORw0KGgo' + 'A'.repeat(600_000);
+const bigTail = [{ type: 'user', uuid: 'big-u1', timestamp: iso(now - 3 * 3600_000), message: { role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: shot } }] } }];
+write('t-big', bigTail);
+write('w-big', [{ type: 'last-prompt' }, ...bigTail, { type: 'assistant', uuid: 'wb-a1', timestamp: iso(now - 40 * 60_000), message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 5, cache_read_input_tokens: 170_000 } } }]);
+writeFileSync(join(dirs.wakecycle, 'lane.w-big'), JSON.stringify({ lane: 'fable' }));
+fold('t-big', 240_000);
+// A fold older than the lookback still counts while an agent's wake receipt
+// names its tail (a vacation hold); one a later fold replaced does not.
+const oldFold = (tail, est) => appendFileSync(join(dirs.ladder, 'folds.jsonl'), JSON.stringify({ at: iso(now - 5 * 24 * 3600_000), reason: 'sleep', source: `jsonl:src-${tail}`, est_tokens: est, tail }) + '\n');
+for (const [t, w] of [['t-held', 'w-held'], ['t-stale', 'w-stale']]) {
+  const te = [{ type: 'user', uuid: `${t}-u1`, timestamp: iso(now - 5 * 24 * 3600_000), message: { role: 'user', content: 'old' } }];
+  write(t, te);
+  write(w, [...te, { type: 'assistant', uuid: `${w}-a1`, timestamp: iso(now - 20 * 60_000), message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'text', text: 'back' }], usage: { input_tokens: 7, cache_read_input_tokens: 99_000 } } }]);
+  writeFileSync(join(dirs.wakecycle, `lane.${w}`), JSON.stringify({ lane: 'opus' }));
+  oldFold(t, 200_000);
+}
+writeFileSync(join(dirs.wakecycle, 'next-wake.opus.json'), JSON.stringify({ lane: 'opus', sessionId: 't-held' }));
+tick();
+const costs2 = lines(join(root, 'ladder', 'wake-costs.jsonl')).map((c) => `${c.tail}:${c.firstRequestTokens}`);
+check('a 600KB first entry is still costed', costs2.includes('t-big:170005'), true);
+check("an old fold still named by a wake receipt is costed; a replaced one isn't", [costs2.includes('t-held:99007'), costs2.some((c) => c.startsWith('t-stale'))], [true, false]);
+
 // An unnamed single-agent hub reads "the main agent"; a failing command never
 // costs the event card.
 const solo = join(root, 'solo');
