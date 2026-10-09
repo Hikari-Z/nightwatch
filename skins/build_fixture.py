@@ -421,8 +421,12 @@ def lane_card(L, now=None):
     if L["next"]:
         what, dt, disp = L["next"]
         # Local time, like every other clock here (Ra, 10/7: the raw ISO slice read as UTC).
-        nxt = (f'<li data-part="next" data-tip="Next {what}: {local(dt).strftime("%H:%M")}">{icon("bell" if what=="bell" else "sun")}'
-               f'<time datetime="{dt}" data-part="countdown">{esc(disp)}</time></li>')
+        # No time = nothing scheduled (a disarmed lane, Ra 10/8): say so, no countdown.
+        if not dt:
+            nxt = f'<li data-part="next" data-tip="No {what} scheduled (disarmed)">{icon("bell" if what=="bell" else "sun")}<span>{esc(disp)}</span></li>'
+        else:
+            nxt = (f'<li data-part="next" data-tip="Next {what}: {local(dt).strftime("%H:%M")}">{icon("bell" if what=="bell" else "sun")}'
+                   f'<time datetime="{dt}" data-part="countdown">{esc(disp)}</time></li>')
     # Accordion. The viewer opens any lane with an un-acked alarm: trouble
     # never hides behind a closed card.
     open_ = "true" if (L.get("open") or alarm) else "false"

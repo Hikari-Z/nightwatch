@@ -259,5 +259,48 @@ const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
     s.LANES.every((l) => l.state !== 'awake'), s.LANES.map((l) => `${l.id}=${l.state}`).join(' '));
 }
 
+// ---- probes: the card's clock and next slot follow the lane's state, and a
+// finished refresh leaves the card (Ra, 10/8, claude-opus-5-5).
+{
+  const LC = { ...cfg, paths: { ...cfg.paths, claudeSessions: '/cs' }, lanes: { fable: { targetTokens: 250_000, switchboard: true }, opus: { targetTokens: 250_000 } } };
+  const SF = 'aaaa0000-0000-0000-0000-000000000001', SO = 'bbbb0000-0000-0000-0000-000000000002', SN = 'cccc0000-0000-0000-0000-000000000003';
+  const world = ({ events, armed, files = {}, mt = {}, pids = [], dirs = {} }) => ({
+    readText: (p) => p === '/ev' ? events.map((e) => JSON.stringify(e)).join('\n') : p === '/armed' ? armed : files[p] ?? null,
+    readDir: (p) => dirs[p] ?? [], readTail: (p) => files[p] ?? null,
+    stat: (p) => mt[p] != null ? { size: 1, mtimeMs: mt[p] } : files[p] != null ? { size: files[p].length, mtimeMs: NOW - 60e3 } : null,
+    livePids: () => pids, psCommand: () => null, now: () => NOW,
+  });
+  const L = (s, id) => s.LANES.find((l) => l.id === id);
+  const beat = { at: iso(60e3), kind: 'daemon-alive', armed: ['opus'] };
+  // fable: woke 37h ago, folded 10h ago, closed, DISARMED. opus: awake on SO, registered 3h ago, armed.
+  const base = {
+    events: [beat, { at: iso(10 * 3600e3), kind: 'folded', lane: 'fable', session: SF, tail: 'x' }],
+    armed: 'opus',
+    files: { [`/wc/lane.${SF}`]: JSON.stringify({ lane: 'fable', pid: 1 }), [`/wc/lane.${SO}`]: JSON.stringify({ lane: 'opus', pid: 2 }),
+      '/cs/2.json': JSON.stringify({ pid: 2, sessionId: SO, status: 'idle' }) },
+    mt: { [`/wc/lane.${SF}`]: NOW - 37 * 3600e3, [`/wc/lane.${SO}`]: NOW - 3 * 3600e3 },
+    dirs: { '/wc': [`lane.${SF}`, `lane.${SO}`], '/cs': ['2.json'] }, pids: [2],
+  };
+  let s = assemble(LC, world(base), '8h');
+  check('clock: an asleep lane counts from its fold, not its last wake', L(s, 'fable').since[0] === iso(10 * 3600e3), L(s, 'fable').since[0]);
+  check('clock: an awake lane counts from when its session started', L(s, 'opus').since[0] === new Date(NOW - 3 * 3600e3).toISOString(), L(s, 'opus').since[0]);
+  check('next: a disarmed lane has nothing scheduled', JSON.stringify(L(s, 'fable').next) === JSON.stringify(['wake', '', 'none']), JSON.stringify(L(s, 'fable').next));
+  check('next: an armed awake lane shows its bell', L(s, 'opus').next[0] === 'bell' && L(s, 'opus').next[1] !== '', JSON.stringify(L(s, 'opus').next));
+  s = assemble(LC, world({ ...base, armed: 'fable,opus' }), '8h');
+  check('next: an armed asleep lane shows its wake', L(s, 'fable').next[0] === 'wake' && L(s, 'fable').next[1] !== '', JSON.stringify(L(s, 'fable').next));
+
+  // The 10/8 card: fold-forced, then already-awake (no wake-confirmed ever).
+  const forced = [beat, { at: iso(6 * 3600e3), kind: 'fold-requested', lane: 'opus', session: SN, deadline: iso(6 * 3600e3 - 600e3) },
+    { at: iso(5.8 * 3600e3), kind: 'fold-forced', lane: 'opus', session: SN }];
+  s = assemble(LC, world({ ...base, events: [...forced, { at: iso(5.7 * 3600e3), kind: 'already-awake', lane: 'opus' }] }), '8h');
+  check('refresh: already-awake ends "waking fresh"', !L(s, 'opus').foldRequest, JSON.stringify(L(s, 'opus').foldRequest));
+  s = assemble(LC, world({ ...base, events: forced }), '8h');
+  check('refresh: running a different session than the folded one ends it too', !L(s, 'opus').foldRequest, JSON.stringify(L(s, 'opus').foldRequest));
+  s = assemble(LC, world({ ...base, events: forced, files: { ...base.files, '/cs/2.json': JSON.stringify({ pid: 2, sessionId: SN, status: 'idle' }), [`/wc/lane.${SN}`]: JSON.stringify({ lane: 'opus', pid: 2 }) }, dirs: { ...base.dirs, '/wc': [...base.dirs['/wc'], `lane.${SN}`] } }), '8h');
+  check('refresh: still the folded session, nothing confirmed → still refreshing', L(s, 'opus').foldRequest?.phase === 'refreshing', JSON.stringify(L(s, 'opus').foldRequest));
+  s = assemble(LC, world({ ...base, events: [beat, { at: iso(3600e3), kind: 'fold-requested', lane: 'opus', session: SO, deadline: iso(3000e3) }] }), '8h');
+  check('request: a request 50m past its deadline with no outcome is no longer pending', !L(s, 'opus').foldRequest, JSON.stringify(L(s, 'opus').foldRequest));
+}
+
 console.log(failures === 0 ? 'PROBES CLEAN' : `PROBES: ${failures} failure(s)`);
 process.exit(failures ? 1 : 0);

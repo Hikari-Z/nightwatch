@@ -347,6 +347,13 @@ export function assemble(cfg, io, range = '8h') {
   const nextBell = (() => { const d = new Date(nowMs); d.setHours(sh, sm, 0, 0); if (d.getTime() <= nowMs) d.setDate(d.getDate() + 1); return d; })();
   const bellMins = Math.round((nextBell.getTime() - nowMs) / 60_000);
   const countdown = `${Math.floor(bellMins / 60)}h ${String(bellMins % 60).padStart(2, '0')}m`;
+  // A lane's next scheduled moment at HH:MM (its own schedule or the global).
+  const nextAt = (hhmm) => {
+    const [h, mi] = String(hhmm).split(':').map(Number);
+    const d = new Date(nowMs); d.setHours(h, mi, 0, 0); if (d.getTime() <= nowMs) d.setDate(d.getDate() + 1);
+    const mins = Math.round((d.getTime() - nowMs) / 60_000);
+    return [d.toISOString(), `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`];
+  };
 
   // The persona this config describes: its configured name, else its folder's
   // name (never a hardcoded "Weft"; Terra's persona is someone else).
@@ -369,12 +376,19 @@ export function assemble(cfg, io, range = '8h') {
     // wake-confirmed after it is REFRESHING (closed, waking fresh).
     const iReq = laneEvents.map((e) => e.kind).lastIndexOf('fold-requested');
     let foldRequest;
+    let refreshFoldedSid;
     if (iReq !== -1) {
       const after = laneEvents.slice(iReq + 1);
       const done = after.find((e) => e.kind === 'fold-request-met' || e.kind === 'fold-forced');
-      if (!done) foldRequest = { phase: 'requested', deadline: laneEvents[iReq].deadline };
-      else if (!after.slice(after.indexOf(done) + 1).some((e) => e.kind === 'wake-confirmed')) {
+      // A request whose deadline passed 30m ago without a met or forced
+      // event was lost (a daemon restart, say); it isn't pending any more.
+      const dl = Date.parse(laneEvents[iReq].deadline ?? '');
+      if (!done) { if (!(dl + 30 * 60_000 < nowMs)) foldRequest = { phase: 'requested', deadline: laneEvents[iReq].deadline }; }
+      // Refreshing ends with any word that the wake happened or won't
+      // (10/8: an already-awake left "waking fresh" on the card for hours).
+      else if (!after.slice(after.indexOf(done) + 1).some((e) => ['wake-confirmed', 'already-awake', 'wake-failed', 'stale-receipt'].includes(e.kind))) {
         foldRequest = { phase: 'refreshing', forced: done.kind === 'fold-forced' };
+        refreshFoldedSid = done.session;
       }
     }
     // The full contract vocabulary (v0.9.1): an alive lane is awake (or
@@ -465,6 +479,21 @@ export function assemble(cfg, io, range = '8h') {
     // else whatever the command line says.
     const sessionSid = (liveSid && status.bySid.has(liveSid)) ? liveSid
       : (r && livePids.has(r.pid)) ? r.sid : (liveSid ?? r?.sid);
+    // The card's clock counts time in the lane's CURRENT state (Ra, 10/8:
+    // asleep Fable read "37h", its time since its last wake). Awake: since
+    // the running session started (its registry entry). Asleep: since its
+    // last fold or close. Next: the bell while awake, the wake while asleep,
+    // and an empty time when the lane is disarmed (nothing is scheduled).
+    const regAt = (sid) => sid ? io.stat(joinPath(cfg.paths.wakecycle, `lane.${sid}`))?.mtimeMs : undefined;
+    const sleptEvt = [...laneEvents].reverse().find((e) => ['folded', 'orphan-fold-done', 'fold-forced', 'panel-closed'].includes(e.kind));
+    const sinceMs = alive ? (regAt(sessionSid) ?? r?.at) : (sleptEvt ? Date.parse(sleptEvt.at) : r?.at);
+    const sinceIso = sinceMs ? new Date(sinceMs).toISOString() : nowIso;
+    const sched = lc.schedule ?? cfg.schedule ?? {};
+    const next = !armed.includes(id) ? [alive ? 'bell' : 'wake', '', 'none']
+      : alive ? ['bell', ...nextAt(sched.sleep ?? '02:00')] : ['wake', ...nextAt(sched.wake ?? '08:00')];
+    // ...or when the lane is plainly running a session other than the one
+    // that was folded: whatever happened, the refresh is over.
+    if (foldRequest?.phase === 'refreshing' && alive && refreshFoldedSid && sessionSid && sessionSid !== refreshFoldedSid) foldRequest = undefined;
     const stats = alive && sessionSid ? transcriptStats(cfg, io, sessionSid) : { est: 0, series: Array(24).fill(0), model: null };
     const activity = alive ? sessionActivity(cfg, io, sessionSid, r && livePids.has(r.pid) ? r.pid : undefined, livePids) : undefined;
     return {
@@ -473,8 +502,8 @@ export function assemble(cfg, io, range = '8h') {
       // A hook-registered session with a live pid is the truest receipt;
       // the ps --resume sid is a fork-wake's TAIL, kept for manual resumes.
       session: sessionSid?.slice(0, 8) ?? '—', sessionId: sessionSid ?? undefined, // full id: the Copy session ID button (10/7)
-      since: pair(r ? new Date(r.at).toISOString() : nowIso, alive ? '' : 'folded'),
-      next: ['bell', nextBell.toISOString(), countdown],
+      since: pair(sinceIso, alive ? '' : 'folded'),
+      next,
       ctx: stats.est, window: lc.contextWindow ?? windowFor(stats.model) ?? undefined, target: lc.targetTokens,
       open: state === 'failed', series: stats.series,
       // Hub design (anima_dev/nightwatch_hub_design.md): every lane names its

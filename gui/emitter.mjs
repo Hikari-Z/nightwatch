@@ -410,7 +410,9 @@ function lane_card(L, nowIso = null, tz = undefined) {
   if (L.next) {
     const [what, dt, disp] = L.next;
     // Local time, like every other clock here (Ra, 10/7: the raw ISO slice read as UTC).
-    nxt = `<li data-part="next" data-tip="Next ${what}: ${hmLocal(dt, tz)}">${icon(what === 'bell' ? 'bell' : 'sun')}` +
+    // No time = nothing scheduled (a disarmed lane, Ra 10/8): say so, no countdown.
+    nxt = !dt ? `<li data-part="next" data-tip="No ${what} scheduled (disarmed)">${icon(what === 'bell' ? 'bell' : 'sun')}<span>${esc(disp)}</span></li>`
+      : `<li data-part="next" data-tip="Next ${what}: ${hmLocal(dt, tz)}">${icon(what === 'bell' ? 'bell' : 'sun')}` +
       `<time datetime="${dt}" data-part="countdown">${esc(disp)}</time></li>`;
   }
   // Accordion. The viewer opens any lane with an un-acked alarm: trouble
