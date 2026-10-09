@@ -281,7 +281,7 @@ function persona_groups(ctx) {
 function copy_session(L) {
   const sid = L.sessionId ?? L.session;
   if (!sid || sid === '—') return '';
-  return `<div data-part="session-row"><button type="button" data-action="copy-session" data-session="${esc(sid)}" data-tip="Copy this lane's current session ID to the clipboard">${icon('id')}<span>Copy session ID</span></button></div>`;
+  return `<div data-part="session-row"><button type="button" data-action="copy-session" data-session="${esc(sid)}" data-tip="${L.state === 'awake' || L.state === 'belled' ? "Copy this agent's current session ID" : "Copy the ID of this agent's last active session"}">${icon('id')}<span>Copy session ID</span></button></div>`;
 }
 
 function lane_settings(L) {

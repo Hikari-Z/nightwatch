@@ -400,7 +400,7 @@ def copy_session(L):
     sid = L.get("sessionId") or L.get("session")
     if not sid or sid == "—":
         return ""
-    return f'<div data-part="session-row"><button type="button" data-action="copy-session" data-session="{esc(sid)}" data-tip="Copy this lane\'s current session ID to the clipboard">{icon("id")}<span>Copy session ID</span></button></div>'
+    return f'<div data-part="session-row"><button type="button" data-action="copy-session" data-session="{esc(sid)}" data-tip="{"Copy this agent\'s current session ID" if L["state"] in ("awake", "belled") else "Copy the ID of this agent\'s last active session"}">{icon("id")}<span>Copy session ID</span></button></div>'
 
 def uptime_li(L, now):
     up = L["state"] in ("awake", "belled")
