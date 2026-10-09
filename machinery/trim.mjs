@@ -6,8 +6,9 @@
  * entries extended back to the nearest genuine human prompt, and writes the
  * kept tail as a NEW session file (fresh uuid) in the same project directory.
  * Delete-only: whole JSONL entries are kept or dropped, nothing inside an
- * entry is rewritten except the session id itself and, where a dropped
- * harness entry sat mid-chain, its children's parentUuid (see HARNESS_LOADED). The original is never
+ * entry is rewritten except the session id itself, each reply's recorded
+ * token `usage` (see STALE USAGE), and, where a dropped harness entry sat
+ * mid-chain, its children's parentUuid (see HARNESS_LOADED). The original is never
  * touched. `claude --resume <new-id> --fork-session` loads the copy as
  * native turns (tested 2026-09-27: 1,058/1,987 entries, 29 s load, texture
  * intact).
@@ -70,6 +71,20 @@ if (torn) console.error(`warning: ${torn} unparseable line(s) will be dropped`);
 const HARNESS_LOADED = new Set(['instructions']);
 function isHarnessLoaded(e) {
   return e?.type === 'attachment' && HARNESS_LOADED.has(e.attachment?.type);
+}
+
+// STALE USAGE: every reply records the token usage of the request that made
+// it. Claude Code reads the newest one as the session's current size, and on
+// resume it trusted the kept tail's last figure: 937k, recorded at 93% before
+// the fold. It decided the window was full and refused locally ("Prompt is
+// too long", terminal_reason blocking_limit, no API call) on 2026-10-08. The
+// same tail with these fields removed resumed and answered at 181,590 real
+// tokens. A copied usage figure describes the session that was folded, not
+// the one that resumes, so it never travels.
+function withoutUsage(e) {
+  if (e?.type !== 'assistant' || !e.message || !('usage' in e.message)) return null;
+  const { usage, ...message } = e.message;
+  return { ...e, message };
 }
 
 /** A genuine human prompt: typed by the person, not a tool result, not a
@@ -153,15 +168,21 @@ const kept = [];
 let keptEst = 0;
 let dropped = 0;
 let relinked = 0;
+let usageStripped = 0;
 for (let i = cut; i < lines.length; i++) {
   if (entries[i] === null) continue;
   if (isHarnessLoaded(entries[i])) { dropped++; continue; }
-  let line = lines[i];
-  const p = entries[i].parentUuid;
+  let e = entries[i];
+  let changed = false;
+  const p = e.parentUuid;
   if (p && droppedParent.has(p)) {
-    line = JSON.stringify({ ...entries[i], parentUuid: liveParent(p) });
+    e = { ...e, parentUuid: liveParent(p) };
     relinked++;
+    changed = true;
   }
+  const stripped = withoutUsage(e);
+  if (stripped) { e = stripped; usageStripped++; changed = true; }
+  const line = changed ? JSON.stringify(e) : lines[i];
   kept.push(line);
   keptEst += estLine(line);
 }
@@ -181,6 +202,7 @@ const report = {
   estTokens: keptEst,
   harnessDropped: dropped,
   relinked,
+  usageStripped,
   cutAt: cutEntry?.timestamp ?? null,
   cutPrompt: String(cutEntry?.message?.content ?? '').slice(0, 120),
 };

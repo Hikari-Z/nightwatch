@@ -30,7 +30,7 @@ add({ type: 'attachment', attachment: { type: 'environment', text: 'env' } });
 add({ type: 'attachment', attachment: { type: 'skill_listing', content: 'skills' } });
 add({ type: 'attachment', attachment: { type: 'instructions', files: [{ path: 'CLAUDE.md', content: big }] } });
 add({ type: 'attachment', attachment: { type: 'total_tokens_reminder' } });
-add({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'reply' }] } });
+add({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'reply' }], usage: { input_tokens: 10, cache_read_input_tokens: 937_000 } } });
 const src = join(dir, `${SID}.jsonl`);
 writeFileSync(src, rows.map((r) => JSON.stringify(r)).join('\n') + '\n');
 
@@ -53,6 +53,7 @@ try {
   let walked = 1;
   while (cur.parentUuid && byId.has(cur.parentUuid)) { cur = byId.get(cur.parentUuid); walked++; }
   check('chain walks leaf → first kept entry with no gap', walked === kept.length, `walked ${walked} of ${kept.length}`);
+  check('no reply carries a copied usage figure (the 937k that blocked the wake)', kept.every((e) => e.type !== 'assistant' || !('usage' in (e.message ?? {}))), types.join(','));
   check('estimate leaves the head out', rep.estTokens < 2_000, `est ${rep.estTokens}`);
   check('report counts drops and relinks', rep.harnessDropped === 1 && rep.relinked >= 1, JSON.stringify({ d: rep.harnessDropped, r: rep.relinked }));
 } finally {
