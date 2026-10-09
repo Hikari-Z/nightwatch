@@ -230,7 +230,8 @@ const LANE_KEYS = {
 };
 const ALLOWED = {
   weftRoot: 'string', timezone: 'string', defaultLane: 'string',
-  persona: { name: 'string' },
+  // pronouns: only ever set by the persona themself (Ra, 10/8: nobody assigns them).
+  persona: { name: 'string', pronouns: 'string' },
   schedule: Object.fromEntries(Object.keys(DEFAULTS.schedule).map((k) => [k, k === 'sleep' || k === 'wake' ? 'time' : 'number'])),
   models: { bell: 'string' },
   viewer: { port: 'number' },
