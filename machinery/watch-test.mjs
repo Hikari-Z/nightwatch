@@ -112,6 +112,36 @@ append('s-context', ctx(500_000));
 tick();
 check('context clears only below the re-arm line', lines(EVENTS).slice(first.length + 1).map((e) => `${e.kind}:${e.cause}`), ['stuck-cleared:context']);
 
+// Wake cost (fix 4): the session woken from a fold's tail, found by the
+// tail's entries in its transcript, records its first real request beside
+// the fold's estimate. A decoy registered after the fold and a dead wake
+// record nothing.
+const fold = (tail, est) => appendFileSync(join(dirs.ladder, 'folds.jsonl'), JSON.stringify({ at: iso(now - 2 * 3600_000), reason: 'sleep', source: `jsonl:src-${tail}`, est_tokens: est, tail }) + '\n');
+const copiedReply = (uuid) => ({ type: 'assistant', uuid, timestamp: iso(now - 3 * 3600_000), message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'text', text: 'from yesterday' }], usage: { input_tokens: 0, cache_read_input_tokens: 937_000, output_tokens: 1 } } }); // a pre-10/8 tail's stale copied usage
+const tailEntries = [{ type: 'user', uuid: 'tail-u1', timestamp: iso(now - 3 * 3600_000), message: { role: 'user', content: 'yesterday' } }, copiedReply('tail-a1')];
+write('t-good', tailEntries);
+write('w-good', [{ type: 'last-prompt' }, ...tailEntries, { type: 'user', uuid: 'w-u1', timestamp: iso(now - 50 * 60_000), message: { role: 'user', content: 'morning' } },
+  // Claude Code's own synthetic replies carry all-zero usage and aren't errors: not a request.
+  { type: 'assistant', uuid: 'w-syn', timestamp: iso(now - 50 * 60_000), message: { role: 'assistant', model: '<synthetic>', content: [{ type: 'text', text: 'No response requested.' }], usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0 } } },
+  { type: 'assistant', uuid: 'w-a1', timestamp: iso(now - 49 * 60_000), message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'text', text: 'awake' }], usage: { input_tokens: 3, cache_read_input_tokens: 190_000, cache_creation_input_tokens: 15_796, output_tokens: 40 } } }]);
+write('w-decoy', [{ type: 'assistant', uuid: 'd-a1', timestamp: iso(now - 30 * 60_000), message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'text', text: 'unrelated' }], usage: { input_tokens: 999, output_tokens: 1 } } }]);
+const deadTail = [{ type: 'user', uuid: 'dt-u1', timestamp: iso(now - 3 * 3600_000), message: { role: 'user', content: 'x' } }];
+write('t-dead', deadTail);
+write('w-dead', [...deadTail, apiError('Prompt is too long', 'invalid_request')]);
+for (const [sid, lane] of [['w-decoy', 'opus'], ['w-good', 'opus'], ['w-dead', 'fable']]) writeFileSync(join(dirs.wakecycle, `lane.${sid}`), JSON.stringify({ lane }));
+fold('t-good', 252_417);
+fold('t-dead', 250_000);
+const eventsBefore = lines(EVENTS).length;
+tick();
+const costs = lines(join(root, 'ladder', 'wake-costs.jsonl'));
+check('the woken session records its first real request beside the estimate',
+  costs.map(({ lane, tail, session, source, estTokens, firstRequestTokens }) => ({ lane, tail, session, source, estTokens, firstRequestTokens })),
+  [{ lane: 'opus', tail: 't-good', session: 'w-good', source: 'jsonl:src-t-good', estTokens: 252_417, firstRequestTokens: 205_799 }]);
+check('the record is stamped with the reply\'s own time', costs[0]?.at, iso(now - 49 * 60_000));
+check('and lands as a wake-cost event', lines(EVENTS).slice(eventsBefore).filter((e) => e.kind === 'wake-cost').map((e) => `${e.tail}:${e.firstRequestTokens}`), ['t-good:205799']);
+tick();
+check('a second tick records nothing twice', lines(join(root, 'ladder', 'wake-costs.jsonl')).length, 1);
+
 // An unnamed single-agent hub reads "the main agent"; a failing command never
 // costs the event card.
 const solo = join(root, 'solo');

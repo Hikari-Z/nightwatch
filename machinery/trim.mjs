@@ -19,7 +19,10 @@
  *
  * Usage: node trim.mjs <session-id-or-path> [--target-tokens 250000] [--dry]
  * Prints JSON: { newSessionId, path, keptEntries, totalEntries, estTokens,
- *               cutAt, cutPrompt }
+ *               targetTokens, cutAt, cutPrompt, overshoot? }
+ * overshoot (fix 5, 10/9) appears when reaching back to a human prompt carried
+ * the kept estimate past OVERSHOOT × target: { ratio, extendedEntries,
+ * walkCutAt }. It's also said on stderr, so a person running a fold sees it.
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -129,6 +132,7 @@ for (let i = lines.length - 1; i >= 0; i--) {
   if (est >= target) break;
 }
 // Extend back to the nearest human prompt at or before the cut.
+const walkCut = cut;
 let promptIdx = -1;
 for (let i = cut; i >= 0; i--) {
   if (isHumanPrompt(entries[i])) {
@@ -193,6 +197,19 @@ const newId = randomUUID();
 const out = kept.map((l) => l.split(oldId).join(newId)).join('\n') + '\n';
 const outPath = join(dirname(srcPath), `${newId}.jsonl`);
 
+// Overshoot (incident fix 5, 10/8): the walk stops at the target, but the
+// tail has to start at a human prompt, and the nearest one can sit far back
+// (288k kept against a 150k target at 22:28 on 10/8, unreported). Say so.
+// Whether a cut may land on an assistant-turn boundary instead is a separate
+// design question: the tail still has to open with a valid user turn.
+const OVERSHOOT = 1.25;
+const overshoot = keptEst > target * OVERSHOOT
+  ? { ratio: Math.round((keptEst / target) * 100) / 100, extendedEntries: Math.max(0, walkCut - cut), walkCutAt: entries[walkCut]?.timestamp ?? null }
+  : null;
+if (overshoot) {
+  console.error(`trim: OVERSHOOT, kept ~${keptEst} tokens against a ${target} target (${overshoot.ratio}x): the nearest human prompt before the cut was ${overshoot.extendedEntries} entries further back.`);
+}
+
 const cutEntry = entries[cut];
 const report = {
   newSessionId: newId,
@@ -200,6 +217,8 @@ const report = {
   keptEntries: kept.length,
   totalEntries: lines.length,
   estTokens: keptEst,
+  targetTokens: target,
+  ...(overshoot ? { overshoot } : {}),
   harnessDropped: dropped,
   relinked,
   usageStripped,

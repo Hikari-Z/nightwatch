@@ -91,6 +91,9 @@ export const DEFAULTS = {
     events: 'events.jsonl', // machine-readable twin of the log; the GUI's API
     watchLog: 'watch.log',
     watchState: 'wakecycle/watch-state.json',
+    // Each wake's real first request beside its fold's estimate (watch.mjs),
+    // joinable with folds.jsonl by tail: the estimate's nightly calibration.
+    wakeCosts: 'ladder/wake-costs.jsonl',
     // Claude Code's live session status files (pid, sessionId, status).
     sessions: join(HOME, '.claude', 'sessions'),
     armedFile: 'wakecycle/nightshift.armed',

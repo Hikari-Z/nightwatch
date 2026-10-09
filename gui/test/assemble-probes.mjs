@@ -302,5 +302,16 @@ const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
   check('request: a request 50m past its deadline with no outcome is no longer pending', !L(s, 'opus').foldRequest, JSON.stringify(L(s, 'opus').foldRequest));
 }
 
+// ---- probe: a fold that overshot its target says so in the log (fix 5, 10/9).
+{
+  const LC = { ...cfg, lanes: { opus: { targetTokens: 150_000 } } };
+  const ev = [{ at: iso(3600e3), kind: 'folded', lane: 'opus', session: 's', tail: 't', kept: 900, total: 2000, est: 288_000, target: 150_000, overshoot: { ratio: 1.92, extendedEntries: 40 } },
+    { at: iso(1800e3), kind: 'folded', lane: 'opus', session: 's2', tail: 't2', kept: 500, total: 900, est: 140_000, target: 150_000 }];
+  const s = assemble(LC, { readText: (p) => p === '/ev' ? ev.map((e) => JSON.stringify(e)).join('\n') : null, readDir: () => [], readTail: () => null, stat: () => null, livePids: () => [], psCommand: () => null, now: () => NOW }, '8h');
+  const tips = s.LOG.flatMap(([, rows]) => rows).filter((r) => r[2] === 'fold').map((r) => r[4]);
+  check('log: an overshooting fold names its ratio', tips.some((t) => /1\.92x its target/.test(t)), JSON.stringify(tips));
+  check('log: a fold within its target says nothing extra', tips.filter((t) => /its target/.test(t)).length === 1, JSON.stringify(tips));
+}
+
 console.log(failures === 0 ? 'PROBES CLEAN' : `PROBES: ${failures} failure(s)`);
 process.exit(failures ? 1 : 0);

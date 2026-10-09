@@ -330,7 +330,8 @@ export function assemble(cfg, io, range = '8h') {
     const kind = KIND_MAP[e.kind];
     if (!kind) continue;
     const lane = e.lane ?? 'nightshift';
-    const tip = `${TIP[e.kind] ?? e.kind}${e.kept ? `, ${e.kept}/${e.total} kept` : ''}${e.cause ? ` (${e.cause})` : ''}`;
+    // An overshoot (fix 5) is the fold's own news: the next wake runs larger than its target.
+    const tip = `${TIP[e.kind] ?? e.kind}${e.kept ? `, ${e.kept}/${e.total} kept` : ''}${e.overshoot ? `, ${e.overshoot.ratio}x its target` : ''}${e.cause ? ` (${e.cause})` : ''}`;
     const status = e.alarm ? 'failed' : (e.kind === 'already-awake' ? 'manual' : 'ok');
     if (ts >= nightStart && lane !== 'nightshift') {
       (NIGHT[lane] ??= []).push([kind, status, Math.max(0, Math.min(1, (ts - nightStart) / span)), hm(e.at), tip, 1]);

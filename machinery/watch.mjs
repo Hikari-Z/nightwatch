@@ -39,6 +39,14 @@
  * stuck-cleared event when it ends while the session lives. Episodes persist
  * (paths.watchState), so a restart doesn't re-announce anything.
  *
+ * Wake cost (incident fix 4, 10/9): for each recent fold, the watch finds the
+ * session woken from its tail (a session this hub registered after the fold
+ * whose transcript carries the tail's entries, whichever path woke it) and
+ * records that session's first real request beside the fold's estimate: one
+ * row in paths.wakeCosts and one `wake-cost` event, fields {at, lane, tail,
+ * session, source, estTokens, firstRequestTokens}. Every night then measures
+ * the trimmer's estimate against what the harness actually sent.
+ *
  * Run: WEFT_CONFIG=<hub config> node watch.mjs [--once]
  *
  * Written by: claude-opus-5-5, 2026-10-09, from weft's watch-spiral.mjs
@@ -201,9 +209,10 @@ function windowFor(lane, model) {
 }
 
 // ── state ────────────────────────────────────────────────────────────────
-// active: `${sid}\u0000${cause}` → episode key; spiral: sid → last alert ms.
-let state = { active: {}, spiral: {} };
-try { state = { active: {}, spiral: {}, ...JSON.parse(readFileSync(P.watchState, 'utf8')) }; } catch { /* first run */ }
+// active: `${sid}\u0000${cause}` → episode key; spiral: sid → last alert ms;
+// costed: tails whose wake cost is recorded; costSeen: tail → woken transcript mtime last read.
+let state = { active: {}, spiral: {}, costed: [], costSeen: {} };
+try { state = { ...state, ...JSON.parse(readFileSync(P.watchState, 'utf8')) }; } catch { /* first run */ }
 function saveState() {
   try { writeFileSync(P.watchState + '.tmp', JSON.stringify(state)); renameSync(P.watchState + '.tmp', P.watchState); }
   catch (e) { log(`state save failed: ${e.message}`); }
@@ -278,6 +287,71 @@ function stuckCauses(now, s, entries) {
   return causes;
 }
 
+// ── wake cost (fix 4) ────────────────────────────────────────────────────
+const COST_LOOKBACK_MS = 3 * 24 * 3600_000;
+const firstUuid = (path) => {
+  let fd;
+  try { fd = openSync(path, 'r'); } catch { return null; }
+  try {
+    const buf = Buffer.alloc(256 * 1024);
+    const n = readSync(fd, buf, 0, buf.length, 0);
+    for (const l of buf.subarray(0, n).toString('utf8').split('\n')) { try { const u = JSON.parse(l).uuid; if (u) return u; } catch {} }
+    return null;
+  } finally { closeSync(fd); }
+};
+const headHas = (path, needle) => {
+  let fd;
+  try { fd = openSync(path, 'r'); } catch { return false; }
+  try {
+    const buf = Buffer.alloc(512 * 1024);
+    const n = readSync(fd, buf, 0, buf.length, 0);
+    return buf.subarray(0, n).includes(needle);
+  } finally { closeSync(fd); }
+};
+const usageTokens = (u) => (u?.input_tokens ?? 0) + (u?.cache_read_input_tokens ?? 0) + (u?.cache_creation_input_tokens ?? 0);
+
+function wakeCostCheck(now) {
+  let rows = [];
+  try { rows = readFileSync(P.folds, 'utf8').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean); } catch { return; }
+  const costed = new Set(state.costed);
+  let registry = [];
+  try { registry = readdirSync(P.wakecycle).filter((f) => f.startsWith('lane.')).map((f) => ({ sid: f.slice(5), mtime: statSync(join(P.wakecycle, f)).mtimeMs, file: join(P.wakecycle, f) })); } catch { return; }
+  for (const row of rows) {
+    const foldAt = Date.parse(row.at);
+    if (!row.tail || costed.has(row.tail) || !(now - foldAt < COST_LOOKBACK_MS)) continue;
+    const tailPath = join(P.transcripts, `${row.tail}.jsonl`);
+    const anchor = firstUuid(tailPath);
+    if (!anchor) continue;
+    const woken = registry.filter((r) => r.mtime > foldAt && r.sid !== row.tail).sort((a, b) => a.mtime - b.mtime)
+      .find((r) => headHas(join(P.transcripts, `${r.sid}.jsonl`), anchor));
+    if (!woken) continue;
+    const wokenPath = join(P.transcripts, `${woken.sid}.jsonl`);
+    let mtime = 0;
+    try { mtime = statSync(wokenPath).mtimeMs; } catch { continue; }
+    if (state.costSeen[row.tail] === mtime) continue; // nothing new since the last read
+    state.costSeen[row.tail] = mtime;
+    const copied = new Set();
+    try { for (const l of readFileSync(tailPath, 'utf8').split('\n')) { try { const u = JSON.parse(l).uuid; if (u) copied.add(u); } catch {} } } catch { continue; }
+    let first = null;
+    for (const l of readFileSync(wokenPath, 'utf8').split('\n')) {
+      let e; try { e = JSON.parse(l); } catch { continue; }
+      if (e.type !== 'assistant' || copied.has(e.uuid) || e.isApiErrorMessage) continue;
+      const t = usageTokens(e.message?.usage);
+      if (t > 0) { first = { at: e.timestamp, tokens: t }; break; }
+    }
+    if (!first) continue; // no real reply yet (or a dead wake: deadwake.mjs's business)
+    let lane = null;
+    try { lane = JSON.parse(readFileSync(woken.file, 'utf8')).lane ?? null; } catch {}
+    const record = { at: first.at, lane, tail: row.tail, session: woken.sid, source: row.source ?? null, estTokens: row.est_tokens ?? null, firstRequestTokens: first.tokens };
+    try { appendFileSync(P.wakeCosts, JSON.stringify(record) + '\n'); } catch (e) { log(`wake-cost write failed: ${e.message}`); continue; }
+    emit({ ...record, kind: 'wake-cost' });
+    log(`WAKE COST: ${lane ?? '?'} woke from ${row.tail.slice(0, 8)}… as ${woken.sid.slice(0, 8)}…: first request ${first.tokens} tokens, fold estimated ${row.est_tokens ?? '?'}`);
+    state.costed.push(row.tail);
+    delete state.costSeen[row.tail];
+  }
+  state.costed = state.costed.slice(-200);
+}
+
 function check() {
   const now = Date.now();
   const before = JSON.stringify(state);
@@ -310,6 +384,7 @@ function check() {
     emit({ at: new Date(now).toISOString(), kind: 'stuck-cleared', cause, lane, session: sid });
   }
   for (const sid of Object.keys(state.spiral)) if (!liveSids.has(sid)) delete state.spiral[sid];
+  try { wakeCostCheck(now); } catch (e) { log(`wake-cost check failed: ${e.message}`); }
   if (JSON.stringify(state) !== before) saveState();
 }
 

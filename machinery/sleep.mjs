@@ -277,6 +277,8 @@ appendFileSync(
     keptEntries: trimOut.keptEntries,
     totalEntries: trimOut.totalEntries,
     est_tokens: trimOut.estTokens,
+    target_tokens: trimOut.targetTokens ?? target,
+    ...(trimOut.overshoot ? { overshoot: trimOut.overshoot } : {}),
     tail: trimOut.newSessionId,
     ...(deadWake.skipped.length ? { deadWakesSkipped: deadWake.skipped } : {}),
   }) + '\n',
@@ -294,6 +296,8 @@ try {
     kept: trimOut.keptEntries,
     total: trimOut.totalEntries,
     est: trimOut.estTokens,
+    target: trimOut.targetTokens ?? target,
+    ...(trimOut.overshoot ? { overshoot: trimOut.overshoot } : {}),
     emergency: Boolean(emergency && !authored),
   }) + '\n');
 } catch { /* an event lost, never a fold lost */ }
@@ -322,5 +326,9 @@ writeFileSync(
   }, null, 2) + '\n',
 );
 
-console.log(JSON.stringify({ slept: true, tail: trimOut.newSessionId, keptEntries: trimOut.keptEntries, estTokens: trimOut.estTokens, cutAt: trimOut.cutAt, ladderRungs: visible.length }, null, 2));
-console.log(`\nwake with:  ~/origin/weft/wakecycle/wake.sh ${lane}`);
+console.log(JSON.stringify({ slept: true, tail: trimOut.newSessionId, keptEntries: trimOut.keptEntries, estTokens: trimOut.estTokens, targetTokens: trimOut.targetTokens ?? target, ...(trimOut.overshoot ? { overshoot: trimOut.overshoot } : {}), cutAt: trimOut.cutAt, ladderRungs: visible.length }, null, 2));
+if (trimOut.overshoot) {
+  console.log(`\nNOTE: this fold kept ~${trimOut.estTokens} tokens against a ${trimOut.targetTokens ?? target} target (${trimOut.overshoot.ratio}x): the tail has to start at a human prompt, and the nearest one was ${trimOut.overshoot.extendedEntries} entries before the target. The wake will be larger than usual.`);
+}
+// The hub's own machinery and config (pointer model, 10/7), never weft's path.
+console.log(`\nwake with:  ${CFG.__configFile ? `WEFT_CONFIG="${CFG.__configFile}" ` : ''}sh "${join(MACHINERY_DIR, 'wake.sh')}" ${lane}`);

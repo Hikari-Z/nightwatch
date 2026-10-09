@@ -8,7 +8,7 @@
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -56,6 +56,32 @@ try {
   check('no reply carries a copied usage figure (the 937k that blocked the wake)', kept.every((e) => e.type !== 'assistant' || !('usage' in (e.message ?? {}))), types.join(','));
   check('estimate leaves the head out', rep.estTokens < 2_000, `est ${rep.estTokens}`);
   check('report counts drops and relinks', rep.harnessDropped === 1 && rep.relinked >= 1, JSON.stringify({ d: rep.harnessDropped, r: rep.relinked }));
+
+  // Overshoot (fix 5): one human prompt, then a long machine-only stretch
+  // (tool calls and results, ~6k tokens each). A 5k target stops the walk
+  // inside the stretch; the tail must reach back to the prompt, and the
+  // report and stderr say how far past the target that went.
+  const SID2 = '66666666-7777-8888-9999-000000000000';
+  const rows2 = [];
+  let p2 = null;
+  const add2 = (e, i) => { const uuid = `v${i}`; rows2.push({ parentUuid: p2, uuid, sessionId: SID2, timestamp: `2026-10-08T23:${String(i).padStart(2, '0')}:00.000Z`, ...e }); p2 = uuid; };
+  add2({ type: 'user', message: { role: 'user', content: 'the only human prompt' } }, 0);
+  for (let i = 1; i <= 8; i++) {
+    add2({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: `t${i}`, name: 'Bash', input: { command: 'ls' } }] } }, 2 * i - 1);
+    add2({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `t${i}`, content: 'y '.repeat(12_000) }] } }, 2 * i);
+  }
+  const src2 = join(dir, `${SID2}.jsonl`);
+  writeFileSync(src2, rows2.map((r) => JSON.stringify(r)).join('\n') + '\n');
+  const run2 = (target) => spawnSync(process.execPath, [join(HERE, 'trim.mjs'), src2, '--target-tokens', String(target), '--dry'], { encoding: 'utf8' });
+  const over = run2(5_000);
+  const rep2 = JSON.parse(over.stdout);
+  check('the report names its target', rep2.targetTokens === 5_000, JSON.stringify(rep2.targetTokens));
+  check('an extension far past the target is reported as overshoot', rep2.overshoot?.ratio > 5 && rep2.overshoot.extendedEntries > 0 && rep2.overshoot.walkCutAt, JSON.stringify(rep2.overshoot));
+  check('and said on stderr', /OVERSHOOT, kept ~\d+ tokens against a 5000 target/.test(over.stderr), over.stderr.trim());
+  check('the tail still opens at the human prompt', rep2.cutPrompt === 'the only human prompt', rep2.cutPrompt);
+  const roomy = run2(200_000);
+  const rep3 = JSON.parse(roomy.stdout);
+  check('a fold within the target reports no overshoot', !('overshoot' in rep3) && !/OVERSHOOT/.test(roomy.stderr), JSON.stringify(rep3.overshoot));
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }
