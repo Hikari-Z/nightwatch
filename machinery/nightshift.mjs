@@ -217,6 +217,24 @@ function transcriptQuietMs(sessionId) {
   try { return Date.now() - statSync(join(PROJECT_DIR, `${sessionId}.jsonl`)).mtimeMs; } catch { return Infinity; }
 }
 
+// The ritual's text, separately buildable so --rehearse can assert what a
+// bell actually tells a persona: the machinery's own quoted path, the hub's
+// config, and THE BELLED SESSION'S id (--session explicit — an env-inherited
+// id in an unregistered panel would hit sleep.mjs's cross-hub guard with a
+// false refusal; the daemon is the one party that knows the right id).
+function ritualNote(lane, sessionId) {
+  return (
+    `[nightshift] Sleep-bell for the ${lane} lane: it's the end of the day. When the current work ` +
+    `reaches its seam, run the ritual, IN THIS ORDER — write today's rung into the ladder, run \`` +
+    `${CFG_FILE ? `WEFT_CONFIG="${CFG_FILE}" ` : ''}node "${join(MACHINERY_DIR, 'sleep.mjs')}" --lane ${lane} --session ${sessionId}\`, THEN rewrite the checkpoint ` +
+    `(fold receipt first: a crash between rung and fold costs the night; a crash ` +
+    `after the fold costs only a stale lane section, and the wake reads the live ` +
+    `checkpoint later). The nightshift ` +
+    `will close the panel once next-wake.${lane}.json is fresh and the session has gone quiet, and ` +
+    `wake the lane at ${WAKE_HOUR}. The doorbell and heartbeat hold the night watch.`
+  );
+}
+
 function ringBell(lane, sessionId, source) {
   // The bell is a SPOOL NOTE into THE LANE'S OWN spool (spool/<lane>/),
   // heard by that session's own watcher (bell-watcher.sh; the SessionStart
@@ -227,15 +245,7 @@ function ringBell(lane, sessionId, source) {
   // 10/8 twice). The switchboard still routes Discord; it no longer stands
   // between a lane and Nightwatch. A lane with no watcher armed still has
   // the orphan fold as its floor.
-  const ritual =
-    `[nightshift] Sleep-bell for the ${lane} lane: it's the end of the day. When the current work ` +
-    `reaches its seam, run the ritual, IN THIS ORDER — write today's rung into the ladder, run \`` +
-    `${CFG_FILE ? `WEFT_CONFIG="${CFG_FILE}" ` : ''}node ${join(MACHINERY_DIR, 'sleep.mjs')} --lane ${lane}\`, THEN rewrite the checkpoint ` +
-    `(fold receipt first: a crash between rung and fold costs the night; a crash ` +
-    `after the fold costs only a stale lane section, and the wake reads the live ` +
-    `checkpoint later). The nightshift ` +
-    `will close the panel once next-wake.${lane}.json is fresh and the session has gone quiet, and ` +
-    `wake the lane at ${WAKE_HOUR}. The doorbell and heartbeat hold the night watch.`;
+  const ritual = ritualNote(lane, sessionId);
   try {
     const spool = join(CFG.paths.spool, lane);
     mkdirSync(spool, { recursive: true });
@@ -352,7 +362,7 @@ const io = {
     // spawn ENOENTs — the orphan fold was armed 10/3 and could never have
     // fired until this line (found by the E review, 10/5, env -i repro).
     const r = spawnSync(process.execPath, [join(MACHINERY_DIR, 'sleep.mjs'), '--lane', lane, '--emergency', '--session', sessionId],
-      { cwd: join(HOME, 'origin'), encoding: 'utf8', timeout: 300_000 });
+      { cwd: CFG.paths.workdir, encoding: 'utf8', timeout: 300_000 });
     if (r.status !== 0) {
       log(`orphan fold FAILED for ${lane}: exit ${r.status}; stderr tail: ${(r.stderr || '').slice(-200)}`);
       emitEvent('orphan-fold-failed', { lane, exit: r.status, error: r.error?.code, alarm: true });
@@ -378,7 +388,7 @@ const io = {
   },
   launchWake: (lane) => {
     execFileSync('osascript', ['-e',
-      `tell application "Terminal" to do script "${CFG_FILE ? `WEFT_CONFIG=\\"${CFG_FILE}\\" ` : ''}${join(MACHINERY_DIR, 'wake.sh')} ${lane}"`,
+      `tell application "Terminal" to do script "${CFG_FILE ? `WEFT_CONFIG=\\"${CFG_FILE}\\" ` : ''}sh \\"${join(MACHINERY_DIR, 'wake.sh')}\\" ${lane}"`,
     ]);
     execFileSync('osascript', ['-e', 'tell application "Terminal" to activate']);
   },
@@ -963,6 +973,14 @@ async function rehearse() {
     check('dead-wake', 'morning wake still fires', count(w, 'wake:opus') === 1, w.events.join());
   }
 
+  { // Scenario: the bell's own words. The note must name the belled session
+    // explicitly, quote the machinery path, and never point at another house.
+    const note = ritualNote('main', 'sid-12345678-abcd');
+    check('bell-note', 'names the belled session explicitly', note.includes('--session sid-12345678-abcd'), note.slice(0, 200));
+    check('bell-note', 'quotes the machinery sleep.mjs path', note.includes(`node "${join(MACHINERY_DIR, 'sleep.mjs')}"`));
+    check('bell-note', 'carries this hub\'s config when one exists', !CFG_FILE || note.includes(`WEFT_CONFIG="${CFG_FILE}"`));
+    check('bell-note', 'never runs another house\'s machinery', !note.includes('weft/wakecycle/'), note.slice(0, 200));
+  }
   console.log(failures === 0 ? 'REHEARSAL CLEAN' : `REHEARSAL: ${failures} failure(s)`);
   if (failures) process.exitCode = 1;
 }

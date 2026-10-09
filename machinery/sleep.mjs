@@ -234,6 +234,27 @@ if (deadWake.skipped.length) {
   sessionId = deadWake.sid;
 }
 
+// ── A zero-turn day has nothing to fold ──
+// Claude Code writes a session's transcript lazily, on its first turn. A
+// registered session that was never prompted (a persona's idle first day —
+// rehearsal, 10/9) therefore has NO transcript file, and "trim failed" is
+// the wrong story: nothing happened, so nothing is lost. Write a fresh-start
+// receipt (wake.sh's firstWake mode) and no fold row — a fold that didn't
+// happen never gets a row (the house doesn't fake receipts).
+if (!existsSync(join(CFG.paths.transcripts, `${sessionId}.jsonl`))) {
+  const registered = existsSync(join(WEFT, 'wakecycle', `lane.${sessionId}`));
+  if (registered) {
+    console.error(`sleep.mjs: session ${sessionId.slice(0, 8)} has no transcript — a zero-turn day. Nothing to fold; writing a fresh-start receipt (the morning wakes a new session).`);
+    const receipt = { lane, firstWake: true, sleptAt: new Date().toISOString(), reason: 'zero-turn-day', from: sessionId };
+    writeFileSync(join(WEFT, 'wakecycle', `next-wake.${lane}.json`), JSON.stringify(receipt, null, 2) + '\n');
+    process.exit(0);
+  }
+  // Unregistered AND transcriptless: nothing ties this id to this hub at
+  // all — refuse rather than invent a fresh start for a typo.
+  console.error(`sleep.mjs: session ${sessionId.slice(0, 8)} has no transcript AND no registry entry in this hub — refusing (a typo'd --session should not become a fresh start).`);
+  process.exit(2);
+}
+
 // ── Trim the transcript into tomorrow's tail ──
 let trimOut;
 try {
