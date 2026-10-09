@@ -517,9 +517,9 @@ function tickWith(io) {
       }
     }
 
-    if (inSleepWindow(m)) {
-      const live = io.liveSessions().map((s) => ({ ...s, lane: io.laneOf(s.sessionId) })).filter((s) => s.lane === lane);
+    const live = io.liveSessions().map((s) => ({ ...s, lane: io.laneOf(s.sessionId) })).filter((s) => s.lane === lane);
 
+    if (inSleepWindow(m)) {
       // Bell: once per window, only if the lane is actually up.
       if (live.length && now - (laneState.belledAt ?? 0) > WINDOW_GAP_MS) {
         // A session whose newest reply is "Prompt is too long" can't take any
@@ -535,7 +535,16 @@ function tickWith(io) {
         delete laneState.orphanDeferredEmitted; // new window, fresh deferral event
         io.saveState(st);
       }
-      // Close: only after this window's bell, only once the session has
+    }
+    // Close and the orphan floor are BELL-ANCHORED, not window-anchored
+    // (found 10/9: guard-test's five-minute window orphaned nothing for an
+    // 11:12 Sleep-agent bell — a bell outside the sleep window had no floor
+    // and a heard one never closed). A bell is a bell wherever the clock
+    // stands: --ring and --fold-now ring at any hour, so their close and
+    // floor must follow the BELL's own clock. Only ringing the scheduled
+    // bell stays window-gated above.
+    {
+      // Close: only after the lane's latest bell, only once the session has
       // actually slept (next-wake written AFTER the bell) and gone quiet.
       if (live.length && laneState.belledAt && now - laneState.belledAt <= WINDOW_GAP_MS
           && (laneState.closedAt ?? 0) < laneState.belledAt
@@ -581,7 +590,8 @@ function tickWith(io) {
           }
         }
       }
-    } else {
+    }
+    if (!inSleepWindow(m)) {
       // ── Wake side: wake anything that slept and hasn't been woken — but
       // ONLY inside a bounded morning window [WAKE, WAKE+2h). Outside it, a
       // fresh sleep receipt means a DELIBERATE daytime/evening fold (Ra
@@ -987,6 +997,36 @@ async function rehearse() {
     check('dead-wake', 'morning wake still fires', count(w, 'wake:opus') === 1, w.events.join());
   }
 
+  { // Scenario: a MANUAL bell outside the sleep window, UNHEARD — the
+    // orphan floor follows the bell's clock, not the window's (10/9:
+    // guard-test's 11:12 Sleep-agent bell orphaned nothing, forever).
+    const w = makeWorld(['fable']);
+    w.sessions = [{ pid: 31, sessionId: 'sess-f', lane: 'fable', quietMs: 60 * 60_000 }];
+    w.step(3 * 60); // 19:00 → 22:00, nowhere near the 02:00 window
+    // what --ring now writes (opus's find: it previously wrote nothing):
+    w.st.fable = { ...(w.st.fable ?? {}), belledAt: w.io.now(), belledSession: 'sess-f' };
+    w.events.push('bell:fable@manual');
+    w.step(44); // grace not yet elapsed
+    check('manual-bell', 'floor holds through the grace period', count(w, 'orphanfold:') === 0, w.events.join());
+    w.step(3); // past ORPHAN_GRACE (45m), quiet all along
+    check('manual-bell', 'unheard out-of-window bell gets the orphan floor', count(w, 'orphanfold:fable') === 1, w.events.join());
+    check('manual-bell', 'floor fires once per bell', (w.step(30), count(w, 'orphanfold:fable') === 1), w.events.join());
+  }
+
+  { // Scenario: the same manual bell, HEARD — the agent folds; the close
+    // follows at quiet, outside the window.
+    const w = makeWorld(['fable']);
+    w.sessions = [{ pid: 32, sessionId: 'sess-f', lane: 'fable', quietMs: 0 }];
+    w.step(3 * 60); // 22:00
+    w.st.fable = { ...(w.st.fable ?? {}), belledAt: w.io.now(), belledSession: 'sess-f' };
+    w.step(10);
+    w.nextWake.fable = w.io.now(); // the agent's fold lands (receipt after the bell)
+    w.sessions[0].quietMs = 5 * 60_000;
+    w.step(2);
+    check('manual-bell', 'a heard out-of-window bell closes when slept and quiet', count(w, 'close:fable') === 1, w.events.join());
+    check('manual-bell', 'and never orphan-folds', count(w, 'orphanfold:') === 0, w.events.join());
+  }
+
   { // Scenario: the bell's own words. The note must name the belled session
     // explicitly, quote the machinery path, and never point at another house.
     const note = ritualNote('main', 'sid-12345678-abcd');
@@ -1100,6 +1140,17 @@ if (process.argv.includes('--ring')) {
   }
   LIVE_EMIT = true; // a hand-rung bell is a real act; its event is real
   ringBell(lane, live[0].sessionId, 'nightwatch');
+  // Record the bell in the daemon's state the way the scheduled bell does
+  // (read-modify-write, the --fold-now pattern): without this, the close
+  // and the orphan floor have nothing to anchor to — opus's find, 10/9:
+  // --ring belled a lane and the state file never knew.
+  try {
+    let st = {};
+    try { st = JSON.parse(readFileSync(STATE_FILE, 'utf8')); } catch {}
+    st[lane] = { ...(st[lane] ?? {}), belledAt: Date.now(), belledSession: live[0].sessionId };
+    delete st[lane].orphanDeferredEmitted;
+    writeFileSync(STATE_FILE, JSON.stringify(st, null, 2));
+  } catch (e) { console.error(`--ring: bell rung but state write failed (${e.message}) — the close/orphan floor won't see this bell`); }
   console.log(`bell rung for ${lane} (session ${live[0].sessionId.slice(0, 8)}…)`);
   process.exit(0);
 }
