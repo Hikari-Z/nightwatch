@@ -622,11 +622,23 @@ function tickWith(io) {
       // for tomorrow; a receipt from yesterday 11:00 predates today's wake
       // and wakes now; the 10/2 evening-fold case still waits for morning.
       // Force fold's refreshWake path is separate and unaffected.
-      const wakeInstant = now - sinceWake * 60_000;
+      // Floored to the minute: now's seconds would put the instant at
+      // 08:00:45, letting a fold in the first seconds after wake count as
+      // pre-wake — a sub-minute crack in ruling A (opus, 10/9). Known limit,
+      // noted not fixed: wall-minutes vs real ms drift an hour on a DST day
+      // whose wake sits within 2h of the 2am switch.
+      const wakeInstant = Math.floor(now / 60_000) * 60_000 - sinceWake * 60_000;
+      // The wake trigger counts from when sleep was ASKED (Ra's spec): a
+      // receipt that answers a bell keys on the BELL's time, so a night
+      // bell whose orphan fold ran late (deferred past the wake for real
+      // work, the 10/8 shape) still wakes THIS morning instead of sleeping
+      // a day (opus's probe, 10/9). An unbelled hand fold falls back to
+      // the receipt's own time.
+      const askedAt = laneState.belledAt && nwMtime > laneState.belledAt ? laneState.belledAt : nwMtime;
       // refreshWake (fold-now, 10/6) is the one exception: a refresh is an
       // immediate close-and-reopen at any hour, so it wakes on any receipt
       // newer than the last wake instead of waiting for a wake instant.
-      const slept = nwMtime > 0 && (laneState.refreshWake ? (laneState.wokenAt ?? 0) < nwMtime : nwMtime < wakeInstant);
+      const slept = nwMtime > 0 && (laneState.refreshWake ? (laneState.wokenAt ?? 0) < nwMtime : askedAt < wakeInstant);
       if (slept && (laneState.wokenAt ?? 0) < nwMtime) {
         // A pending launch attempt is TRUSTED only once the lane registry
         // confirms a session actually started (the 10/3 lesson: the window
@@ -1067,6 +1079,24 @@ async function rehearse() {
     w.nextWake.fable = w.io.now() - 10 * 3600_000; // slept long ago
     w.step(26 * 60); // through two full mornings
     check('disarmed-sleep', 'a disarmed slept lane is never woken by the schedule', count(w, 'wake:') === 0, w.events.join());
+  }
+
+  { // Regression (opus, 10/9): a NIGHT bell whose orphan fold was deferred
+    // past the wake (real work under the panel all night, the 10/8 shape)
+    // must still wake THIS morning — the trigger counts from the bell, not
+    // from the late receipt.
+    const w = makeWorld(['opus']);
+    w.sessions = [{ pid: 41, sessionId: 'sess-o', lane: 'opus', quietMs: 60 * 60_000 }];
+    w.busy = ['ffmpeg render'];
+    w.step(7 * 60 + 2); // 19:00 → 02:02, bell rings, orphan defers for work
+    w.step(6 * 60);     // → 08:02, still busy all night
+    check('late-orphan', 'deferred all night', count(w, 'orphanfold:') === 0, w.events.join());
+    w.busy = [];
+    w.step(30);         // work ends; the floor fires post-wake-instant
+    check('late-orphan', 'folds once the work ends', count(w, 'orphanfold:opus') === 1, w.events.join());
+    w.sessions = [];
+    w.step(60);
+    check('late-orphan', "that night's sleep still wakes this morning", count(w, 'wake:opus') === 1, w.events.join());
   }
 
   { // Scenario: the bell's own words. The note must name the belled session
