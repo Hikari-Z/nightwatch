@@ -603,7 +603,7 @@ function tickWith(io) {
       // heartbeat's to flag, not ours to force at arbitrary hours.
       const sinceWake = (m - WAKE_MIN + 1440) % 1440;
       if (sinceWake >= 120 && !laneState.refreshWake) continue; // refresh waives the window once
-      // The next-wake file's mtime is the sleep receipt, fresh within 20h.
+      // The next-wake file's mtime is the sleep receipt.
       // Belled but never folded: the receipt predates this window's bell, so
       // the lane's span since its old fold is unfolded. Don't wake the stale
       // tail; say so once, loudly (the 10:17 heartbeat alerts on this line).
@@ -616,7 +616,17 @@ function tickWith(io) {
         }
         continue;
       }
-      const slept = nwMtime > 0 && now - nwMtime < 20 * 3600_000;
+      // Ra's ruling (10/9): a sleep receipt is woken at the FIRST scheduled
+      // wake instant AFTER it was written — no age limit, no same-morning
+      // re-wake. A press after today's wake (receipt > wakeInstant) waits
+      // for tomorrow; a receipt from yesterday 11:00 predates today's wake
+      // and wakes now; the 10/2 evening-fold case still waits for morning.
+      // Force fold's refreshWake path is separate and unaffected.
+      const wakeInstant = now - sinceWake * 60_000;
+      // refreshWake (fold-now, 10/6) is the one exception: a refresh is an
+      // immediate close-and-reopen at any hour, so it wakes on any receipt
+      // newer than the last wake instead of waiting for a wake instant.
+      const slept = nwMtime > 0 && (laneState.refreshWake ? (laneState.wokenAt ?? 0) < nwMtime : nwMtime < wakeInstant);
       if (slept && (laneState.wokenAt ?? 0) < nwMtime) {
         // A pending launch attempt is TRUSTED only once the lane registry
         // confirms a session actually started (the 10/3 lesson: the window
@@ -739,7 +749,7 @@ async function rehearse() {
       emit: () => {}, // events.jsonl is live-only; the bench asserts on w.events
       now: () => (w.day * 1440 + w.min) * 60_000,
       nowMin: () => w.min,
-      armedLanes: () => lanes,
+      armedLanes: () => w.armed ?? lanes, // scenarios may disarm (w.armed = [])
       state: () => w.st,
       saveState: () => {},
       liveSessions: () => w.sessions.map(({ pid, sessionId }) => ({ pid, sessionId })),
@@ -836,11 +846,28 @@ async function rehearse() {
     check('manual-wake', 'no Terminal launch when already up', count(w, 'wake:') === 0, w.events.join());
   }
 
-  { // Scenario 6: late receipt (>20h) is stale — no wake.
+  { // Scenario 6 (REWRITTEN under Ra's 10/9 ruling — was: >20h is stale):
+    // ruling B — a receipt however old wakes at the next scheduled morning.
     const w = makeWorld(['fable']);
-    w.nextWake.fable = w.io.now() - 21 * 3600_000;
-    w.step(13 * 60 + 30);
-    check('stale', 'a 21h-old receipt never wakes', count(w, 'wake:') === 0, w.events.join());
+    w.step(24 * 60); // bench clock starts 19:00 day 0; move to day 1 so a
+    // 21h-old receipt is a positive timestamp (scenario-clock artifact).
+    w.nextWake.fable = w.io.now() - 21 * 3600_000; // slept 22:00 YESTERDAY
+    w.step(13 * 60 + 30); // 19:00 → 08:30 next day
+    check('old-receipt', 'a 21h-old receipt wakes at the next 08:00 (ruling B)', count(w, 'wake:fable') === 1, w.events.join());
+  }
+
+  { // Ruling A: Sleep agent pressed after the scheduled wake — the agent
+    // stays asleep until the NEXT scheduled wake, never re-woken same morning.
+    const w = makeWorld(['fable']);
+    w.sessions = [{ pid: 33, sessionId: 'sess-f', lane: 'fable', quietMs: 5 * 60_000 }];
+    w.step(13 * 60 + 30); // 19:00 → 08:30, inside the morning window
+    w.st.fable = { ...(w.st.fable ?? {}), belledAt: w.io.now(), belledSession: 'sess-f', wokenAt: w.io.now() - 60_000 };
+    w.step(5);
+    w.nextWake.fable = w.io.now(); // the agent folds at 08:35
+    w.step(60); // through 09:35 — still inside [08:00, 10:00)
+    check('press-after-wake', 'no same-morning re-wake (ruling A)', count(w, 'wake:fable') === 0, w.events.join());
+    w.step(23 * 60); // to the NEXT morning
+    check('press-after-wake', 'woken at the next scheduled morning', count(w, 'wake:fable') === 1, w.events.join());
   }
 
   { // Scenario 8: belled but never folded (opus, 10/3) — stale receipt refused.
@@ -913,9 +940,13 @@ async function rehearse() {
     w.nextWake.fable = w.io.now();
     w.step(14 * 60); // night one: 3 launches, WAKE FAILED
     check('stale-attempts', 'night one gave up at 3', count(w, 'wake:fable') === 3, w.events.join());
-    // Night two: a fresh sleep receipt lands; launches still get eaten.
+    // A fresh sleep receipt lands mid-morning. Under Ra's 10/9 ruling (A)
+    // it does NOT re-wake the same morning — it waits for the next
+    // scheduled wake, where the attempts get their own fresh count.
     w.nextWake.fable = w.io.now();
     w.step(14 * 60);
+    check('stale-attempts', 'a mid-morning receipt never re-wakes same day (ruling A)', count(w, 'wake:fable') === 3, w.events.join());
+    w.step(10 * 60); // through the NEXT morning window
     check('stale-attempts', 'night two gets its own 3 attempts', count(w, 'wake:fable') === 6, w.events.join());
   }
 
@@ -1025,6 +1056,17 @@ async function rehearse() {
     w.step(2);
     check('manual-bell', 'a heard out-of-window bell closes when slept and quiet', count(w, 'close:fable') === 1, w.events.join());
     check('manual-bell', 'and never orphan-folds', count(w, 'orphanfold:') === 0, w.events.join());
+  }
+
+  { // Ra's spec (10/9): a DISARMED agent put to sleep stays asleep until
+    // the Wake button — the daemon never schedules it. (The button's half
+    // is the app's path, outside this bench.)
+    const w = makeWorld(['fable']);
+    w.armed = []; // disarmed
+    w.step(24 * 60);
+    w.nextWake.fable = w.io.now() - 10 * 3600_000; // slept long ago
+    w.step(26 * 60); // through two full mornings
+    check('disarmed-sleep', 'a disarmed slept lane is never woken by the schedule', count(w, 'wake:') === 0, w.events.join());
   }
 
   { // Scenario: the bell's own words. The note must name the belled session
