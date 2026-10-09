@@ -34,7 +34,7 @@
 
   // Actions that change the world. Everything else is view.
   const WRITES = new Set(['open-terminal', 'hide-terminal', 'wake', 'sleep', 'emergency-fold', 'wake-all', 'sleep-all', 'fold-all',
-    'toggle-nightly', 'save-lane', 'remove-lane', 'save-settings', 'restore-checkpoint', 'retry-wake',
+    'toggle-nightly', 'arm-lane', 'save-lane', 'remove-lane', 'save-settings', 'restore-checkpoint', 'retry-wake',
     'restart-daemon', 'run-doctor', 'confirm', 'hide-window']);
   // Lane creation (10/6): flow buttons, each needing one host capability.
   // plan = the machinery's dry run, apply = the build (nightwatch.mjs).
@@ -93,6 +93,12 @@
           body: 'No lane will be belled, folded or woken tonight until you turn it back on. Lanes keep running as they are.' }
       : { title: 'Turn the nightly cycle on?', verb: 'Turn on', icon: 'repeat',
           body: 'Every lane will be belled at its sleep time and woken at its wake time.' },
+    // One lane's nightly switch: the bell slot on its card (Ra, 10/8).
+    'arm-lane': (lane, btn) => btn?.getAttribute('aria-pressed') === 'true'
+      ? { title: `Disarm ${lane}?`, verb: 'Disarm', icon: 'bell-off',
+          body: `${lane} won't be belled, folded or woken tonight, or any night, until you arm it again. It keeps running as it is now.` }
+      : { title: `Arm ${lane}?`, verb: 'Arm', icon: 'bell',
+          body: `${lane} will be belled at its sleep time and woken at its wake time, starting tonight.` },
     sleep: (lane) => ({ title: `Ring ${lane}'s bell now?`, verb: 'Ring the bell', icon: 'moon',
       body: `Sends ${lane} the same note the 02:00 bell sends: write the day's rung, then fold. It finishes the step it's on first, so nothing is cut off mid-thought.` }),
   };
@@ -141,6 +147,7 @@
         id: tr.dataset.lane, targetK: Number($('input[type="number"]', tr)?.value), armed: $('input[type="checkbox"]', tr)?.checked ?? true })) };
     },
     'toggle-nightly': (btn) => ({ on: btn.getAttribute('aria-pressed') !== 'true' }),
+    'arm-lane': (btn) => ({ on: btn.getAttribute('aria-pressed') !== 'true' }),
   };
   // The terminal button is a toggle (Ra, 10/7): while the lane's Terminal
   // window is open (not minimized), it hides it; otherwise it brings it to the

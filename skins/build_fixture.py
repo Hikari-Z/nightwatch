@@ -95,6 +95,7 @@ ICONS = {
     "restore":  '<path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v5h5"/><path d="M12 8v4l3 2"/>',
     "check":    '<path d="M5 12l4 4 10-10"/>',
     "bell":     '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+    "bell-off": '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/><path d="M4 4l16 16"/>',
     "launch":   '<path d="M5 19l4-4"/><path d="M14 4c3 0 6 3 6 6l-7 7-6-6z"/>',
     "x":        '<path d="M6 6l12 12M18 6L6 18"/>',
     "down":     '<circle cx="12" cy="12" r="8"/><path d="M6.5 17.5l11-11"/>',
@@ -406,7 +407,7 @@ def uptime_li(L, now):
     disp = elapsed(L["since"][0], now) if now else ""
     # The number is on the card already; the tip gives the start, like the bell's ("Next bell: 02:00").
     tip = f'Up since: {L["since"][1]}' if up else f'{L["state"].capitalize()} since: {L["since"][1]}'
-    return f'<li data-part="uptime" data-tip="{esc(tip)}">{icon("uptime" if up else "since")}<time datetime="{L["since"][0]}" data-part="elapsed">{esc(disp)}</time></li>'
+    return f'<li data-part="uptime" data-tip="{esc(tip)}">{icon("sun" if up else "moon")}<time datetime="{L["since"][0]}" data-part="elapsed">{esc(disp)}</time></li>'
 
 def lane_card(L, now=None):
     window = L.get("window") or WINDOWS.get(L["model"]) or L["target"]
@@ -421,11 +422,13 @@ def lane_card(L, now=None):
     if L["next"]:
         what, dt, disp = L["next"]
         # Local time, like every other clock here (Ra, 10/7: the raw ISO slice read as UTC).
-        # No time = nothing scheduled (a disarmed lane, Ra 10/8): say so, no countdown.
+        # The slot is the lane's nightly switch (Ra, 10/8): lit while armed, a
+        # click disarms; disarmed it's a crossed bell, unlit, "none", and a click
+        # arms it. No time = nothing scheduled.
         if not dt:
-            nxt = f'<li data-part="next" data-tip="No {what} scheduled (disarmed)">{icon("bell" if what=="bell" else "sun")}<span>{esc(disp)}</span></li>'
+            nxt = f'<li data-part="next" data-action="arm-lane" aria-pressed="false" data-tip="Disarmed: no bell or wake scheduled. Click to arm.">{icon("bell-off")}<span>{esc(disp)}</span></li>'
         else:
-            nxt = (f'<li data-part="next" data-tip="Next {what}: {local(dt).strftime("%H:%M")}">{icon("bell" if what=="bell" else "sun")}'
+            nxt = (f'<li data-part="next" data-action="arm-lane" aria-pressed="true" data-tip="Next {what}: {local(dt).strftime("%H:%M")}. Click to disarm.">{icon("bell" if what=="bell" else "sun")}'
                    f'<time datetime="{dt}" data-part="countdown">{esc(disp)}</time></li>')
     # Accordion. The viewer opens any lane with an un-acked alarm: trouble
     # never hides behind a closed card.
@@ -955,6 +958,8 @@ def page():
   .nw-app > .nw-confirm {{ position: fixed; z-index: 50; left: 50%; top: 96px; transform: translateX(-50%);
     width: min(420px, calc(100vw - 32px)); box-shadow: 0 18px 60px #0008; }}
   .nw-app > .nw-settings[data-open="false"] {{ display: none; }}
+  .nw-lane [data-part="next"][data-action] {{ cursor: pointer; }}
+  .nw-lane [data-part="next"][aria-pressed="false"] {{ opacity: .45; text-shadow: none; }}
   .nw-app > .nw-settings {{ position: fixed; z-index: 45; left: 50%; top: 72px; transform: translateX(-50%);
     width: min(600px, calc(100vw - 32px)); max-height: calc(100vh - 100px); overflow: auto; box-shadow: 0 18px 60px #0008; }}
   /* In the app the window FITS its content, so a viewport-capped panel was circular: capped to the short

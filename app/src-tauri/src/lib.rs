@@ -90,7 +90,7 @@ fn toggle(app: &AppHandle) {
 // v0.8). Built one at a time, safest first (Ra, 10/6): hide-window, then
 // wake. Anything not listed in HOST_CAN stays read-only in the page.
 const HOST_CAN: &[&str] = &["hide-window", "wake", "sleep", "retry-wake", "open-terminal", "hide-terminal", "terminal-state", "wake-all", "sleep-all", "restore-checkpoint", "restart-daemon",
-    "save-lane", "save-settings", "toggle-nightly", "remove-lane", "emergency-fold", "fold-all", "run-doctor"];
+    "save-lane", "save-settings", "toggle-nightly", "arm-lane", "remove-lane", "emergency-fold", "fold-all", "run-doctor"];
 
 // The product's own source tree (the repo this app was built from): its gui/
 // serves the page and its machinery/ is what Set up points new hubs at.
@@ -533,6 +533,15 @@ fn toggle_nightly(d: &serde_json::Value) -> Result<String, String> {
     Ok(if on { "Nightly cycle on: every lane will be belled and woken.".into() } else { "Nightly cycle off: no lane will be belled or woken until you turn it back on.".into() })
 }
 
+// One lane's nightly switch: the bell slot on its card (Ra, 10/8). The same
+// nightshift --arm/--disarm the settings save uses, for one lane.
+fn arm_lane(h: &Hub, lane: Option<&str>, d: &serde_json::Value) -> Result<String, String> {
+    let lane = h.check_lane(lane)?;
+    let on = d.get("on").and_then(|x| x.as_bool()).ok_or("arm-lane needs on: true|false")?;
+    arm(h, &lane, on)?;
+    Ok(if on { format!("{lane} armed: belled at its sleep time and woken at its wake time.") } else { format!("{lane} disarmed: no bell, fold or wake until it's armed again.") })
+}
+
 // Stop managing a lane: disarm, then drop it from the config. Its
 // transcripts, ladder and receipts stay on disk (the button's own promise).
 fn remove_lane(h: &Hub, lane: Option<&str>) -> Result<String, String> {
@@ -703,6 +712,7 @@ fn act(app: AppHandle, action: String, lane: Option<String>, hub: Option<String>
         "save-lane" => save_lane(&h()?, lane, &d),
         "save-settings" => save_settings(&h()?, &d),
         "toggle-nightly" => toggle_nightly(&d),
+        "arm-lane" => arm_lane(&h()?, lane, &d),
         "remove-lane" => remove_lane(&h()?, lane),
         "emergency-fold" => emergency_fold(&h()?, lane),
         "fold-all" => for_all(emergency_fold, "not awake").map(|m| format!("Fold requested for: {m}")),
@@ -870,6 +880,15 @@ mod rehearsal_tests {
         println!("save-lane: {msg}");
         let after = Hub::open(&root).unwrap();
         assert_eq!(after.cfg["lanes"][&lane]["schedule"]["sleep"], "02:30");
+
+        // the card's bell slot: one lane's nightly switch, off then on (10/8)
+        let armed_has = |h: &Hub| std::fs::read_to_string(h.state.join("nightshift.armed")).unwrap_or_default()
+            .split(|c: char| c == ',' || c.is_whitespace()).any(|l| l == lane);
+        println!("arm-lane off: {}", arm_lane(&after, Some(&lane), &serde_json::json!({ "on": false })).expect("arm-lane off"));
+        assert!(!armed_has(&after), "arm-lane off left the lane armed");
+        println!("arm-lane on: {}", arm_lane(&after, Some(&lane), &serde_json::json!({ "on": true })).expect("arm-lane on"));
+        assert!(armed_has(&after), "arm-lane on left the lane disarmed");
+        assert!(arm_lane(&after, Some(&lane), &serde_json::json!({})).unwrap_err().contains("needs on"));
 
         // Check again: the hub's own nightshift dry run
         let pre = run_doctor(&after).expect("run-doctor");
