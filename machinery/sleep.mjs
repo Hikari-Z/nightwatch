@@ -39,6 +39,11 @@ const flag = (name, dflt) => {
   return i !== -1 ? args[i + 1] : dflt;
 };
 let sessionId = flag('--session', process.env.CLAUDE_CODE_SESSION_ID); // reassigned once, by the dead-wake resolution below
+// Whether the id was NAMED or merely inherited decides how much the registry
+// guard below may forgive: an inherited id running under another hub's config
+// is the cross-hub class (rehearsal, 10/7 — a scratch hub's fold reached for
+// the operator's own session), and only an explicit --session may cross.
+const sessionIdFromEnv = !args.includes('--session');
 // One ladder, two tails (Ra's ruling 9/30): tails are per-stream and never
 // interleave. Each lane sleeps into its own next-wake file; the ladder and
 // checkpoint stay shared. The Opus/MV lane's likely tuning: smaller
@@ -91,7 +96,33 @@ try {
     console.error(`Pass --lane ${regLane}, or --force-lane if the cross-lane fold is deliberate.`);
     process.exit(2);
   }
-} catch {} // no registry entry: nothing to crosscheck (pre-registry sessions)
+} catch {
+  // No registry entry for this id IN THIS HUB. For an id the operator NAMED,
+  // that's forgivable (pre-registry sessions, recovery folds). For an id
+  // inherited from the environment it means we're probably in the wrong
+  // house: a shell inside one session, folding under another hub's config,
+  // would otherwise fold the OPERATOR's session into this hub (and fail at
+  // "no transcript" only by luck). Refuse and name this hub's own sessions.
+  if (sessionIdFromEnv && sessionId) {
+    console.error(`sleep.mjs: session ${String(sessionId).slice(0, 8)} came from the environment, not --session, and this hub's registry has no entry for it — refusing to fold a session that isn't this hub's.`);
+    try {
+      const entries = readdirSync(join(WEFT, 'wakecycle')).filter((f) => f.startsWith('lane.'));
+      if (entries.length) {
+        console.error('This hub\'s registered sessions:');
+        for (const e of entries) {
+          let l = '?';
+          try { l = JSON.parse(readFileSync(join(WEFT, 'wakecycle', e), 'utf8')).lane ?? '?'; } catch {}
+          console.error(`  --session ${e.slice(5)}  (lane ${l})`);
+        }
+      } else {
+        console.error('This hub\'s registry has no live sessions at all.');
+      }
+    } catch {}
+    console.error('Pass --session <id> explicitly to fold one of them.');
+    process.exit(2);
+  }
+  // A NAMED id with no entry: nothing to crosscheck (pre-registry sessions).
+}
 // "today" is Ra's wall clock, not UTC — a 10pm fold belongs to the day it
 // closes, and the rung gate below matches rung filenames against this.
 // A POST-MIDNIGHT fold (the nightshift rings at 02:00) also closes
