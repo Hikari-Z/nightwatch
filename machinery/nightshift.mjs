@@ -690,6 +690,20 @@ function args_has_test_windows() { return process.argv.includes('--test-windows'
 // would have caught the window-wrap, today-is-tomorrow, laneOf and
 // evening-refold bugs in daylight. Exit 0 = all scenarios pass.
 async function rehearse() {
+  // HERMETIC: the scenarios are written against the stock schedule, and the
+  // bench must not inherit whatever the live hub happens to be set to — an
+  // accelerated scratch hub (sleep 10:52) failed 21 scenarios that assume
+  // 02:00/08:00 before this pin (found 10/9). Pin every schedule knob to
+  // the scenario contract; the hub's own config is untouched on disk, and
+  // --rehearse exits before the live loop ever reads it again.
+  const pinned = structuredClone(CFG);
+  pinned.schedule = {
+    sleep: '02:00', wake: '08:00', quietMs: 2 * 60_000, pollMs: 60_000,
+    wakeRetries: 3, wakeConfirmMs: 5 * 60_000,
+    orphanQuietMs: 20 * 60_000, orphanGraceMs: 45 * 60_000,
+    windowGapMs: 16 * 3600_000,
+  };
+  applySchedule(pinned);
   let failures = 0;
   const check = (scenario, name, ok, detail = '') => {
     console.log(`${ok ? 'PASS' : 'FAIL'} [${scenario}] ${name}${ok || !detail ? '' : ' — ' + detail}`);
