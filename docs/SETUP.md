@@ -148,6 +148,40 @@ port is open work; everything else is platform-neutral node.
   emergency fold is with a lane that got belled and went quiet.
 - `models.bell` — the model used for spool-note bell passes.
 
+## The watch: hearing when an agent is stuck
+
+`machinery/watch.mjs` runs as its own job beside the nightshift (Set up
+installs it as `house.nightwatch.<hub>.watch`). Once a minute it reads the
+hub's live agents and notices the states that stop an agent without
+anyone seeing: an API-error spiral, "Prompt is too long", an expired
+login, the usage limit, no network, a reply cut off by the machine
+sleeping, repeated auto-mode classifier denials, a context window past
+85%, and a permission prompt left waiting. It only tells; it never
+folds, kills or messages an agent. Each state is told once when it
+starts and cleared when it ends, and a restart repeats nothing.
+
+Every alert lands in the app as a card. Beyond that, the config decides:
+
+- `notify.macos` (default `true`): a Notification Center banner.
+- `notify.command`: an executable (run directly, no shell) for anything
+  else: a chat DM, a pager, a log shipper. It gets the message on
+  stdin, and `NIGHTWATCH_ALERT_KIND` (`spiral-alarm` or `stuck`),
+  `NIGHTWATCH_ALERT_CAUSE`, `NIGHTWATCH_ALERT_LANE`,
+  `NIGHTWATCH_ALERT_SESSION`, `NIGHTWATCH_ALERT_TITLE` and
+  `NIGHTWATCH_PERSONA` in its environment. A failing command is logged
+  in `watch.log`; the card still stands.
+
+```sh
+#!/bin/sh
+# notify.command example: every alert as a phone push via ntfy.sh
+curl -s -H "Title: $NIGHTWATCH_ALERT_TITLE" -d "$(cat)" https://ntfy.sh/YOUR-TOPIC
+```
+
+The thresholds live under `watch.*` (`spiralThreshold`, `waitingMs`,
+`contextWarn`, …); the defaults are what this house calibrated on its own
+nights. `node machinery/watch-test.mjs` runs the whole watch against a
+scratch hub.
+
 ## The parts the config can't do for you
 
 The ritual itself is the agent's: the rung (the day, in its own words,

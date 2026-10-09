@@ -173,7 +173,7 @@ function initSteps(spec) {
     },
   });
   steps.push({
-    verb: 'Install', what: 'the nightshift and the session hook', detail: `a background job (house.nightwatch.${slug}) that rings the bell and wakes them, and the hook that tells it which session is theirs`,
+    verb: 'Install', what: 'the nightshift, the watch and the session hook', detail: `a background job (house.nightwatch.${slug}) that rings the bell and wakes them, a second (house.nightwatch.${slug}.watch) that says when an agent is stuck, and the hook that tells it which session is theirs`,
     run() {
       // The hook runs the APP's register-lane.sh (pointer model) and must
       // carry the hub's config explicitly: a hook without WEFT_CONFIG
@@ -187,6 +187,10 @@ function initSteps(spec) {
       // lands — a Move failure must not leave a job pointing at nothing
       // (opus's read, 6c). This step stages the hub-internal copy only.
       writeFileSync(join(part, 'wakecycle', `house.nightwatch.${slug}.plist`), plistFor(slug, hub));
+      // The stuck/spiral watch's job, staged the same way. Its hub copy is
+      // named so the app's daemon lookup (house.nightwatch.*.plist) can't
+      // mistake it for the nightshift's.
+      writeFileSync(join(part, 'wakecycle', 'watch-job.plist'), plistFor(slug, hub, 'watch'));
     },
   });
   steps.push({
@@ -213,6 +217,8 @@ function initSteps(spec) {
           renameSync(regPath + '.tmp', regPath);
         }
         execFileSync('launchctl', ['load', join(HOME, 'Library', 'LaunchAgents', `house.nightwatch.${slug}.plist`)]);
+        writeFileSync(join(HOME, 'Library', 'LaunchAgents', `house.nightwatch.${slug}.watch.plist`), plistFor(slug, hub, 'watch'));
+        execFileSync('launchctl', ['load', join(HOME, 'Library', 'LaunchAgents', `house.nightwatch.${slug}.watch.plist`)]);
         launchLegTest(hub);
       },
     });
@@ -317,18 +323,20 @@ function firstSessionStep(spec, hub, ctx, noActivate, cpPath, laneWc) {
   return { prep, launch };
 }
 
-function plistFor(slug, hub) {
+// kind 'watch': the stuck/spiral watch's job (watch.mjs) instead of the nightshift's.
+function plistFor(slug, hub, kind = 'nightshift') {
   const node = process.execPath;
+  const label = kind === 'watch' ? `house.nightwatch.${slug}.watch` : `house.nightwatch.${slug}`;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>house.nightwatch.${slug}</string>
-  <key>ProgramArguments</key><array><string>${node}</string><string>${join(WC, 'nightshift.mjs')}</string></array>
+  <key>Label</key><string>${label}</string>
+  <key>ProgramArguments</key><array><string>${node}</string><string>${join(WC, kind === 'watch' ? 'watch.mjs' : 'nightshift.mjs')}</string></array>
   <key>EnvironmentVariables</key><dict><key>WEFT_CONFIG</key><string>${join(hub, 'nightwatch.config.json')}</string></dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>300</integer>
-  <key>StandardErrorPath</key><string>${join(hub, 'nightshift.err')}</string>
+  <key>StandardErrorPath</key><string>${join(hub, kind === 'watch' ? 'watch.err' : 'nightshift.err')}</string>
 </dict></plist>\n`;
 }
 

@@ -52,6 +52,29 @@ export const DEFAULTS = {
   lanes: {
     main: { targetTokens: 250_000, switchboard: true },
   },
+  // The stuck/spiral watch (watch.mjs, its own daemon per hub). Defaults are
+  // the calibrations this house paid for: two exhausted-retry error lines
+  // with the newest still an error is a spiral (Ra, 9/30; each line is ~10
+  // retries); context warns at 85% of the window and re-arms below 80%.
+  watch: {
+    pollMs: 60_000,
+    spiralWindowMs: 60 * 60_000,
+    spiralThreshold: 2,
+    spiralCooldownMs: 30 * 60_000,
+    classifierWindowMs: 30 * 60_000,
+    classifierThreshold: 2,
+    waitingMs: 15 * 60_000,
+    contextWarn: 0.85,
+    contextRearm: 0.80,
+  },
+  // Where a watch alert goes besides the app's own card (events.jsonl, always
+  // written). macos: a Notification Center banner. command: an executable
+  // (no shell) run per alert with the message on stdin and NIGHTWATCH_ALERT_*
+  // in its environment; how a house wires a chat DM, a pager, anything.
+  notify: {
+    macos: true,
+    command: '',
+  },
   viewer: {
     // The GUI's HTTP port. 7350 is the code default's history; 7352 is ours
     // because 7350 is squatted by a long-lived local service (bun, 9/2).
@@ -66,6 +89,10 @@ export const DEFAULTS = {
     wakecycle: 'wakecycle',
     nightshiftLog: 'nightshift.log',
     events: 'events.jsonl', // machine-readable twin of the log; the GUI's API
+    watchLog: 'watch.log',
+    watchState: 'wakecycle/watch-state.json',
+    // Claude Code's live session status files (pid, sessionId, status).
+    sessions: join(HOME, '.claude', 'sessions'),
     armedFile: 'wakecycle/nightshift.armed',
     stateFile: 'wakecycle/nightshift.state.json',
     spool: 'doorbell/spool',
@@ -234,6 +261,8 @@ const ALLOWED = {
   persona: { name: 'string', pronouns: 'string' },
   schedule: Object.fromEntries(Object.keys(DEFAULTS.schedule).map((k) => [k, k === 'sleep' || k === 'wake' ? 'time' : 'number'])),
   models: { bell: 'string' },
+  watch: Object.fromEntries(Object.keys(DEFAULTS.watch).map((k) => [k, 'number'])),
+  notify: { macos: 'boolean', command: 'string' },
   viewer: { port: 'number' },
   paths: Object.fromEntries(Object.keys(DEFAULTS.paths).map((k) => [k, 'string'])),
   lanes: { '*': LANE_KEYS },
