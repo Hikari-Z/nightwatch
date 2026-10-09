@@ -211,5 +211,53 @@ const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
   check('a 00:32 event is stamped 00:32 in the log, not 24:32', times.includes('00:32') && !times.some((t) => t.startsWith('24')), JSON.stringify(times));
 }
 
+// ---- probes: liveness from the harness status files (10/8, claude-opus-5-5).
+// Three real shapes: a window Ra closed (its transcript still warm) must read
+// asleep at once; a /clear'd window (command line still says the old tail)
+// shows the session running now; a stray non-lane claude wakes nothing.
+{
+  const LIVE = { ...cfg, paths: { ...cfg.paths, claudeSessions: '/cs' }, lanes: { fable: { targetTokens: 250_000, switchboard: true }, opus: { targetTokens: 250_000 } } };
+  const OLD = 'cccccccc-3333-3333-3333-333333333333';   // dead wake: registered, its window now closed
+  const NEW = 'dddddddd-4444-4444-4444-444444444444';   // the /clear'd session, registered by the hook
+  const TAIL = 'eeeeeeee-5555-5555-5555-555555555555';  // what the window's command line still names
+  const STRAY = 'ffffffff-6666-6666-6666-666666666666'; // someone's unrelated session
+  const world = ({ files, dirs, pids, ps }) => ({
+    readText: (p) => p === '/ev' ? JSON.stringify({ at: iso(60e3), kind: 'daemon-alive', armed: ['opus'] }) : p === '/armed' ? 'opus' : files[p] ?? null,
+    readDir: (p) => dirs[p] ?? [],
+    stat: (p) => files[p] != null ? { size: files[p].length, mtimeMs: NOW - 60e3 } : null, // every transcript warm: written a minute ago
+    readTail: (p) => files[p] ?? null,
+    livePids: () => pids, psCommand: (pid) => ps[pid] ?? null, now: () => NOW,
+  });
+  const lane = (s, id) => s.LANES.find((l) => l.id === id);
+
+  // 1. Closed window: registry pid 200 is gone; its transcript was written a minute ago.
+  let s = assemble(LIVE, world({
+    files: { [`/wc/lane.${OLD}`]: JSON.stringify({ lane: 'opus', pid: 200 }), [`/tx/${OLD}.jsonl`]: usageLine('m1', 60e3, 100_000, 10) },
+    dirs: { '/wc': [`lane.${OLD}`] }, pids: [], ps: {},
+  }), '8h');
+  check('liveness: a closed window is asleep at once, warm transcript or not', lane(s, 'opus')?.state !== 'awake',
+    `state=${lane(s, 'opus')?.state}`);
+
+  // 2. /clear: pid 300's command line still names TAIL; its status file names NEW.
+  s = assemble(LIVE, world({
+    files: {
+      [`/wc/lane.${OLD}`]: JSON.stringify({ lane: 'opus', pid: 300 }), [`/wc/lane.${NEW}`]: JSON.stringify({ lane: 'opus', pid: 300 }),
+      '/cs/300.json': JSON.stringify({ pid: 300, sessionId: NEW, status: 'busy' }),
+      [`/tx/${NEW}.jsonl`]: usageLine('m2', 60e3, 200_000, 20),
+    },
+    dirs: { '/wc': [`lane.${OLD}`, `lane.${NEW}`], '/cs': ['300.json'] }, pids: [300], ps: { 300: `claude --resume ${TAIL} --fork-session` },
+  }), '8h');
+  check('liveness: after /clear the card shows the session running now', lane(s, 'opus')?.state === 'awake' && lane(s, 'opus')?.session === NEW.slice(0, 8),
+    `state=${lane(s, 'opus')?.state} session=${lane(s, 'opus')?.session}`);
+
+  // 3. A stray claude (status file, unknown sid, plain command line) wakes no lane.
+  s = assemble(LIVE, world({
+    files: { '/cs/400.json': JSON.stringify({ pid: 400, sessionId: STRAY, status: 'idle' }), [`/tx/${STRAY}.jsonl`]: usageLine('m3', 60e3, 50_000, 5) },
+    dirs: { '/cs': ['400.json'] }, pids: [400], ps: { 400: 'claude' },
+  }), '8h');
+  check('liveness: an unrelated claude session wakes no lane (not even the switchboard)',
+    s.LANES.every((l) => l.state !== 'awake'), s.LANES.map((l) => `${l.id}=${l.state}`).join(' '));
+}
+
 console.log(failures === 0 ? 'PROBES CLEAN' : `PROBES: ${failures} failure(s)`);
 process.exit(failures ? 1 : 0);

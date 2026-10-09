@@ -109,8 +109,14 @@ const TB = (lane) => `document.querySelector('.nw-app > .nw-lanes .nw-lane[data-
 await check('an open terminal shows as Hide; a minimized one as Open', `[${TB('opus')}.dataset.action, ${TB('fable')}.dataset.action]`, ['hide-terminal', 'open-terminal']);
 await ev(`${TB('opus')}.click()`); await sleep(400);
 await check('pressing Hide minimizes that lane\'s window and flips the button', `[JSON.stringify(__tcalls.at(-1)), ${TB('opus')}.dataset.action, ${TB('opus')}.querySelector('use').getAttribute('href')]`, ['["hide-terminal","opus"]', 'open-terminal', '#i-terminal']);
+// This runs against the live hub, so fable may really be asleep (10/8: it was,
+// all day, and the step failed). Asleep, its button is disabled and must do
+// nothing; awake, Open must bring it forward and flip to Hide.
+const fableAsleep = await ev(`${TB('fable')}.getAttribute('aria-disabled') === 'true'`);
+const callsBefore = await ev('__tcalls.length');
 await ev(`${TB('fable')}.click()`); await sleep(400);
-await check('pressing Open brings it forward and flips to Hide', `[JSON.stringify(__tcalls.at(-1)), ${TB('fable')}.dataset.action, ${TB('fable')}.querySelector('use').getAttribute('href')]`, ['["open-terminal","fable"]', 'hide-terminal', '#i-terminal-hide']);
+if (fableAsleep) await check('a sleeping lane\'s terminal button is disabled and does nothing', `[__tcalls.length, ${TB('fable')}.dataset.action]`, [callsBefore, 'open-terminal']);
+else await check('pressing Open brings it forward and flips to Hide', `[JSON.stringify(__tcalls.at(-1)), ${TB('fable')}.dataset.action, ${TB('fable')}.querySelector('use').getAttribute('href')]`, ['["open-terminal","fable"]', 'hide-terminal', '#i-terminal-hide']);
 
 // ---- the persona card and the + are clickable, not click-through (10/7)
 await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__hits2=[];window.NW_HOST={can:a=>a==='hide-window',act:()=>Promise.resolve(''),hitRects:r=>__hits2.push(r),onTop:()=>{}};` });

@@ -17,7 +17,7 @@ import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, loadConfigFrom } from '../machinery/config.mjs';
-import { assemble } from './assemble.mjs';
+import { stateKey, assemble } from './assemble.mjs';
 import { readRegistry, configFileFor, mergeSnapshots, REGISTRY_REL } from './hubs.mjs';
 import { homedir } from 'node:os';
 import { renderPage, mergeSnapshot } from './emitter.mjs';
@@ -97,6 +97,15 @@ function skinsFromDisk() {
 // an empty one: the one hub this process's config names, exactly as before.
 // NIGHTWATCH_REGISTRY overrides the registry's path (scratch benches).
 const REGISTRY = process.env.NIGHTWATCH_REGISTRY ?? join(homedir(), ...REGISTRY_REL);
+// The poll key across every hub (see stateKey): any persona's change refreshes.
+function keyAll() {
+  const roots = readRegistry(io.readText(REGISTRY) ?? '');
+  if (!roots.length) return stateKey(CFG, io);
+  return roots.map((root) => {
+    try { return stateKey(loadConfigFrom(configFileFor(root, existsSync)), io); } catch { return `${root}:?`; }
+  }).join('#');
+}
+
 function snapshotAll(range) {
   const roots = readRegistry(io.readText(REGISTRY) ?? '');
   if (!roots.length) return assemble(CFG, io, range);
@@ -114,6 +123,11 @@ function snapshotAll(range) {
 const server = createServer((req, res) => {
   try {
     const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
+    if (url.pathname === '/key') {
+      res.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' });
+      res.end(keyAll());
+      return;
+    }
     if (url.pathname === '/') {
       const snap = snapshotAll(url.searchParams.get('range') ?? '8h');
       snap.version = '0.9'; // snapshot schema, pinned in CONTRACT.md

@@ -1028,6 +1028,23 @@
       setOnTop(state.onTop ?? false, false);
       setInterval(tick, 15_000);
       setInterval(() => refresh(), 30_000);
+      // Interaction state in near-real time (Ra, 10/8): a closed window, a
+      // fold, an arm toggled from the terminal should reach the buttons in
+      // seconds, not at the next 30s tick. The server's /key is a cheap
+      // fingerprint of exactly that state; only a change costs a refresh. A
+      // change seen while someone is mid-edit stays pending and is retried.
+      let lastKey = null;
+      setInterval(async () => {
+        if (doc.hidden || inflight) return;
+        try {
+          const k = await (await fetch('/key', { cache: 'no-store' })).text();
+          if (lastKey !== null && k !== lastKey) {
+            if (busy()) return;
+            await refresh();
+          }
+          lastKey = k;
+        } catch { /* server away: the 30s refresh marks the page stale */ }
+      }, 3_000);
       doc.addEventListener('visibilitychange', () => { if (!doc.hidden) refresh(); });
     } else {
       // The fixture still checks the skin radio that matches ?skin=.

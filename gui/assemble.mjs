@@ -55,17 +55,69 @@ function laneOfSid(cfg, io, sid, registryLaneForSid) {
   return cfg.defaultLane ?? null;
 }
 
-function aliveSessionIds(io, livePids) {
-  // A manual resume mints a NEW pid for an OLD session id, so the registry's
-  // recorded pid goes stale. Ask the processes themselves: `--resume <sid>`
-  // in a live pid's command line is ground truth for that sid being up.
-  const sids = new Set();
-  for (const pid of livePids) {
-    const cmd = io.psCommand(pid);
-    const m = cmd && cmd.match(/--resume[ =]([0-9a-f-]{36})/);
-    if (m) sids.add(m[1]);
+// The harness's own status file per process (~/.claude/sessions/<pid>.json)
+// names the session that process is running NOW. A command line's
+// `--resume <sid>` is fixed at launch and goes stale through a /clear or an
+// in-window /resume (10/8: the window ran 7b83b7ae while its command line
+// still said c4454e27), so the status file wins wherever one exists.
+const claudeSessionsDir = (cfg) => cfg.paths.claudeSessions ?? String(cfg.paths.transcripts ?? '').replace(/\/projects\/[^/]+\/?$/, '/sessions');
+function liveStatus(cfg, io, livePids) {
+  const bySid = new Map();
+  const pids = new Set();
+  for (const f of io.readDir(claudeSessionsDir(cfg))) {
+    if (!f.endsWith('.json')) continue;
+    let d; try { d = JSON.parse(io.readText(joinPath(claudeSessionsDir(cfg), f)) ?? ''); } catch { continue; }
+    if (!d?.sessionId || !livePids.has(d.pid)) continue;
+    bySid.set(d.sessionId, d.pid);
+    pids.add(d.pid);
   }
-  return sids;
+  return { bySid, pids };
+}
+
+// Live sids this hub can place, each with the lane it belongs to (null = let
+// laneOfSid decide). Status files cover EVERY claude process on the machine,
+// a person's unrelated sessions and headless runs included, so a status sid
+// counts only when the hub knows it: registered to a lane, or a fold tail.
+// A status sid the hub doesn't know still counts if its process was launched
+// as `--resume <known sid>` (a wake whose hook didn't register it). A process
+// with no status file falls back to its command line, as before.
+function aliveSessionIds(cfg, io, livePids, status, everyLane, events) {
+  const tails = new Map();
+  for (const e of events) if (e.kind === 'folded' && e.tail && e.lane) tails.set(e.tail, e.lane);
+  const known = (sid) => everyLane[sid] ?? tails.get(sid) ?? null;
+  const resumeOf = (pid) => { const m = io.psCommand(pid)?.match(/--resume[ =]([0-9a-f-]{36})/); return m ? m[1] : null; };
+  const out = new Map();
+  for (const [sid, pid] of status.bySid) {
+    const lane = known(sid) ?? known(resumeOf(pid));
+    if (lane) out.set(sid, lane);
+  }
+  for (const pid of livePids) {
+    if (status.pids.has(pid)) continue;
+    const sid = resumeOf(pid);
+    if (sid) out.set(sid, known(sid));
+  }
+  return out;
+}
+
+// A cheap fingerprint of everything that changes a lane's state or its
+// buttons: which claude processes live and what each is running (session and
+// working/idle), the event stream's length, the armed lanes, the daemon's
+// state file, the wake receipts and the lane registry. The page polls it every
+// few seconds and refreshes only when it changes (Ra, 10/8: charts may lag,
+// interaction state may not). Reads only stats and small files.
+export function stateKey(cfg, io) {
+  const livePids = new Set(io.livePids());
+  const statOf = (p) => { const s = io.stat(p); return s ? `${s.size}:${s.mtimeMs}` : '-'; };
+  const statuses = [];
+  for (const f of io.readDir(claudeSessionsDir(cfg))) {
+    if (!f.endsWith('.json')) continue;
+    let d; try { d = JSON.parse(io.readText(joinPath(claudeSessionsDir(cfg), f)) ?? ''); } catch { continue; }
+    if (d && livePids.has(d.pid)) statuses.push(`${d.pid}:${d.sessionId}:${d.status}`);
+  }
+  const wc = io.readDir(cfg.paths.wakecycle).filter((f) => f.startsWith('lane.') || f.startsWith('next-wake.')).sort()
+    .map((f) => `${f}@${statOf(joinPath(cfg.paths.wakecycle, f))}`);
+  return [[...livePids].sort().join(','), statuses.sort().join(','), statOf(cfg.paths.events),
+    io.readText(cfg.paths.armedFile) ?? '', statOf(cfg.paths.stateFile ?? ''), wc.join(',')].join('|');
 }
 
 // Working vs idle (Ra, 10/7). Claude Code keeps a status per running session
@@ -77,7 +129,7 @@ function aliveSessionIds(io, livePids) {
 // their process).
 const ACTIVITY = { busy: 'working', waiting: 'waiting', idle: 'idle', shell: 'idle' };
 function sessionActivity(cfg, io, sid, pid, livePids) {
-  const dir = cfg.paths.claudeSessions ?? String(cfg.paths.transcripts ?? '').replace(/\/projects\/[^/]+\/?$/, '/sessions');
+  const dir = claudeSessionsDir(cfg);
   for (const f of io.readDir(dir)) {
     if (!f.endsWith('.json')) continue;
     let d; try { d = JSON.parse(io.readText(joinPath(dir, f)) ?? ''); } catch { continue; }
@@ -86,11 +138,6 @@ function sessionActivity(cfg, io, sid, pid, livePids) {
   }
   return undefined;
 }
-
-const transcriptFresh = (cfg, io, sid, ms = 10 * 60_000) => {
-  const st = io.stat(joinPath(cfg.paths.transcripts, `${sid}.jsonl`));
-  return st ? io.now() - st.mtimeMs < ms : false;
-};
 
 // Every registry entry, newest-per-lane or not: sid -> lane (the timeline's
 // throughput reads a lane's earlier sessions too).
@@ -256,15 +303,16 @@ export function assemble(cfg, io, range = '8h') {
   const events = parseLines(io.readText(cfg.paths.events));
   const reg = laneRegistry(cfg, io);
   const livePids = new Set(io.livePids());
-  const aliveSids = aliveSessionIds(io, livePids);
+  const status = liveStatus(cfg, io, livePids);
+  const aliveSids = aliveSessionIds(cfg, io, livePids, status, laneOfEverySid(cfg, io), events);
   // sid → lane for every LIVE session, so the card shows the session that
   // is actually running, not the registry's last hook-written one — a
   // stale sid on a card is a false receipt (runtime review note 2).
   const regLaneBySid = {};
   for (const [lane, r] of Object.entries(reg)) regLaneBySid[r.sid] = lane;
   const liveSidByLane = {};
-  for (const sid of aliveSids) {
-    const lane = laneOfSid(cfg, io, sid, regLaneBySid[sid]);
+  for (const [sid, known] of aliveSids) {
+    const lane = laneOfSid(cfg, io, sid, regLaneBySid[sid] ?? known);
     if (lane) liveSidByLane[lane] = sid;
   }
   const armed = (io.readText(cfg.paths.armedFile) ?? '').split(/[\s,]+/).filter(Boolean);
@@ -308,10 +356,12 @@ export function assemble(cfg, io, range = '8h') {
   const LANES = Object.keys(cfg.lanes ?? {}).map((id) => {
     const lc = laneCfg(cfg, id);
     const r = reg[id];
-    // Alive = registry pid still breathing, OR a live process resuming this
-    // sid (manual resumes mint new pids), OR a transcript still warm.
+    // Alive = a live process is running one of this lane's sessions (status
+    // file first, command line as fallback), OR the registry's pid is still a
+    // live claude. A warm transcript no longer counts: it kept a closed
+    // window "awake" for ten minutes, with the awake buttons (Ra, 10/8).
     const liveSid = liveSidByLane[id];
-    const alive = Boolean(liveSid || (r && (livePids.has(r.pid) || transcriptFresh(cfg, io, r.sid))));
+    const alive = Boolean(liveSid || (r && livePids.has(r.pid)));
     const laneEvents = events.filter((e) => e.lane === id);
     const last = laneEvents[laneEvents.length - 1];
     // Fold now (Ra's refresh ruling): a fold-requested with no met/forced
@@ -409,7 +459,12 @@ export function assemble(cfg, io, range = '8h') {
     // stats from it showed last night's pre-fold context and zero throughput
     // (Ra, 10/6: "is fable really on 833k?" — it was 552k). The resume sid is
     // the right file only for a plain manual resume, which writes in place.
-    const sessionSid = (r && livePids.has(r.pid)) ? r.sid : (liveSid ?? r?.sid);
+    // Which session the card shows: the status file's (what's running now)
+    // when there is one; else the registry's while its pid lives (a fork
+    // wake's command line names the frozen TAIL, never the session running);
+    // else whatever the command line says.
+    const sessionSid = (liveSid && status.bySid.has(liveSid)) ? liveSid
+      : (r && livePids.has(r.pid)) ? r.sid : (liveSid ?? r?.sid);
     const stats = alive && sessionSid ? transcriptStats(cfg, io, sessionSid) : { est: 0, series: Array(24).fill(0), model: null };
     const activity = alive ? sessionActivity(cfg, io, sessionSid, r && livePids.has(r.pid) ? r.pid : undefined, livePids) : undefined;
     return {
