@@ -6,7 +6,8 @@
  * entries extended back to the nearest genuine human prompt, and writes the
  * kept tail as a NEW session file (fresh uuid) in the same project directory.
  * Delete-only: whole JSONL entries are kept or dropped, nothing inside an
- * entry is rewritten except the session id itself. The original is never
+ * entry is rewritten except the session id itself and, where a dropped
+ * harness entry sat mid-chain, its children's parentUuid (see HARNESS_LOADED). The original is never
  * touched. `claude --resume <new-id> --fork-session` loads the copy as
  * native turns (tested 2026-09-27: 1,058/1,987 entries, 29 s load, texture
  * intact).
@@ -55,6 +56,22 @@ const entries = lines.map((l) => {
 const torn = entries.filter((e) => e === null).length;
 if (torn) console.error(`warning: ${torn} unparseable line(s) will be dropped`);
 
+// Entries the harness writes at EVERY session start, whether or not a copy
+// is already in the transcript: resuming a tail that carries one loads the
+// head twice. Measured 2026-10-08 (anima_dev/nightwatch_incident_2026-10-08_
+// prompt_too_long.md): a refold of a dead wake kept its 429KB `instructions`
+// entry (CLAUDE.md + ladder + memory, ~55k tokens), the next resume added a
+// fresh one, and the wake died on "Prompt is too long". `environment` and
+// `total_tokens_reminder` are re-sent too, but they are small AND written
+// every turn mid-session (the cwd changes, the token count): dropping them
+// would edit what the model was told along the way, so they stay. The
+// *_delta / skill_listing entries are not re-sent (the harness rebuilds that
+// state from the transcript) and stay.
+const HARNESS_LOADED = new Set(['instructions']);
+function isHarnessLoaded(e) {
+  return e?.type === 'attachment' && HARNESS_LOADED.has(e.attachment?.type);
+}
+
 /** A genuine human prompt: typed by the person, not a tool result, not a
  *  meta/caveat wrapper. The cut must land ON one so the resumed session's
  *  first conversational turn is a human turn. */
@@ -92,7 +109,7 @@ function estLine(l) {
 let est = 0;
 let cut = lines.length; // index of first KEPT line
 for (let i = lines.length - 1; i >= 0; i--) {
-  est += estLine(lines[i]);
+  if (!isHarnessLoaded(entries[i])) est += estLine(lines[i]);
   cut = i;
   if (est >= target) break;
 }
@@ -120,12 +137,33 @@ if (promptIdx === -1) {
 }
 cut = promptIdx;
 
+// A dropped entry's children are re-pointed at its parent, or the harness's
+// chain walk (leaf → parentUuid → …) would stop at the gap and silently
+// resume only the turns after it.
+const droppedParent = new Map();
+for (let i = cut; i < lines.length; i++) {
+  if (isHarnessLoaded(entries[i]) && entries[i].uuid) droppedParent.set(entries[i].uuid, entries[i].parentUuid ?? null);
+}
+function liveParent(u) {
+  const seen = new Set();
+  while (u && droppedParent.has(u) && !seen.has(u)) { seen.add(u); u = droppedParent.get(u); }
+  return u ?? null;
+}
 const kept = [];
 let keptEst = 0;
+let dropped = 0;
+let relinked = 0;
 for (let i = cut; i < lines.length; i++) {
   if (entries[i] === null) continue;
-  kept.push(lines[i]);
-  keptEst += estLine(lines[i]);
+  if (isHarnessLoaded(entries[i])) { dropped++; continue; }
+  let line = lines[i];
+  const p = entries[i].parentUuid;
+  if (p && droppedParent.has(p)) {
+    line = JSON.stringify({ ...entries[i], parentUuid: liveParent(p) });
+    relinked++;
+  }
+  kept.push(line);
+  keptEst += estLine(line);
 }
 
 const newId = randomUUID();
@@ -141,6 +179,8 @@ const report = {
   keptEntries: kept.length,
   totalEntries: lines.length,
   estTokens: keptEst,
+  harnessDropped: dropped,
+  relinked,
   cutAt: cutEntry?.timestamp ?? null,
   cutPrompt: String(cutEntry?.message?.content ?? '').slice(0, 120),
 };

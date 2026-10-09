@@ -19,6 +19,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { loadConfig, laneConfig } from './config.mjs';
+import { resolveFoldSource } from './deadwake.mjs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // Code finds code beside ITSELF (the machinery dir), never in the hub's
@@ -37,7 +38,7 @@ const flag = (name, dflt) => {
   const i = args.indexOf(name);
   return i !== -1 ? args[i + 1] : dflt;
 };
-const sessionId = flag('--session', process.env.CLAUDE_CODE_SESSION_ID);
+let sessionId = flag('--session', process.env.CLAUDE_CODE_SESSION_ID); // reassigned once, by the dead-wake resolution below
 // One ladder, two tails (Ra's ruling 9/30): tails are per-stream and never
 // interleave. Each lane sleeps into its own next-wake file; the ladder and
 // checkpoint stay shared. The Opus/MV lane's likely tuning: smaller
@@ -190,6 +191,18 @@ const levelNum = (l) => Number(String(l).replace(/^L/, '')) || 0;
 const visible = entries.filter((e) => !(e.parent && present.has(e.parent)));
 visible.sort((a, b) => levelNum(b.level) - levelNum(a.level));
 
+// ── Dead wake? Fold the session it came from instead ──
+// A session woken from a tail that never got a real turn in (the newest
+// reply is "Prompt is too long", nothing of its own but errors) holds the
+// harness's head inside what a fold would keep; refolding it made each wake
+// worse on 2026-10-08. Every fold path lands here, so none can carry a dead
+// wake forward. See deadwake.mjs and anima_dev/nightwatch_incident_2026-10-08_prompt_too_long.md.
+const deadWake = resolveFoldSource(sessionId, { transcripts: CFG.paths.transcripts, foldsPath: join(LADDER, 'folds.jsonl') });
+if (deadWake.skipped.length) {
+  console.error(`sleep.mjs: DEAD WAKE — ${deadWake.skipped.map((s) => s.slice(0, 8)).join(' → ')} never got a turn in; folding ${deadWake.sid.slice(0, 8)} (the last session that ran) instead.`);
+  sessionId = deadWake.sid;
+}
+
 // ── Trim the transcript into tomorrow's tail ──
 let trimOut;
 try {
@@ -234,6 +247,7 @@ appendFileSync(
     totalEntries: trimOut.totalEntries,
     est_tokens: trimOut.estTokens,
     tail: trimOut.newSessionId,
+    ...(deadWake.skipped.length ? { deadWakesSkipped: deadWake.skipped } : {}),
   }) + '\n',
 );
 // Event-stream twin (GUI phase 1): the planned fold happens HERE, not in the

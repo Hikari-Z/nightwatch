@@ -22,12 +22,13 @@
  *  - pid→session mapping is verified through the process's own environment
  *    (CLAUDE_CODE_SESSION_ID via `ps eww`), never guessed from timing.
  */
-import { readFileSync, readdirSync, statSync, existsSync, appendFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync, appendFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { loadConfig, reloadConfig, switchboardLane } from './config.mjs';
+import { cannotAnswer } from './deadwake.mjs';
 
 const HOME = homedir();
 // One config, one truth (item E; the 10/5 decoy-checkpoint failure is the
@@ -137,8 +138,18 @@ function saveState(s) { try { writeFileSync(STATE_FILE, JSON.stringify(s, null, 
  *  claude process (sock → bridge → bun wrapper → claude; verified 9/30:
  *  58205→58198→58178). Deterministic, no guessing. */
 const BRIDGE_SOCK_DIR = join(HOME, '.claude', 'mcpl-bridge');
+// The harness's own per-process status file names the session the process
+// is running NOW. The bridge socket is named once, at process start, and
+// keeps that name through a /clear or an in-window /resume: on 10/8 the
+// socket still said e9ec58c1 (a dead wake) while the window ran 7b83b7ae,
+// and the 02:00 tick would have folded the live window as dead.
+const HARNESS_SESSIONS_DIR = join(HOME, '.claude', 'sessions');
+function currentSessionOf(pid) {
+  try { return JSON.parse(readFileSync(join(HARNESS_SESSIONS_DIR, `${pid}.json`), 'utf8')).sessionId || null; } catch { return null; }
+}
 function liveSessions() {
   const out = [];
+  const seenPids = new Set();
   let socks = [];
   try { socks = readdirSync(BRIDGE_SOCK_DIR).filter((f) => /^sock-[0-9a-f-]{36}\.sock$/.test(f)); } catch { return out; }
   for (const f of socks) {
@@ -149,7 +160,10 @@ function liveSessions() {
       let pid = listener;
       for (let hop = 0; hop < 4; hop++) {
         const comm = execFileSync('ps', ['-o', 'comm=', '-p', String(pid)], { encoding: 'utf8' }).trim();
-        if (comm === 'claude' || comm.endsWith('/claude')) { out.push({ pid, sessionId }); break; }
+        if (comm === 'claude' || comm.endsWith('/claude')) {
+          if (!seenPids.has(pid)) { seenPids.add(pid); out.push({ pid, sessionId: currentSessionOf(pid) ?? sessionId }); }
+          break;
+        }
         const ppid = Number(execFileSync('ps', ['-o', 'ppid=', '-p', String(pid)], { encoding: 'utf8' }).trim());
         if (!ppid || ppid === 1) break;
         pid = ppid;
@@ -198,14 +212,15 @@ function transcriptQuietMs(sessionId) {
 }
 
 function ringBell(lane, sessionId, source) {
-  // The bell is a SPOOL NOTE into the fable lane's doorbell spool — the
-  // armed inbox-watcher wakes that session within seconds. No spawned
-  // courier pass: the haiku courier was both the welfare concern (Ra,
-  // 10/1) and the 10/3 misdelivery (it resolved targets by session NAME,
-  // and two sessions named origin-99 sent the opus bell to fable's
-  // socket). The fable session is the switchboard; another lane's bell
-  // asks it to forward before folding, which is the one delivery path
-  // that worked on 10/3.
+  // The bell is a SPOOL NOTE into THE LANE'S OWN spool (spool/<lane>/),
+  // heard by that session's own watcher (bell-watcher.sh; the SessionStart
+  // hook tells every lane session to arm it). Ra's ruling, 10/8: no lane's
+  // Nightwatch bell may depend on another agent being up. Until then every
+  // bell went to the switchboard (fable) with a relay request, and with
+  // fable out of usage the opus bells sat unheard in fable's spool (10/7,
+  // 10/8 twice). The switchboard still routes Discord; it no longer stands
+  // between a lane and Nightwatch. A lane with no watcher armed still has
+  // the orphan fold as its floor.
   const ritual =
     `[nightshift] Sleep-bell for the ${lane} lane: it's the end of the day. When the current work ` +
     `reaches its seam, run the ritual, IN THIS ORDER — write today's rung into the ladder, run \`node ` +
@@ -215,16 +230,10 @@ function ringBell(lane, sessionId, source) {
     `checkpoint later). The nightshift ` +
     `will close the panel once next-wake.${lane}.json is fresh and the session has gone quiet, and ` +
     `wake the lane at ${WAKE_HOUR}. The doorbell and heartbeat hold the night watch.`;
-  const note = lane === switchboardLane(CFG) ? ritual :
-    `[nightshift] BELL RELAY for the ${lane} lane (session ${sessionId.slice(0, 8)}…): forward the ` +
-    `note below to that lane's session via SendMessage (ListAgents; with two lanes it is the ` +
-    `interactive peer that isn't you) BEFORE running your own fold, so both lanes hear the bell ` +
-    `even though the spool only wakes yours. The note: """${ritual}"""`;
   try {
-    // Every bell lands in the SWITCHBOARD lane's spool — that session
-    // forwards other lanes' bells (the one delivery path that works).
-    const spool = join(CFG.weftRoot, 'doorbell', 'spool', switchboardLane(CFG));
-    writeFileSync(join(spool, `${Date.now()}-bell-${lane}.txt`), note + '\n');
+    const spool = join(CFG.paths.spool, lane);
+    mkdirSync(spool, { recursive: true });
+    writeFileSync(join(spool, `${Date.now()}-bell-${lane}.txt`), ritual + '\n');
     log(`rang the sleep-bell for ${lane} (session ${sessionId.slice(0, 8)}…) — spool note written`);
     emitEvent('bell-rung', { lane, session: sessionId, ...(source ? { source } : {}) });
   } catch (e) {
@@ -284,6 +293,7 @@ const io = {
     return existsSync(nw) ? statSync(nw).mtimeMs : 0;
   },
   closePid: (pid) => process.kill(pid, 'SIGTERM'),
+  cannotAnswer: (sessionId) => cannotAnswer(join(PROJECT_DIR, `${sessionId}.jsonl`)),
   lastEntryIsApiError: (sessionId) => {
     try {
       const lines = readFileSync(join(PROJECT_DIR, `${sessionId}.jsonl`), 'utf8')
@@ -496,7 +506,14 @@ function tickWith(io) {
 
       // Bell: once per window, only if the lane is actually up.
       if (live.length && now - (laneState.belledAt ?? 0) > WINDOW_GAP_MS) {
-        io.ringBell(lane, live[0].sessionId);
+        // A session whose newest reply is "Prompt is too long" can't take any
+        // prompt, so a bell can't reach it (10/8). Flag it loudly; the orphan
+        // fold below folds it at once, and sleep.mjs folds the last session
+        // that actually ran instead of the corpse.
+        if (io.cannotAnswer?.(live[0].sessionId)) {
+          io.log(`DEAD WAKE: ${lane} session ${live[0].sessionId.slice(0, 8)}… can't take a prompt ("Prompt is too long") — no bell, nothing could answer it; folding it from the last session that ran`);
+          io.emit('dead-wake', { lane, session: live[0].sessionId, alarm: true });
+        } else io.ringBell(lane, live[0].sessionId);
         laneState.belledAt = now;
         laneState.belledSession = live[0].sessionId;
         delete laneState.orphanDeferredEmitted; // new window, fresh deferral event
@@ -533,7 +550,8 @@ function tickWith(io) {
         const sid = laneState.belledSession;
         const quiet = io.quietMs(sid);
         const apiErr = io.lastEntryIsApiError(sid);
-        const ready = apiErr ? quiet >= ORPHAN_QUIET
+        const dead = io.cannotAnswer?.(sid) ?? false; // no grace: nothing will ever answer
+        const ready = dead ? true : apiErr ? quiet >= ORPHAN_QUIET
           : quiet >= ORPHAN_QUIET && now - laneState.belledAt >= ORPHAN_GRACE;
         if (ready) {
           const r = tryOrphanFold(io, lane, laneState, st, sid, { deferKey: 'orphanDeferredEmitted' });
@@ -542,8 +560,8 @@ function tickWith(io) {
             laneState.orphanFoldedAt = now;
             laneState.closedAt = now;
             io.saveState(st);
-            io.log(`ORPHAN FOLD: ${lane} belled at ${new Date(laneState.belledAt).toISOString()}, never folded (last entry: ${apiErr ? 'api error' : 'idle'}) — closed and emergency-folded; the 08:00 wake will brief the lane`);
-            io.emit('orphan-fold-done', { lane, cause: apiErr ? 'api-error' : 'idle' });
+            io.log(`ORPHAN FOLD: ${lane} belled at ${new Date(laneState.belledAt).toISOString()}, never folded (last entry: ${dead ? 'prompt too long' : apiErr ? 'api error' : 'idle'}) — closed and emergency-folded; the 08:00 wake will brief the lane`);
+            io.emit('orphan-fold-done', { lane, cause: dead ? 'dead-wake' : apiErr ? 'api-error' : 'idle' });
           }
         }
       }
@@ -701,6 +719,7 @@ async function rehearse() {
       wakeConfirmed: (lane, sinceMs) => w.sessions.find((s) => s.lane === lane && (s.bornAt ?? -1) > sinceMs)?.sessionId ?? false,
       nextWakeSession: (lane) => `rehearse-${lane}-tail`,
       lastEntryIsApiError: (sid) => !!w.apiErrorTails?.[sid],
+      cannotAnswer: (sid) => !!w.deadWakes?.[sid],
       busyChildren: () => w.busy ?? [],
       killAndWait: (pid) => { w.sessions = w.sessions.filter((s) => s.pid !== pid); return true; },
       emergencyFold: (lane, sid) => { w.events.push(`orphanfold:${lane}@${w.day}d${fmt(w.min)}`); w.nextWake[lane] = w.io.now(); return true; },
@@ -922,6 +941,22 @@ async function rehearse() {
     applySchedule(keep); // restore the real schedule for anything after
   }
 
+  { // Scenario 17: the 10/8 DEAD WAKE — the lane's live session answers
+    // every prompt with "Prompt is too long". A bell can't reach it, so none
+    // rings; the orphan path folds it at once (no quiet threshold, no grace);
+    // the morning wake still happens. (Which session the fold READS is
+    // sleep.mjs's job — deadwake.mjs — benched separately in deadwake-test.)
+    const w = makeWorld(['opus']);
+    w.sessions = [{ pid: 23, sessionId: 'sess-dead', lane: 'opus', quietMs: 0 }];
+    w.deadWakes = { 'sess-dead': true };
+    w.step(7 * 60 + 1); // 19:00 → 02:01
+    check('dead-wake', 'no bell rung into a session that cannot answer', count(w, 'bell:') === 0, w.events.join());
+    check('dead-wake', 'flagged in the log', w.logs.some((l) => l.startsWith('DEAD WAKE: opus')), w.logs.join(' | '));
+    check('dead-wake', 'folded within a minute, not after the grace', count(w, 'orphanfold:opus') === 1, w.events.join());
+    w.step(6 * 60 + 10); // → 08:11
+    check('dead-wake', 'morning wake still fires', count(w, 'wake:opus') === 1, w.events.join());
+  }
+
   console.log(failures === 0 ? 'REHEARSAL CLEAN' : `REHEARSAL: ${failures} failure(s)`);
   if (failures) process.exitCode = 1;
 }
@@ -975,17 +1010,25 @@ if (process.argv.includes('--fold-now')) {
     process.exit(2);
   }
   LIVE_EMIT = true;
-  ringBell(lane, live[0].sessionId, 'nightwatch');
+  // A dead wake can't hear a bell; waiting out the deadline only delays the
+  // fold (10/8: ten minutes of nothing, then the forced fold). Force now.
+  const dead = cannotAnswer(join(PROJECT_DIR, `${live[0].sessionId}.jsonl`));
+  if (dead) {
+    log(`DEAD WAKE: ${lane} session ${live[0].sessionId.slice(0, 8)}… can't take a prompt — fold-now skips the bell and forces at once`);
+    emitEvent('dead-wake', { lane, session: live[0].sessionId, alarm: true });
+  } else ringBell(lane, live[0].sessionId, 'nightwatch');
   let st = {};
   try { st = JSON.parse(readFileSync(STATE_FILE, 'utf8')); } catch {}
   (st[lane] ??= {}).foldRequest = {
     sessionId: live[0].sessionId,
     requestedAt: Date.now(),
-    deadline: Date.now() + withinMin * 60_000,
+    deadline: dead ? Date.now() : Date.now() + withinMin * 60_000,
   };
   writeFileSync(STATE_FILE, JSON.stringify(st, null, 2));
   emitEvent('fold-requested', { lane, session: live[0].sessionId, deadline: new Date(st[lane].foldRequest.deadline).toISOString() });
-  console.log(`fold requested for ${lane}: bell rung, forcing in ${withinMin}m if unfolded`);
+  console.log(dead
+    ? `fold requested for ${lane}: the session can't take a prompt ("Prompt is too long"), so no bell — folding from the last session that ran, then a fresh wake`
+    : `fold requested for ${lane}: bell rung, forcing in ${withinMin}m if unfolded`);
   process.exit(0);
 }
 
@@ -1005,6 +1048,10 @@ if (process.argv.includes('--ring')) {
   if (!live.length) {
     console.error(`--ring: lane ${lane} is not awake — nothing to bell`);
     process.exit(3);
+  }
+  if (cannotAnswer(join(PROJECT_DIR, `${live[0].sessionId}.jsonl`))) {
+    console.error(`--ring: ${lane}'s session can't take a prompt ("Prompt is too long"), so a bell can't reach it. Use Fold now: it folds from the last session that ran and opens a fresh window.`);
+    process.exit(4);
   }
   LIVE_EMIT = true; // a hand-rung bell is a real act; its event is real
   ringBell(lane, live[0].sessionId, 'nightwatch');

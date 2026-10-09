@@ -5,7 +5,11 @@
 # no WEFT_LANE, writes nothing, and the daemon falls back to its heuristic.
 # Runs inside the new session because only here does the session id exist —
 # wake.sh cannot know it (--fork-session mints it at launch).
-# Prints nothing: SessionStart stdout lands in the session's context.
+# SessionStart stdout lands in the session's context, so this prints only
+# one thing, on purpose: the lane's instruction to arm its OWN bell watcher
+# (Ra's ruling, 10/8: no lane's Nightwatch bell may depend on another agent
+# being up). Skipped for the switchboard lane, whose doorbell watcher
+# already watches the same spool (it would otherwise fire on DM notes too).
 set -u
 # Registry dir from the one config (item E); fall back to the script's own
 # directory, which is where the registry has always lived — a hook that
@@ -29,4 +33,10 @@ SESSION_ID=$(python3 -c "import json,sys; print(json.load(sys.stdin).get('sessio
 # $PPID is the shell's parent: the claude process that spawned this hook.
 printf '{"lane":"%s","pid":%d,"at":"%s"}\n' "$WEFT_LANE" "$PPID" \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$REG/lane.$SESSION_ID"
+SWITCH="$(node "$SELF_DIR/config.mjs" get "lanes.$WEFT_LANE.switchboard" 2>/dev/null || echo false)"
+if [ "$SWITCH" != "true" ]; then
+  CFGPFX=""
+  [ -n "${WEFT_CONFIG:-}" ] && CFGPFX="WEFT_CONFIG=$WEFT_CONFIG "
+  echo "Nightwatch: this session is the $WEFT_LANE lane. Arm your bell watcher now, as a background task: ${CFGPFX}sh $SELF_DIR/bell-watcher.sh $WEFT_LANE — its exit is your sleep-bell (or a Fold now). When it fires: read the note, do what it says, delete the note file, and re-arm the watcher if you're staying up."
+fi
 exit 0
