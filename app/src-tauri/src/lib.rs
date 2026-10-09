@@ -560,7 +560,7 @@ fn remove_lane(h: &Hub, lane: Option<&str>) -> Result<String, String> {
 fn emergency_fold(h: &Hub, lane: Option<&str>) -> Result<String, String> {
     let lane = h.check_lane(lane)?;
     h.node("nightshift.mjs", &["--fold-now", &lane])
-        .map(|_| format!("Rang {lane}'s bell. If it hasn't folded in 10 minutes it's folded for it; then a fresh window opens."))
+        .map(|_| format!("Force-folding {lane}: its window closes, it folds, and a fresh one opens within a minute. The fresh window writes the rung."))
         .map_err(|e| e.replace("--fold-now: ", ""))
 }
 
@@ -715,7 +715,7 @@ fn act(app: AppHandle, action: String, lane: Option<String>, hub: Option<String>
         "arm-lane" => arm_lane(&h()?, lane, &d),
         "remove-lane" => remove_lane(&h()?, lane),
         "emergency-fold" => emergency_fold(&h()?, lane),
-        "fold-all" => for_all(emergency_fold, "not awake").map(|m| format!("Fold requested for: {m}")),
+        "fold-all" => for_all(emergency_fold, "not awake").map(|m| format!("Force-folding: {m}")),
         "run-doctor" => run_doctor(&h()?),
         "plan" => with_spec(&creation_hub(sel, &d)?, "plan", &d),
         "apply" => with_spec(&creation_hub(sel, &d)?, "apply", &d),

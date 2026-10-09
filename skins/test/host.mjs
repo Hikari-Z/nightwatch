@@ -60,7 +60,7 @@ await check('sleeping lane: sleep stays disabled', `document.querySelector('.nw-
 await click('.nw-app > .nw-lanes .nw-persona:first-child > .nw-add [data-action="create-lane"]'); // still unwired (needs the lane-creation flow)
 await check('unwired action never acts or asks', `[window.__calls.length, !!document.querySelector('.nw-app > .nw-confirm')]`, [0, false]);
 await click(SL);
-await check('sleep asks first', `document.querySelector('.nw-app > .nw-confirm [data-part="title"]').textContent.trim()`, "Ring opus's bell now?");
+await check('sleep asks first', `document.querySelector('.nw-app > .nw-confirm [data-part="title"]').textContent.trim()`, "Put opus to sleep?");
 await click('.nw-app > .nw-confirm [data-part="yes"]'); await sleep(200);
 await check('sleep acts with the lane', 'window.__calls', [['sleep', 'opus']]);
 const L = '.nw-app > .nw-lanes .nw-lane[data-lane="scout"]';
@@ -134,12 +134,12 @@ await check('then sends on:false', 'window.__data.at(-1)', { on: false });
 // fold now / fold all / check again (10/6)
 await ev('window.__calls=[]');
 await click('.nw-app > .nw-lanes .nw-lane[data-lane="opus"] [data-action="emergency-fold"]');
-await check('fold now asks, in danger red', `[document.querySelector('.nw-app > .nw-confirm [data-part="title"]')?.textContent.trim(), document.querySelector('.nw-app > .nw-confirm [data-part="yes"]')?.dataset.danger]`, ['Fold opus now?', 'true']);
+await check('fold now asks, in danger red', `[document.querySelector('.nw-app > .nw-confirm [data-part="title"]')?.textContent.trim(), document.querySelector('.nw-app > .nw-confirm [data-part="yes"]')?.dataset.danger]`, ['Force-fold opus?', 'true']);
 await click('.nw-app > .nw-confirm [data-part="yes"]'); await sleep(150);
 await check('then acts on that lane', 'window.__calls', [['emergency-fold', 'opus']]);
 await ev('window.__calls=[]');
 await click('.nw-app > .nw-controls [data-action="fold-all"]');
-await check('fold all asks first', `document.querySelector('.nw-app > .nw-confirm [data-part="title"]')?.textContent.trim()`, 'Fold every awake lane now?');
+await check('fold all asks first', `document.querySelector('.nw-app > .nw-confirm [data-part="title"]')?.textContent.trim()`, 'Force-fold every awake lane?');
 await click('.nw-app > .nw-confirm [data-part="yes"]'); await sleep(150);
 await ev(`document.querySelector('.nw-head [data-part="view-menu"][data-menu="app"] [data-action="app-settings"]').click()`);
 await click('.nw-app > .nw-settings [data-action="run-doctor"]'); await sleep(150);

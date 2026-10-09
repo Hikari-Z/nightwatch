@@ -82,10 +82,10 @@
       body: 'Copies the newest timestamped archive back to the checkpoint path. Only runs if the checkpoint is missing; it never replaces one that exists.' }),
     'restart-daemon': () => ({ title: 'Restart the nightshift?', verb: 'Restart', icon: 'retry',
       body: 'Relaunches the background job that rings bells and wakes lanes. Lanes keep running; only the watcher restarts.' }),
-    'emergency-fold': (lane) => ({ title: `Fold ${lane} now?`, verb: 'Fold now', icon: 'fold', danger: true,
-      body: `Rings ${lane}'s bell now. If it hasn't folded on its own within 10 minutes, it's folded for it. Either way its window then closes and a fresh one opens straight away, resuming from the fold.` }),
-    'fold-all': () => ({ title: 'Fold every awake lane now?', verb: 'Fold all', icon: 'fold', danger: true,
-      body: 'Each awake lane gets its bell now and a 10-minute deadline; each then closes and wakes fresh. Lanes that are asleep are left alone.' }),
+    'emergency-fold': (lane) => ({ title: `Force-fold ${lane}?`, verb: 'Force fold', icon: 'fold', danger: true,
+      body: `Closes ${lane}'s window now, folds it, and opens a fresh one straight away. The fresh window writes the rung for the day. For a full context or an API-error wall; for a normal bedtime, use Sleep agent.` }),
+    'fold-all': () => ({ title: 'Force-fold every awake lane?', verb: 'Force-fold all', icon: 'fold', danger: true,
+      body: 'Each awake lane is closed now, folded, and reopened fresh; each fresh window writes its own rung. Lanes that are asleep are left alone.' }),
     'remove-lane': (lane) => ({ title: `Remove ${lane} from Nightwatch?`, verb: 'Remove', icon: 'x',
       body: `The nightshift stops belling and waking ${lane}, and it leaves this window. Its transcripts, ladder and receipts stay on disk.` }),
     'toggle-nightly': (lane, btn) => btn?.getAttribute('aria-pressed') === 'true'
@@ -99,7 +99,7 @@
           body: `${lane} won't be belled, folded or woken tonight, or any night, until you arm it again. It keeps running as it is now.` }
       : { title: `Arm ${lane}?`, verb: 'Arm', icon: 'bell',
           body: `${lane} will be belled at its sleep time and woken at its wake time, starting tonight.` },
-    sleep: (lane) => ({ title: `Ring ${lane}'s bell now?`, verb: 'Ring the bell', icon: 'moon',
+    sleep: (lane) => ({ title: `Put ${lane} to sleep?`, verb: 'Sleep agent', icon: 'moon',
       body: `Sends ${lane} the same note the 02:00 bell sends: write the day's rung, then fold. It finishes the step it's on first, so nothing is cut off mid-thought.` }),
   };
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

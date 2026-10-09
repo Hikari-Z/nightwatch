@@ -987,11 +987,14 @@ for (const op of ['--arm', '--disarm']) {
   process.exit(0);
 }
 
-// --fold-now <lane> [--within <minutes>]: the app's "Fold now" (Ra's
-// refresh ruling, 10/6). Rings the real bell immediately, then records a
-// fold request the DAEMON enforces: fold seen → fold-request-met; deadline
-// passed → forced orphan fold; either way close + immediate re-wake.
-// Default deadline 10 minutes — an explicit human "now".
+// --fold-now <lane> [--within <minutes>]: the app's "Force fold" (Ra, 10/8:
+// "closes immediately, folds, reopens, writes rung" — the emergency button,
+// for a full context or an API-error wall; Sleep agent is the bedtime one).
+// No bell by default: the request's deadline is now, so the DAEMON forces it
+// on its next tick (close, emergency fold, immediate re-wake; the woken
+// session writes the rung). --within <minutes> keeps the older bell-first
+// form (Ra's 10/6 refresh ruling): ring, then force at the deadline if the
+// lane hasn't folded on its own.
 if (process.argv.includes('--fold-now')) {
   const lane = process.argv[process.argv.indexOf('--fold-now') + 1];
   if (!lane || !(lane in (CFG.lanes ?? {}))) {
@@ -1004,30 +1007,32 @@ if (process.argv.includes('--fold-now')) {
     process.exit(3);
   }
   const withinIdx = process.argv.indexOf('--within');
-  const withinMin = withinIdx !== -1 ? Number(process.argv[withinIdx + 1]) : 10;
-  if (!Number.isFinite(withinMin) || withinMin < 1) {
-    console.error('--within takes minutes, at least 1');
+  const withinMin = withinIdx !== -1 ? Number(process.argv[withinIdx + 1]) : 0;
+  if (!Number.isFinite(withinMin) || withinMin < 0) {
+    console.error('--within takes minutes (0 = force at once)');
     process.exit(2);
   }
   LIVE_EMIT = true;
   // A dead wake can't hear a bell; waiting out the deadline only delays the
   // fold (10/8: ten minutes of nothing, then the forced fold). Force now.
   const dead = cannotAnswer(join(PROJECT_DIR, `${live[0].sessionId}.jsonl`));
+  const now_ = dead || withinMin === 0;
   if (dead) {
     log(`DEAD WAKE: ${lane} session ${live[0].sessionId.slice(0, 8)}… can't take a prompt — fold-now skips the bell and forces at once`);
     emitEvent('dead-wake', { lane, session: live[0].sessionId, alarm: true });
-  } else ringBell(lane, live[0].sessionId, 'nightwatch');
+  } else if (!now_) ringBell(lane, live[0].sessionId, 'nightwatch');
   let st = {};
   try { st = JSON.parse(readFileSync(STATE_FILE, 'utf8')); } catch {}
   (st[lane] ??= {}).foldRequest = {
     sessionId: live[0].sessionId,
     requestedAt: Date.now(),
-    deadline: dead ? Date.now() : Date.now() + withinMin * 60_000,
+    deadline: now_ ? Date.now() : Date.now() + withinMin * 60_000,
   };
   writeFileSync(STATE_FILE, JSON.stringify(st, null, 2));
   emitEvent('fold-requested', { lane, session: live[0].sessionId, deadline: new Date(st[lane].foldRequest.deadline).toISOString() });
   console.log(dead
     ? `fold requested for ${lane}: the session can't take a prompt ("Prompt is too long"), so no bell — folding from the last session that ran, then a fresh wake`
+    : now_ ? `force fold for ${lane}: closing, folding and reopening within a minute; the fresh window writes the rung`
     : `fold requested for ${lane}: bell rung, forcing in ${withinMin}m if unfolded`);
   process.exit(0);
 }

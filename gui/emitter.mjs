@@ -158,8 +158,8 @@ function actions(lane) {
   return [
     ['terminal', 'open-terminal', 'Open terminal', awake, awake ? "Bring this lane's terminal to the front" : 'No live session'],
     ['sun', 'wake', 'Wake', wakeable, wakeable ? 'Wake now' : 'Already awake'],
-    ['moon', 'sleep', 'Sleep', awake, awake ? 'Ring the bell: write a rung, fold, close' : 'Not awake'],
-    ['fold', 'emergency-fold', 'Emergency fold', awake, awake ? 'Fold right now, without waiting for a rung' : 'Nothing to fold'],
+    ['moon', 'sleep', 'Sleep agent', awake, awake ? 'Rings the bell: it writes its rung and folds, then its window closes' : 'Not awake'],
+    ['fold', 'emergency-fold', 'Force fold', awake, awake ? 'Closes it now, folds, and reopens it; the fresh window writes the rung. For a full context or an API-error wall' : 'Nothing to fold'],
     ['log', 'show-log', 'Logs', true, "This lane's events and log lines"],
     ['gear', 'lane-settings', 'Lane settings', true, 'Model, hours, fold target'],
   ];
@@ -230,10 +230,10 @@ function fold_request(L, nowIso) {
   if (!fr) return '';
   if (fr.phase === 'requested') {
     const mins = Math.max(0, Math.floor((Date.parse(fr.deadline) - Date.parse(nowIso)) / 60000));
-    return `<li data-part="fold-request" data-phase="requested" data-tip="Fold now: the bell has rung; if ${esc(laneName(L))} hasn't folded by then, it's folded for it">${icon('fold')}`
+    return `<li data-part="fold-request" data-phase="requested" data-tip="Force fold: if ${esc(laneName(L))} hasn't folded by then, it's folded for it">${icon('fold')}`
       + `<span>Bell rung · forcing in </span><time data-part="countdown" datetime="${esc(fr.deadline)}">${mins}m</time></li>`;
   }
-  return `<li data-part="fold-request" data-phase="refreshing" data-tip="Fold now: folded; the window closes and a fresh one opens">${icon('fold')}`
+  return `<li data-part="fold-request" data-phase="refreshing" data-tip="Force fold: folded; the window closes and a fresh one opens">${icon('fold')}`
     + `<span>Folded${fr.forced ? ' (forced)' : ''} · waking fresh</span></li>`;
 }
 
@@ -415,7 +415,7 @@ function lane_card(L, nowIso = null, tz = undefined) {
     // click disarms; disarmed it's a crossed bell, unlit, "none", and a click
     // arms it. No time = nothing scheduled.
     nxt = !dt ? `<li data-part="next" data-action="arm-lane" aria-pressed="false" data-tip="Disarmed: no bell or wake scheduled. Click to arm.">${icon('bell-off')}<span>${esc(disp)}</span></li>`
-      : `<li data-part="next" data-action="arm-lane" aria-pressed="true" data-tip="Next ${what}: ${hmLocal(dt, tz)}. Click to disarm.">${icon(what === 'bell' ? 'bell' : 'sun')}` +
+      : `<li data-part="next" data-action="arm-lane" aria-pressed="true" data-tip="Next ${what}: ${hmLocal(dt, tz)}. Click to disarm.">${icon('bell')}` +
       `<time datetime="${dt}" data-part="countdown">${esc(disp)}</time></li>`;
   }
   // Accordion. The viewer opens any lane with an un-acked alarm: trouble
@@ -740,7 +740,7 @@ function settings_panel(ctx, p, lanesOf) {
     const w = L.window || WINDOWS[L.model] || 0;
     if (!(w && L.ctx / w >= 0.9)) continue;
     laneTrouble++;
-    items.push(`<li data-status="warn" data-lane="${esc(L.id)}">${icon('gauge')} ${esc(laneName(L))} is at ${pyRound(L.ctx / w * 100)}% of its context window — a Fold now would trim it to ~${k(L.target)}</li>`);
+    items.push(`<li data-status="warn" data-lane="${esc(L.id)}">${icon('gauge')} ${esc(laneName(L))} is at ${pyRound(L.ctx / w * 100)}% of its context window — a Force fold would trim it to ~${k(L.target)}</li>`);
   }
   if (!laneTrouble) items.push(`<li data-status="ok">${icon('check')} No lane needs a hand</li>`);
   const who = p ? esc(p.name) : 'Settings';
@@ -864,7 +864,7 @@ function controls(ctx, setup = false) {
     <div data-part="transport" data-all-awake="${allAwake ? 'true' : 'false'}">
       ${primary}
       ${pause}
-      <button type="button" data-action="fold-all" aria-label="Fold all now" data-danger="true" data-tip="Emergency fold every awake lane (asks first)"${setup ? ' aria-disabled="true"' : ''}>${icon('stop')}</button>
+      <button type="button" data-action="fold-all" aria-label="Force-fold all" data-danger="true" data-tip="Force-fold every awake lane (asks first)"${setup ? ' aria-disabled="true"' : ''}>${icon('stop')}</button>
       <button type="button" data-action="toggle-nightly" aria-pressed="${!setup && ctx.LANES.some((L) => L.armed !== false) ? 'true' : 'false'}" aria-label="Nightly cycle" data-tip-on="Nightly cycle is on: bell ${ctx.SCHEDULE.sleep}, wake ${ctx.SCHEDULE.wake}. Press to turn it off." data-tip-off="Nightly cycle is off. Press to turn it on (bell ${ctx.SCHEDULE.sleep}, wake ${ctx.SCHEDULE.wake})." data-tip="${!setup && ctx.LANES.some((L) => L.armed !== false) ? `Nightly cycle is on: bell ${ctx.SCHEDULE.sleep}, wake ${ctx.SCHEDULE.wake}. Press to turn it off.` : `Nightly cycle is off. Press to turn it on (bell ${ctx.SCHEDULE.sleep}, wake ${ctx.SCHEDULE.wake}).`}">${icon('repeat')}</button>
       <button type="button" data-part="panel-toggle" data-action="toggle-timeline" aria-pressed="false" aria-label="Timeline" data-tip-on="Hide the timeline" data-tip-off="Show the timeline" data-tip="Show the timeline">${icon('clock')}</button>
       <button type="button" data-part="panel-toggle" data-action="toggle-log" aria-pressed="false" aria-label="Log" data-tip-on="Hide the log" data-tip-off="Show the log" data-tip="Show the log">${icon('log')}</button>
@@ -875,10 +875,10 @@ function controls(ctx, setup = false) {
 function confirm() {
   return `
   <div class="nw-confirm" role="alertdialog" aria-label="Confirm emergency fold" data-action="emergency-fold" data-lane="opus">
-    <p data-part="title">${icon('fold')} Emergency fold opus now?</p>
+    <p data-part="title">${icon('fold')} Force-fold opus?</p>
     <p data-part="body">This folds the session as it stands, without waiting for a rung. The lane's next wake starts with an emergency note so it can write the missing rung itself. Nothing in the transcript is deleted.</p>
     <div data-part="buttons"><button type="button" data-action="cancel">Cancel</button>
-      <button type="button" data-action="confirm" data-danger="true">${icon('fold')}<span>Fold now</span></button></div>
+      <button type="button" data-action="confirm" data-danger="true">${icon('fold')}<span>Force fold</span></button></div>
   </div>`;
 }
 

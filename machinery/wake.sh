@@ -233,4 +233,18 @@ if [ "$RC" -ne 0 ] && [ "$LIVED" -lt 20 ]; then
   fi
   exit 6
 fi
+# The run is over (the nightshift closed it, or someone typed /exit): close
+# this Terminal window too, so finished lanes don't leave a trail of dead
+# windows (Ra, 10/8). A detached AppleScript waits a second for this script
+# to end, then closes the window on this tty. A quick death above keeps its
+# window open so the error stays readable; outside Terminal (a test, another
+# terminal app) no window matches and nothing happens.
+MYTTY="$(tty 2>/dev/null || true)"
+case "$MYTTY" in
+  /dev/tty*)
+    nohup osascript -e 'delay 1' \
+      -e "tell application \"Terminal\" to close (every window whose tty of selected tab is \"$MYTTY\")" \
+      >/dev/null 2>&1 &
+    ;;
+esac
 exit $RC
