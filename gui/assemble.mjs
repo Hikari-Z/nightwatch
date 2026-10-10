@@ -287,6 +287,9 @@ const STUCK_CARD = {
   context: { title: 'Context nearly full', window: false, cause: (e) => `At ${Math.round((e.ratio ?? 0) * 100)}% of its context window. Worth a fold at its next seam.` },
   slept: { title: 'Cut off by sleep', window: true, cause: () => 'This machine went to sleep mid-reply. A short poke in its window resumes it.' },
 };
+// Lane-tagged events that report on a session rather than move it through
+// the bell → fold → close → wake cycle.
+const NOT_LIFECYCLE = new Set(['stuck', 'stuck-cleared', 'spiral-alarm', 'wake-cost', 'orphan-fold-deferred']);
 const KIND_MAP = { 'fold-requested': 'bell', 'fold-request-met': 'fold', 'fold-forced': 'fold', 'bell-rung': 'bell', folded: 'fold', 'panel-closed': 'close', 'wake-launched': 'launch', 'wake-exec': 'launch', 'wake-confirmed': 'wake', 'wake-failed': 'wake-failed', 'already-awake': 'wake', 'stale-receipt': 'wake-failed', 'orphan-fold-done': 'fold', 'orphan-fold-failed': 'wake-failed', 'daemon-up': 'heartbeat', 'daemon-alive': 'heartbeat', 'daemon-down': 'wake-failed', 'bell-failed': 'wake-failed', 'spiral-alarm': 'wake-failed', stuck: 'wake-failed', 'stuck-cleared': 'wake', 'dead-wake': 'wake-failed' };
 const TIP = { 'fold-requested': 'Fold requested (bell + deadline)', 'fold-request-met': 'Fold request met — refreshing', 'fold-forced': 'Fold FORCED at deadline — refreshing', 'bell-rung': 'Bell rung (spool note)', folded: 'Folded', 'panel-closed': 'Panel closed, slept and quiet', 'wake-launched': 'Wake launched', 'wake-exec': 'Wake reached exec', 'wake-confirmed': 'Wake confirmed (registry)', 'wake-failed': 'Wake failed', 'already-awake': 'Already awake', 'stale-receipt': 'Stale sleep receipt', 'orphan-fold-done': 'Orphan fold', 'orphan-fold-failed': 'Orphan fold FAILED', 'daemon-up': 'Nightshift up', 'daemon-alive': 'Nightshift alive', 'daemon-down': 'Nightshift DOWN', 'bell-failed': 'Bell FAILED', 'spiral-alarm': 'API error spiral', stuck: 'Stuck', 'stuck-cleared': 'Recovered', 'dead-wake': 'Dead wake: too full to answer, folded from the last session that ran' };
 
@@ -371,7 +374,13 @@ export function assemble(cfg, io, range = '8h') {
     const liveSid = liveSidByLane[id];
     const alive = Boolean(liveSid || (r && livePids.has(r.pid)));
     const laneEvents = events.filter((e) => e.lane === id);
-    const last = laneEvents[laneEvents.length - 1];
+    // The card's state comes from the lane's last LIFECYCLE event. Watch
+    // events (stuck, spiral alarms, wake costs, deferrals) also carry the
+    // lane, and one landing after a bell used to wipe the belled state: a
+    // lane near a full context gets its "context" stuck event at exactly
+    // the moment it's most likely to be belled.
+    const lifecycle = laneEvents.filter((e) => !NOT_LIFECYCLE.has(e.kind));
+    const last = lifecycle[lifecycle.length - 1];
     // Fold now (Ra's refresh ruling): a fold-requested with no met/forced
     // after it is PENDING (deadline from the event); a met/forced with no
     // wake-confirmed after it is REFRESHING (closed, waking fresh).
@@ -398,6 +407,10 @@ export function assemble(cfg, io, range = '8h') {
     // hand-rescued lane whose history ends in wake-failed is just awake.
     let state = alive ? 'awake' : 'sleeping';
     if (alive && last?.kind === 'bell-rung') state = 'belled';
+    // Folded but its window still open: the close comes once the session goes
+    // quiet (Ra, 10/9: after the fold the card went back to plain awake, and
+    // nothing showed where the agent was in the cycle).
+    if (alive && last?.kind === 'folded') state = 'folding';
     if (!alive) {
       if (last?.kind === 'wake-failed') state = 'failed';
       else if (last?.kind === 'orphan-fold-done') state = 'orphaned';

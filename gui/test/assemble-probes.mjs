@@ -313,5 +313,27 @@ const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
   check('log: a fold within its target says nothing extra', tips.filter((t) => /its target/.test(t)).length === 1, JSON.stringify(tips));
 }
 
+// ---- the fold-cycle stage on a live lane (opus, 10/9). The card's state
+// comes from lifecycle events only; a fold leaves 'folding' until the close.
+{
+  const REG = 'cccccccc-3333-3333-3333-333333333333';
+  const live = (lines) => ({
+    readText: (p) => p === '/ev' ? [JSON.stringify({ at: iso(10 * 60e3), kind: 'daemon-alive', armed: ['fable'] }), ...lines.map((l) => JSON.stringify(l))].join('\n')
+      : p === '/armed' ? 'fable'
+        : p === `/wc/lane.${REG}` ? JSON.stringify({ lane: 'fable', pid: 300 }) : null,
+    readDir: (p) => p === '/wc' ? [`lane.${REG}`] : [],
+    stat: (p) => p.startsWith('/wc/') ? { size: 1, mtimeMs: NOW - 3600e3 } : null,
+    readTail: () => null, livePids: () => [300], psCommand: () => null, now: () => NOW,
+  });
+  const bell = { at: iso(5 * 60e3), kind: 'bell-rung', lane: 'fable', session: REG };
+  const stuck = { at: iso(2 * 60e3), kind: 'stuck', lane: 'fable', state: 'context', ratio: 0.86 };
+  let L = assemble(cfg, live([bell, stuck]), '8h').LANES[0];
+  check('stage: a stuck event after the bell keeps the lane belled', L.state === 'belled', `state=${L.state}`);
+  L = assemble(cfg, live([bell, { at: iso(3 * 60e3), kind: 'folded', lane: 'fable', session: REG }, stuck]), '8h').LANES[0];
+  check('stage: folded with the window still open reads folding', L.state === 'folding', `state=${L.state}`);
+  L = assemble(cfg, live([bell, { at: iso(3 * 60e3), kind: 'folded', lane: 'fable', session: REG }, { at: iso(60e3), kind: 'wake-confirmed', lane: 'fable', session: REG }]), '8h').LANES[0];
+  check('stage: a confirmed wake after the fold reads awake again', L.state === 'awake', `state=${L.state}`);
+}
+
 console.log(failures === 0 ? 'PROBES CLEAN' : `PROBES: ${failures} failure(s)`);
 process.exit(failures ? 1 : 0);

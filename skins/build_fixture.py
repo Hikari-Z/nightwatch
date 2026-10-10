@@ -160,7 +160,7 @@ LANES = [
 ]
 
 STATE_TIP = {
-    "awake": "Awake", "belled": "Bell rung, fold due", "folding": "Folding now",
+    "awake": "Awake", "belled": "Bell rung, fold due", "folding": "Folded; the window closes once the session goes quiet",
     "sleeping": "Asleep until its wake time", "waking": "Waking, waiting for the session to register",
     "orphaned": "Orphan-folded after its session died; emergency wake next", "failed": "Needs a hand",
     "down": "The nightshift itself isn't running",
@@ -175,7 +175,7 @@ def state_tip(L):
 # (skins lay out a stable toolbar) with aria-disabled and a tip saying why.
 def actions(lane):
     s = lane["state"]
-    awake = s in ("awake", "belled")
+    awake = s in ("awake", "belled", "folding")
     return [
         ("terminal", "open-terminal", "Open terminal", awake, "Bring this lane's terminal to the front" if awake else "No live session"),
         ("sun", "wake", "Wake", s in ("sleeping", "failed", "orphaned"), "Wake now" if s in ("sleeping", "failed", "orphaned") else "Already awake"),
@@ -400,10 +400,10 @@ def copy_session(L):
     sid = L.get("sessionId") or L.get("session")
     if not sid or sid == "—":
         return ""
-    return f'<div data-part="session-row"><button type="button" data-action="copy-session" data-session="{esc(sid)}" data-tip="{"Copy this agent\'s current session ID" if L["state"] in ("awake", "belled") else "Copy the ID of this agent\'s last active session"}">{icon("id")}<span>Copy session ID</span></button></div>'
+    return f'<div data-part="session-row"><button type="button" data-action="copy-session" data-session="{esc(sid)}" data-tip="{"Copy this agent\'s current session ID" if L["state"] in ("awake", "belled", "folding") else "Copy the ID of this agent\'s last active session"}">{icon("id")}<span>Copy session ID</span></button></div>'
 
 def uptime_li(L, now):
-    up = L["state"] in ("awake", "belled")
+    up = L["state"] in ("awake", "belled", "folding")
     disp = elapsed(L["since"][0], now) if now else ""
     # The number is on the card already; the tip gives the start, like the bell's ("Next bell: 02:00").
     tip = f'Up since: {L["since"][1]}' if up else f'{L["state"].capitalize()} since: {L["since"][1]}'

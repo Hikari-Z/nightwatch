@@ -140,7 +140,7 @@ function sprite() {
 
 // ---------------------------------------------------------------- pieces
 const STATE_TIP = {
-  awake: 'Awake', belled: 'Bell rung, fold due', folding: 'Folding now',
+  awake: 'Awake', belled: 'Bell rung, fold due', folding: 'Folded; the window closes once the session goes quiet',
   sleeping: 'Asleep until its wake time', waking: 'Waking, waiting for the session to register',
   orphaned: 'Orphan-folded after its session died; emergency wake next', failed: 'Needs a hand',
   down: "The nightshift itself isn't running",
@@ -153,7 +153,7 @@ const state_tip = (L) => STATE_TIP[L.state] + (L.activity && ACTIVITY_TIP[L.acti
 // (skins lay out a stable toolbar) with aria-disabled and a tip saying why.
 function actions(lane) {
   const s = lane.state;
-  const awake = s === 'awake' || s === 'belled';
+  const awake = s === 'awake' || s === 'belled' || s === 'folding';
   const wakeable = s === 'sleeping' || s === 'failed' || s === 'orphaned';
   return [
     ['terminal', 'open-terminal', 'Open terminal', awake, awake ? "Bring this lane's terminal to the front" : 'No live session'],
@@ -281,7 +281,7 @@ function persona_groups(ctx) {
 function copy_session(L) {
   const sid = L.sessionId ?? L.session;
   if (!sid || sid === '—') return '';
-  return `<div data-part="session-row"><button type="button" data-action="copy-session" data-session="${esc(sid)}" data-tip="${L.state === 'awake' || L.state === 'belled' ? "Copy this agent's current session ID" : "Copy the ID of this agent's last active session"}">${icon('id')}<span>Copy session ID</span></button></div>`;
+  return `<div data-part="session-row"><button type="button" data-action="copy-session" data-session="${esc(sid)}" data-tip="${['awake', 'belled', 'folding'].includes(L.state) ? "Copy this agent's current session ID" : "Copy the ID of this agent's last active session"}">${icon('id')}<span>Copy session ID</span></button></div>`;
 }
 
 function lane_settings(L) {
@@ -392,7 +392,7 @@ function elapsed(sinceIso, nowIso) {
   return h ? `${h}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`;
 }
 function uptime_li(L, nowIso) {
-  const up = L.state === 'awake' || L.state === 'belled';
+  const up = L.state === 'awake' || L.state === 'belled' || L.state === 'folding';
   const disp = nowIso ? elapsed(L.since[0], nowIso) : '';
   // The number is on the card already; the tip gives the start, like the bell's ("Next bell: 02:00").
   const tip = up ? `Up since: ${L.since[1]}` : `${L.state.charAt(0).toUpperCase()}${L.state.slice(1)} since: ${L.since[1]}`;
