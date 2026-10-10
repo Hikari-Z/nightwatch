@@ -143,7 +143,7 @@ body { color: var(--nw-ink); font-size: 12px; }
 .nw-timeline [data-part="activity"] [data-part="grid"] line { stroke: #d6dde8; stroke-dasharray: none; }
 .nw-timeline [data-part="activity"] [data-part="fill-top"] { stop-opacity: .45; }
 .nw-timeline :is([data-part="activity"], [data-part="sleep-bands"]) [data-part="sleep"] { background: repeating-linear-gradient(-45deg, rgb(120 130 150 / .12) 0 3px, transparent 3px 8px); color: #7a8494; text-shadow: var(--mt-emboss); }
-.nw-timeline [data-part="activity"] [data-part="peak"] { color: #26301c; background: linear-gradient(#f2f6e6, #d3dcc0); box-shadow: 0 0 0 1px #9aa58a; border-radius: 7px; }
+.nw-timeline [data-part="activity"] :is([data-part="peak"], [data-part="cursor-label"]) { color: #26301c; background: linear-gradient(#f2f6e6, #d3dcc0); box-shadow: 0 0 0 1px #9aa58a; border-radius: 7px; }
 
 /* log: an iTunes list */
 .nw-log [data-part="events"] { border-radius: 3px; background: #fff; box-shadow: inset 0 0 0 1px #8a8a8a, inset 0 1px 3px rgb(0 0 0 / .25); padding: 0 1px; }

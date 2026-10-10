@@ -895,6 +895,69 @@
     $('#skin')?.addEventListener('load', reportHits);
   }
 
+  // ------------------------------------------------------- activity cursor
+  // Hovering the timeline's output graph draws a dot on the curve under the
+  // pointer, labelled with the rate there in tokens per minute (Ra, 10/9).
+  // The dot lives inside the graph's own svg, so every skin's scaling and
+  // Vertical's turned graph carry it for free; a zero-length round-capped
+  // line with a non-scaling stroke stays round under the svg's stretch. The
+  // label is HTML beside it, anchored at the dot. While the cursor shows,
+  // the graph's static tip steps aside (it said the same thing, less well).
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const rate = (n) => n < 1000 ? `${Math.round(n)}` : n < 10_000 ? `${(n / 1e3).toFixed(1)}k` : `${Math.round(n / 1e3)}k`;
+  let cursorOn = null;
+  function cursorOff() {
+    const a = cursorOn; cursorOn = null; if (!a) return;
+    $(':scope > svg [data-part="cursor"]', a)?.remove();
+    $(':scope > [data-part="cursor-label"]', a)?.remove();
+    delete a.dataset.cursor;
+    if (a.dataset.tipRest != null) { a.dataset.tip = a.dataset.tipRest; delete a.dataset.tipRest; }
+  }
+  // The curve's height at svg x: the path is monotone in x, so a search on
+  // its length finds the point exactly as drawn.
+  function curveAt(path, x) {
+    let lo = 0, hi = path.getTotalLength();
+    for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2; if (path.getPointAtLength(m).x < x) lo = m; else hi = m; }
+    return path.getPointAtLength((lo + hi) / 2);
+  }
+  doc.addEventListener('pointermove', (e) => {
+    const a = e.target.closest?.('.nw-timeline [data-part="activity"]');
+    if (a !== cursorOn) cursorOff();
+    if (!a) return;
+    const svg = $(':scope > svg', a), line = svg && $('[data-part="line"]', svg);
+    const series = (a.dataset.series ?? '').split(',').map(Number);
+    const peak = Math.max(...series), bm = Number(a.dataset.bucketMin) || 10;
+    if (!line || !(peak > 0)) return; // a quiet night has no curve worth reading
+    const r = svg.getBoundingClientRect(); if (!r.width || !r.height) return;
+    const turned = app()?.dataset.layout === 'column'; // Vertical: time runs up the screen
+    const t = turned ? (r.bottom - e.clientY) / r.height : (e.clientX - r.left) / r.width;
+    // The curve runs between the first and last bucket centres.
+    const x = Math.min(1000 * (1 - .5 / series.length), Math.max(1000 * .5 / series.length, 1000 * t));
+    const p = curveAt(line, x);
+    if (cursorOn !== a) {
+      cursorOn = a;
+      if (a.dataset.tip != null) { a.dataset.tipRest = a.dataset.tip; delete a.dataset.tip; }
+      a.dataset.cursor = 'on'; // skins hide the peak chip under it
+    }
+    let dot = $('[data-part="cursor"]', svg);
+    if (!dot) { dot = doc.createElementNS(SVGNS, 'line'); dot.setAttribute('data-part', 'cursor'); dot.setAttribute('vector-effect', 'non-scaling-stroke'); svg.append(dot); }
+    for (const [k, v] of [['x1', p.x], ['x2', p.x], ['y1', p.y], ['y2', p.y]]) dot.setAttribute(k, v.toFixed(2));
+    let label = $(':scope > [data-part="cursor-label"]', a);
+    if (!label) { label = doc.createElement('span'); label.dataset.part = 'cursor-label'; label.setAttribute('aria-hidden', 'true'); a.append(label); }
+    // Tokens per minute: the curve's height over the series' scale, per bucket minute.
+    const perMin = Math.max(0, (40 - p.y) / 34) * peak / bm;
+    label.textContent = `${rate(perMin)}/min`;
+    // Anchor in the graph's own (unturned) box: the svg's layout box inside
+    // the padding, which getBoundingClientRect can't give once it's rotated.
+    const cs = getComputedStyle(a);
+    const left = parseFloat(cs.paddingLeft) + (p.x / 1000) * svg.clientWidth;
+    const top = parseFloat(cs.paddingTop) + (p.y / 40) * svg.clientHeight;
+    label.style.left = `${left}px`; label.style.top = `${top}px`;
+    label.dataset.turned = turned ? 'true' : 'false';
+  });
+  doc.addEventListener('pointerleave', cursorOff);
+  doc.addEventListener('pointerout', (e) => { if (cursorOn && !cursorOn.contains(e.relatedTarget)) cursorOff(); });
+
   // ------------------------------------------------------- measured layout
   // Things CSS can't measure (Ra, 10/7 round 5). Horizontal: the persona's
   // spine is positioned down the row's edge, so it can't size the row; when

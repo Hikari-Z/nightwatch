@@ -326,6 +326,14 @@ button { cursor: pointer; }
 .nw-timeline [data-part="activity"] [data-part="peak"] { position: absolute; left: calc(var(--t) * 100%); bottom: calc(var(--v) * 85% + 4px); translate: -50% 0;
   padding: 0 4px; border-radius: 4px; font: 600 10px var(--nw-mono); color: var(--act); background: var(--nw-surface); box-shadow: 0 0 0 1px color-mix(in srgb, var(--act) 35%, transparent); }
 .nw-timeline [data-part="activity"] [data-part="peak"]::after { content: ""; position: absolute; left: 50%; top: calc(100% + 2px); width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--act); }
+/* The hover cursor (runtime draws it, 10/10): a dot on the curve under the pointer and its rate, anchored at the
+   dot. The label reads upright in Vertical, where the graph itself is turned. */
+.nw-timeline [data-part="activity"][data-cursor] [data-part="peak"] { visibility: hidden; }
+.nw-timeline [data-part="activity"] [data-part="cursor"] { stroke: var(--act); stroke-width: 7; stroke-linecap: round; pointer-events: none; }
+.nw-timeline [data-part="activity"] [data-part="cursor-label"] { position: absolute; z-index: 2; pointer-events: none; white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 8px)); padding: 0 4px; border-radius: 4px; font: 600 10px var(--nw-mono); font-variant-numeric: tabular-nums;
+  color: var(--act); background: var(--nw-surface); box-shadow: 0 0 0 1px color-mix(in srgb, var(--act) 35%, transparent); }
+.nw-timeline [data-part="activity"] [data-part="cursor-label"][data-turned="true"] { transform-origin: 0 0; transform: rotate(90deg) translate(calc(-100% - 8px), -50%); }
 :is(.nw-timeline, .nw-log) [data-part="empty"] { grid-column: 1 / -1; align-self: center; margin: 0; padding: 18px 8px; text-align: center; font-size: 12.5px; color: var(--nw-ink-2); }
 :is(.nw-timeline, .nw-log) [data-part="empty"][hidden] { display: none; }
 .nw-log[data-empty="true"] [data-part="events"] { display: none; }

@@ -180,8 +180,9 @@ input[type="checkbox"] { accent-color: #8a8272; }
 .nw-timeline [data-part="activity"] [data-part="line"] { stroke-width: 1.25; filter: drop-shadow(0 0 3px var(--am)); }
 .nw-timeline :is([data-part="activity"], [data-part="sleep-bands"]) [data-part="sleep"] { background: repeating-linear-gradient(-45deg, rgb(255 255 255 / .045) 0 2px, transparent 2px 7px); border-radius: 0;
   font: 500 9.5px var(--nw-cond); letter-spacing: .3em; text-transform: uppercase; color: #4a4640; }
-.nw-timeline [data-part="activity"] [data-part="peak"] { border-radius: 0; background: transparent; box-shadow: none; color: var(--am-hi); text-shadow: 0 0 6px var(--am-glow); }
+.nw-timeline [data-part="activity"] :is([data-part="peak"], [data-part="cursor-label"]) { border-radius: 0; background: transparent; box-shadow: none; color: var(--am-hi); text-shadow: 0 0 6px var(--am-glow); }
 .nw-timeline [data-part="activity"] [data-part="peak"]::after { border-radius: 0; rotate: 45deg; box-shadow: 0 0 6px var(--am); }
+.nw-timeline [data-part="activity"] [data-part="cursor"] { stroke-linecap: square; filter: drop-shadow(0 0 3px var(--am)); }
 :is(.nw-timeline, .nw-log) [data-part="empty"] { font: 500 11px var(--nw-cond); letter-spacing: .18em; text-transform: uppercase; color: var(--nw-ink-2); }
 
 /* Hover keeps this theme's surface (the base layout's hover paints a faint

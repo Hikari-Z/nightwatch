@@ -786,3 +786,12 @@ body { color: var(--bw-ink); }
 /* Restore defaults (10/7): a brass tag like the filter chips. */
 .nw-log [data-part="filters"] [data-action="reset-log"] { display: inline-grid; place-items: center; padding: 0 5px; border: 2px solid #8a6524; border-radius: 3px; color: #5a4214; background: linear-gradient(#f7e2a8, #d8b260); rotate: 2deg; cursor: pointer; }
 .nw-log [data-part="filters"] [data-action="reset-log"] .nw-icon { width: 12px; height: 12px; }
+
+/* The hover cursor (runtime, 10/10): a dot on the curve and its rate. */
+.nw-timeline [data-part="activity"][data-cursor] [data-part="peak"] { visibility: hidden; }
+.nw-timeline [data-part="activity"] [data-part="cursor"] { stroke: var(--mw-lcd); stroke-width: 7; stroke-linecap: round; pointer-events: none; filter: drop-shadow(0 0 3px var(--mw-lcd)); }
+.nw-timeline [data-part="activity"] [data-part="cursor-label"] { position: absolute; z-index: 2; pointer-events: none; white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 8px)); font: 700 10px var(--mw-mono); font-variant-numeric: tabular-nums; color: var(--mw-lcd); text-shadow: 0 0 6px var(--mw-lcd); }
+.nw-timeline [data-part="activity"] [data-part="cursor-label"][data-turned="true"] { transform-origin: 0 0; transform: rotate(90deg) translate(calc(-100% - 8px), -50%); }
+.nw-timeline [data-part="activity"] [data-part="cursor"] { stroke: #ffb347; filter: drop-shadow(0 0 3px #ff8a1a); }
+.nw-timeline [data-part="activity"] [data-part="cursor-label"] { color: #ffb347; text-shadow: 0 0 6px #ff8a1a; }
