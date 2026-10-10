@@ -38,7 +38,7 @@ const HOME = homedir();
 // `caffeinate -i -t 300` for itself during activity, and on 10/10 it
 // deferred the opus lane's orphan fold (pmset receipts). Real work looks
 // like a render, an encode, a daemon a hand started.
-export const INFRA_PROCESS = /mcpl|cc-sock|bridge|inbox-watcher|caffeinate/;
+export const INFRA_PROCESS = /mcpl|cc-sock|bridge|inbox-watcher|bell-watcher|caffeinate/;
 // One config, one truth (item E; the 10/5 decoy-checkpoint failure is the
 // receipt). Env overrides are applied INSIDE the loader, so the pre-E
 // spellings (WEFT_NIGHT_SLEEP etc.) keep working without a second ?? chain
@@ -413,7 +413,7 @@ function tryOrphanFold(io, lane, laneState, st, sid, { deferKey }) {
   if (panel) {
     const busy = io.busyChildren(panel.pid);
     if (busy.length) {
-      io.log(`orphan fold deferred for ${lane}: real work under the panel (${busy[0]}) — re-checking next tick`);
+      io.log(`fold deferred for ${lane}: real work under the panel (${busy[0]}) — re-checking next tick`);
       if (!laneState[deferKey]) {
         io.emit('orphan-fold-deferred', { lane, busy: busy[0] });
         laneState[deferKey] = true;
@@ -1130,6 +1130,7 @@ async function rehearse() {
     const note = ritualNote('main', 'sid-12345678-abcd');
     check('infra-filter', 'caffeinate is plumbing, not work', INFRA_PROCESS.test('caffeinate -i -t 300'));
     check('infra-filter', 'the inbox watcher is plumbing', INFRA_PROCESS.test('/bin/bash ./inbox-watcher.sh fable'));
+    check('infra-filter', "the lane's own bell watcher is plumbing", INFRA_PROCESS.test('/bin/zsh -c source /x/shell-snapshots/s.sh && sh /Users/x/nightwatch/machinery/bell-watcher.sh main'));
     check('infra-filter', 'a render is real work', !INFRA_PROCESS.test('node render.mjs --frames 0-8160'));
     check('infra-filter', 'a hand-started daemon is real work', !INFRA_PROCESS.test('node /Users/x/nightwatch/machinery/nightshift.mjs'));
     check('bell-note', 'names the belled session explicitly', note.includes('--session sid-12345678-abcd'), note.slice(0, 200));
