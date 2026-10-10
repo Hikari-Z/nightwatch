@@ -32,6 +32,10 @@ not here.
   stamped from tick-start; stamping with io.now() after launchWake would
   make it exact. Cosmetic; probed not-dangerous. (opus, 10/9)
 
+- **No UI indication a lane was belled:** pressing Sleep agent shows
+  nothing on the card about the pending bell — regression from earlier
+  behavior where belled state was visible. (Ra, 10/9)
+
 ## Done
 
 (nothing struck yet — list born 10/9)
