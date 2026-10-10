@@ -695,7 +695,13 @@ function tickWith(io) {
         io.emit('wake-launched', { lane, attempt: (laneState.wakeAttempts ?? 0) + 1 });
         try {
           io.launchWake(lane);
-          laneState.wakeAttemptAt = now;
+          // Stamp AFTER the launch, not with the tick's `now`: a forced fold
+          // earlier in this same tick writes its receipt mid-tick, and an
+          // attempt stamped before that receipt is never checked against the
+          // registry; the new session then logs as "already awake" (10/8
+          // 22:28). The launch returns before wake.sh starts claude, so the
+          // session's registry entry still lands after this stamp.
+          laneState.wakeAttemptAt = io.now();
           laneState.wakeAttempts = (laneState.wakeAttempts ?? 0) + 1;
           io.saveState(st);
         } catch (e) {
@@ -760,7 +766,11 @@ async function rehearse() {
     w.io = {
       real: false,
       emit: () => {}, // events.jsonl is live-only; the bench asserts on w.events
-      now: () => (w.day * 1440 + w.min) * 60_000,
+      // Effects take real time inside a tick: a fold writes its receipt and a
+      // launch returns a few ms after the tick began. w.ms models that (reset
+      // each tick), so a receipt written mid-tick postdates the tick's `now`,
+      // as it does live (10/8 22:28: forced fold and relaunch in one tick).
+      now: () => (w.day * 1440 + w.min) * 60_000 + (w.ms ?? 0),
       nowMin: () => w.min,
       armedLanes: () => w.armed ?? lanes, // scenarios may disarm (w.armed = [])
       state: () => w.st,
@@ -776,6 +786,7 @@ async function rehearse() {
       },
       launchWake: (lane) => {
         if (w.launchFails > 0) { w.launchFails--; throw new Error('simulated launch failure'); }
+        w.ms = (w.ms ?? 0) + 1;
         w.events.push(`wake:${lane}@${w.day}d${fmt(w.min)}`);
         if (w.confirmWakes) w.sessions.push({ pid: 9000 + w.events.length, sessionId: `woken-${lane}-${w.day}-${w.min}`, lane, quietMs: 0, bornAt: w.io.now() + 1 }); // born strictly after the attempt, as the registry is
       },
@@ -785,12 +796,13 @@ async function rehearse() {
       cannotAnswer: (sid) => !!w.deadWakes?.[sid],
       busyChildren: () => w.busy ?? [],
       killAndWait: (pid) => { w.sessions = w.sessions.filter((s) => s.pid !== pid); return true; },
-      emergencyFold: (lane, sid) => { w.events.push(`orphanfold:${lane}@${w.day}d${fmt(w.min)}`); w.nextWake[lane] = w.io.now(); return true; },
+      emergencyFold: (lane, sid) => { w.events.push(`orphanfold:${lane}@${w.day}d${fmt(w.min)}`); w.ms = (w.ms ?? 0) + 1; w.nextWake[lane] = w.io.now(); return true; },
       log: (line) => w.logs.push(line),
     };
     w.step = (minutes = 1) => {
       for (let i = 0; i < minutes; i++) {
         w.min++;
+        w.ms = 0;
         if (w.min >= 1440) { w.min -= 1440; w.day++; }
         tickWith(w.io);
       }
@@ -1000,12 +1012,18 @@ async function rehearse() {
     const w = makeWorld(['fable']);
     w.sessions = [{ pid: 30, sessionId: 'old-f', lane: 'fable', quietMs: 10 * 60_000 }];
     w.st.fable = { foldRequest: { sessionId: 'old-f', requestedAt: w.io.now(), deadline: w.io.now() + 2 * 60_000 } };
+    // The live shape (10/8 22:28): a receipt newer than the lane's last
+    // wake already exists, so the refresh relaunches in the SAME tick as
+    // the forced fold, whose fresh receipt lands mid-tick.
+    w.st.fable.wokenAt = w.io.now() - 120 * 60_000;
+    w.nextWake.fable = w.io.now() - 60 * 60_000;
     w.step(4); // deadline passes → forced fold (old killed) → wake launches
     check('refresh-identity', 'forced + refresh wake launched', count(w, 'orphanfold:fable') === 1 && count(w, 'wake:fable') === 1, w.events.join());
     for (const sess of w.sessions) sess.quietMs = 10 * 60_000; // the resumed tail reads quiet NOW
     w.step(3);
     check('refresh-identity', 'the NEW session is never closed by its own refresh', count(w, 'close:fable') === 0, w.events.join());
     check('refresh-identity', 'confirmation lands on a LIVE window', !!w.st.fable.wokenAt && w.sessions.length === 1, JSON.stringify({ st: w.st.fable, live: w.sessions.length }));
+    check('refresh-identity', 'the relaunch is confirmed as a wake, not mistaken for "already awake"', w.logs.some((l) => l.startsWith('wake confirmed for fable')) && !w.logs.some((l) => l.includes('already awake')), w.logs.filter((l) => /wake|awake/.test(l)).join(' | '));
     check('refresh-identity', 'refresh fully cleared', !w.st.fable.refreshWake && !w.st.fable.refreshFrom, JSON.stringify(w.st.fable));
   }
 
