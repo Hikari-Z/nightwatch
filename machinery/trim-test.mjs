@@ -85,5 +85,31 @@ try {
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }
+// Peer seam (Ra's ruling, 10/9): a cross-session message opens an exchange,
+// so a tail may start on one — a cover afternoon must not reach back to the
+// human's last morning prompt.
+{
+  const SID3 = '33333333-2222-3333-4444-555555555555';
+  const rows3 = [];
+  let n3 = 0; let prev3 = null;
+  const add3 = (e) => { const uuid = `w${++n3}`; rows3.push({ parentUuid: prev3, uuid, sessionId: SID3, timestamp: `2026-10-09T0${Math.min(9, n3)}:00:00.000Z`, ...e }); prev3 = uuid; };
+  const bulk = 'the long morning of ordinary prose work '.repeat(5_000); // ~195k chars of WORDS — not a blob run, so it bills at chars/4
+  add3({ type: 'user', message: { role: 'user', content: 'the human morning prompt' } });
+  add3({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: bulk }] } });
+  add3({ type: 'user', isMeta: true, message: { role: 'user', content: '<cross-session-message from="x" from-name="peer">afternoon review request</cross-session-message>' } });
+  add3({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'the afternoon work' }] } });
+  const dir3 = mkdtempSync(join(tmpdir(), 'trim-test-peer-'));
+  const src3 = join(dir3, `${SID3}.jsonl`);
+  writeFileSync(src3, rows3.map((r) => JSON.stringify(r)).join('\n') + '\n');
+  const rep = JSON.parse(execFileSync(process.execPath, [join(HERE, 'trim.mjs'), src3, '--target-tokens', '5000'], { encoding: 'utf8' }));
+  const kept = readFileSync(rep.path, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const first = kept.find((e) => e.type === 'user');
+  check('the tail opens at the PEER message, not the morning human prompt',
+    typeof first?.message?.content === 'string' && first.message.content.includes('cross-session-message'),
+    JSON.stringify(first?.message?.content)?.slice(0, 80));
+  check('the bulky morning stays folded away', !kept.some((e) => e.message?.content?.[0]?.text?.length > 100_000), `kept ${kept.length}`);
+  rmSync(dir3, { recursive: true, force: true });
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nall pass');
 process.exit(fails ? 1 : 0);

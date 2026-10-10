@@ -229,7 +229,8 @@ function ritualNote(lane, sessionId) {
     `${CFG_FILE ? `WEFT_CONFIG="${CFG_FILE}" ` : ''}node "${join(MACHINERY_DIR, 'sleep.mjs')}" --lane ${lane} --session ${sessionId}\`, THEN rewrite the checkpoint ` +
     `(fold receipt first: a crash between rung and fold costs the night; a crash ` +
     `after the fold costs only a stale lane section, and the wake reads the live ` +
-    `checkpoint later). The nightshift ` +
+    `checkpoint later). Close any background shells or watchers you left running — ` +
+    `the nightshift can't close a panel that still has work under it. The nightshift ` +
     `will close the panel once next-wake.${lane}.json is fresh and the session has gone quiet, and ` +
     `wake the lane at ${WAKE_HOUR}. The doorbell and heartbeat hold the night watch.`
   );

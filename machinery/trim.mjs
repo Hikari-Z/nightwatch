@@ -102,6 +102,23 @@ function isHumanPrompt(e) {
   return false;
 }
 
+/** A peer's cross-session message opens an exchange the same way a human
+ *  prompt does (Ra's ruling, 10/9): a tail may start on one. Without this,
+ *  a cover day where the lanes talk to each other all afternoon reaches
+ *  back to the human's LAST prompt and keeps everything since — the live
+ *  958k-est overshoot at opus's 10/9 fold. Peer messages arrive as
+ *  isMeta user turns, so isHumanPrompt alone excludes them. */
+function isPeerMessage(e) {
+  if (!e || e.type !== 'user' || !e.isMeta) return false;
+  const c = e.message?.content;
+  return typeof c === 'string' && c.includes('<cross-session-message ');
+}
+
+/** Where a cut may land: a turn that OPENS an exchange. */
+function isSeamTurn(e) {
+  return isHumanPrompt(e) || isPeerMessage(e);
+}
+
 // Per-line token estimate: chars/4 for text, with long base64 runs (image
 // blobs in tool results, screenshots, data URIs) billed at the vision rate
 // instead of the byte rate. A 200KB screenshot is ~273k base64 chars —
@@ -123,31 +140,33 @@ function estLine(l) {
 }
 
 // Walk from the end, accumulating the estimate per raw line (includes tool
-// results and metadata — the honest weight of what resumes).
+// results and metadata — the honest weight of what resumes), remembering the
+// suffix estimate AT each index so seams can be compared afterwards.
 let est = 0;
 let cut = lines.length; // index of first KEPT line
+const suffixEst = new Array(lines.length + 1).fill(0);
 for (let i = lines.length - 1; i >= 0; i--) {
   if (!isHarnessLoaded(entries[i])) est += estLine(lines[i]);
-  cut = i;
-  if (est >= target) break;
+  suffixEst[i] = est;
+  if (est >= target && cut === lines.length) cut = i;
 }
-// Extend back to the nearest human prompt at or before the cut.
+if (cut === lines.length) cut = 0; // whole session fits
+// The tail must OPEN at a seam (a human prompt, or a peer's cross-session
+// message — Ra's ruling, 10/9). Among all seams, take the one whose kept
+// estimate lands CLOSEST to the target: the old nearest-backward rule kept
+// everything since the human's last morning prompt on a lane-to-lane
+// afternoon (the live 958k-est overshoot at opus's 10/9 fold), when a peer
+// seam within sight of the target existed. Ties prefer the larger tail
+// (fold-TO keeps at least the tide line where it can).
 const walkCut = cut;
 let promptIdx = -1;
-for (let i = cut; i >= 0; i--) {
-  if (isHumanPrompt(entries[i])) {
+let bestDist = Infinity;
+for (let i = 0; i < lines.length; i++) {
+  if (!isSeamTurn(entries[i])) continue;
+  const dist = Math.abs(suffixEst[i] - target);
+  if (dist < bestDist || (dist === bestDist && i < promptIdx)) {
+    bestDist = dist;
     promptIdx = i;
-    break;
-  }
-}
-if (promptIdx === -1) {
-  // No human prompt before the cut — take the first one after it instead
-  // (a short session, or a cut into a machine-only stretch).
-  for (let i = cut; i < lines.length; i++) {
-    if (isHumanPrompt(entries[i])) {
-      promptIdx = i;
-      break;
-    }
   }
 }
 if (promptIdx === -1) {
