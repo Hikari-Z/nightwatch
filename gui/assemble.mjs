@@ -379,7 +379,15 @@ export function assemble(cfg, io, range = '8h') {
     // lane, and one landing after a bell used to wipe the belled state: a
     // lane near a full context gets its "context" stuck event at exactly
     // the moment it's most likely to be belled.
-    const lifecycle = laneEvents.filter((e) => !NOT_LIFECYCLE.has(e.kind));
+    // Two daemon events are REPORTS, not transitions, while the window is
+    // open: already-awake ("no action taken") and stale-receipt ("refused to
+    // wake a stale tail"). The daemon stamps them every wake-window tick, so
+    // they used to wipe the stage they report on: 10/10, a folded window got
+    // already-awake 36s after its fold and read plain awake (Fable's read).
+    // On a closed lane they stay: already-awake is the evidence that a
+    // hand-rescued wake happened, so a later close doesn't revive 'failed'.
+    const REPORTS = new Set(['already-awake', 'stale-receipt']);
+    const lifecycle = laneEvents.filter((e) => !NOT_LIFECYCLE.has(e.kind) && !(alive && REPORTS.has(e.kind)));
     const last = lifecycle[lifecycle.length - 1];
     // Fold now (Ra's refresh ruling): a fold-requested with no met/forced
     // after it is PENDING (deadline from the event); a met/forced with no

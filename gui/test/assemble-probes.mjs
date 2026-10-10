@@ -333,6 +333,18 @@ const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
   check('stage: folded with the window still open reads folding', L.state === 'folding', `state=${L.state}`);
   L = assemble(cfg, live([bell, { at: iso(3 * 60e3), kind: 'folded', lane: 'fable', session: REG }, { at: iso(60e3), kind: 'wake-confirmed', lane: 'fable', session: REG }]), '8h').LANES[0];
   check('stage: a confirmed wake after the fold reads awake again', L.state === 'awake', `state=${L.state}`);
+  // The daemon's reports don't wipe the stage they report on (10/10 receipts:
+  // already-awake landed 36s after Fable's fold; stale-receipt after a bell).
+  const folded = { at: iso(3 * 60e3), kind: 'folded', lane: 'fable', session: REG };
+  L = assemble(cfg, live([bell, folded, { at: iso(2 * 60e3), kind: 'already-awake', lane: 'fable' }]), '8h').LANES[0];
+  check('stage: already-awake after the fold keeps folding', L.state === 'folding', `state=${L.state}`);
+  L = assemble(cfg, live([bell, { at: iso(2 * 60e3), kind: 'stale-receipt', lane: 'fable' }]), '8h').LANES[0];
+  check('stage: stale-receipt after the bell keeps belled', L.state === 'belled', `state=${L.state}`);
+  // Closed: already-awake still counts, so a hand-rescued lane that later
+  // closes reads sleeping, not failed.
+  const dead = (lines) => ({ ...live(lines), livePids: () => [] });
+  L = assemble(cfg, dead([{ at: iso(4 * 60e3), kind: 'wake-failed', lane: 'fable' }, { at: iso(2 * 60e3), kind: 'already-awake', lane: 'fable' }]), '8h').LANES[0];
+  check('stage: a closed lane whose failed wake was rescued is not failed', L.state !== 'failed', `state=${L.state}`);
 }
 
 console.log(failures === 0 ? 'PROBES CLEAN' : `PROBES: ${failures} failure(s)`);
