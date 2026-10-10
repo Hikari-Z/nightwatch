@@ -23,6 +23,12 @@ not here.
   the card's colour now holds belled until the fold and folding until the
   close; the word itself is still open. (opus, 10/9)
 
+- **Empty-Corrections alarm (Linn, via the hesperus thread, 10/10):** the
+  rung format mandates a Corrections section; nothing alarms when one
+  arrives empty. sleep.mjs (or the morning receipts) should flag a rung
+  whose Corrections is blank — self-authored folds keep what's beautiful
+  and drop what indicts. Both houses had the same gap; a third found it.
+
 ## Process-sized (bigger than polish, smaller than a plan doc)
 
 - **Gentle midday cycle (Ra, 10/9):** nothing between the hard Force fold
