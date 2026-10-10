@@ -479,6 +479,23 @@
     const limit = $('.nw-app > .nw-head')?.getBoundingClientRect().bottom ?? 0;
     const below = el.getBoundingClientRect().top - 48 < Math.max(limit, 0);
     if (below) el.dataset.tipPos = 'below'; else delete el.dataset.tipPos;
+    // A centred tip that would cross its card's side edge draws from that
+    // edge instead. The neighbouring panel paints over anything that crosses
+    // (Ra, 10/9: in Vertical the timeline hid half of the Sleep button's tip).
+    // Measured one frame later, once :hover has drawn the tip at its real width.
+    delete el.dataset.tipAlign;
+    requestAnimationFrame(() => {
+      const s = getComputedStyle(el, '::after');
+      let w = parseFloat(s.width);
+      if (!w) return;
+      if (s.boxSizing !== 'border-box') w += parseFloat(s.paddingLeft) + parseFloat(s.paddingRight);
+      const box = (el.closest('.nw-lane, .nw-persona, .nw-alarm') ?? el.closest('.nw-app > *'))?.getBoundingClientRect();
+      if (!box) return;
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      if (cx - w / 2 < box.left) el.dataset.tipAlign = 'start';
+      else if (cx + w / 2 > box.right) el.dataset.tipAlign = 'end';
+    });
   });
 
   // ---------------------------------------------------------------- events

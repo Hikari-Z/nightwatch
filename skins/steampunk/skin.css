@@ -775,6 +775,9 @@ body { color: var(--bw-ink); }
 
 /* Tips flip below when they would run into the head bar (runtime sets data-tip-pos, 10/7). */
 [data-tip][data-tip-pos="below"]:hover::after { bottom: auto; top: calc(100% + 8px); }
+/* A tip that would cross its card's side edge draws from that edge (runtime sets data-tip-align, 10/9). */
+[data-tip][data-tip-align="start"]:hover::after { left: 0; right: auto; translate: 0 0; }
+[data-tip][data-tip-align="end"]:hover::after { left: auto; right: 0; translate: 0 0; }
 
 /* Persona rows (10/7): this skin keeps its own arrangement of lanes, so a persona's group dissolves into it
    (its cards and add slot sit where they always did) and the name isn't shown here yet. */

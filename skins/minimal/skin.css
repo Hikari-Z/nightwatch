@@ -56,6 +56,9 @@ button { cursor: pointer; }
   background: var(--nw-tip-bg); color: var(--nw-tip-ink); font: 12px/1.35 var(--nw-font); pointer-events: none;
 }
 [data-tip][data-tip-pos="below"]:hover::after { bottom: auto; top: calc(100% + 6px); }
+/* A tip that would cross its card's side edge draws from that edge (runtime sets data-tip-align, 10/9). */
+[data-tip][data-tip-align="start"]:hover::after { left: 0; right: auto; translate: 0 0; }
+[data-tip][data-tip-align="end"]:hover::after { left: auto; right: 0; translate: 0 0; }
 
 /* ---------- the rack ---------- */
 /* Every module: a surface plus a 1px outline that lands in the 1px gap. */
