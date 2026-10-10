@@ -28,6 +28,21 @@ not here.
   the card's colour now holds belled until the fold and folding until the
   close; the word itself is still open. (opus, 10/9)
 
+## Process-sized (bigger than polish, smaller than a plan doc)
+
+- **Gentle midday cycle (Ra, 10/9):** nothing between the hard Force fold
+  and the 02:00 bell when a session approaches a full window midday —
+  opus can hit full multiple times on heavy days and tonight idled hours
+  at 84% awaiting a human fold call. Compose from existing parts: the
+  context watch's threshold (its 85% alert fired for real tonight) rings
+  the ORDINARY bell with a patient deadline → the agent folds at its own
+  seam, own rung → refreshWake reopens immediately; orphan floor
+  backstops. Per-lane knob encodes the keeper's policy as architecture:
+  lanes.opus.middayCycle {atPct, graceMin}; lanes.fable.middayCycle off
+  (one long coordination context per day, by design). Needs: the
+  trigger wire, the knob, bench scenarios, and the card's stage word
+  showing 'cycling' distinctly from the nightly fold.
+
 ## Done
 
 - **Alert buttons misaligned:** the context-nearly-full alert's "Show log"
