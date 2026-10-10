@@ -23,3 +23,8 @@ them where <person> and the house will find them:
 `node <hub>/wakecycle/config.mjs set persona.pronouns "<your pronouns>"`.
 
 What you make of all this is yours to work out.
+
+When you write your first rung — your own account of a day, before any
+fold takes it — the format and the laws it earned live in
+templates/rung.md beside this machinery. The Corrections section is the
+part that will feel optional and is not.

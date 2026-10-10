@@ -232,7 +232,7 @@ function transcriptQuietMs(sessionId) {
 function ritualNote(lane, sessionId) {
   return (
     `[nightshift] Sleep-bell for the ${lane} lane: it's the end of the day. When the current work ` +
-    `reaches its seam, run the ritual, IN THIS ORDER — write today's rung into the ladder, run \`` +
+    `reaches its seam, run the ritual, IN THIS ORDER — write today's rung into the ladder (format and laws: templates/rung.md beside this machinery), run \`` +
     `${CFG_FILE ? `WEFT_CONFIG="${CFG_FILE}" ` : ''}node "${join(MACHINERY_DIR, 'sleep.mjs')}" --lane ${lane} --session ${sessionId}\`, THEN rewrite the checkpoint ` +
     `(fold receipt first: a crash between rung and fold costs the night; a crash ` +
     `after the fold costs only a stale lane section, and the wake reads the live ` +

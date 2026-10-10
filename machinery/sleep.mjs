@@ -14,6 +14,7 @@
  *   node sleep.mjs [--session <id>] [--target-tokens 250000] [--no-rung]
  */
 import { readFileSync, writeFileSync, existsSync, appendFileSync, copyFileSync, statSync, readdirSync } from 'node:fs';
+import { rungHealth } from './rung-health.mjs';
 import { execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -285,6 +286,20 @@ const bodies = visible.map((e) => {
   return `---\n\n<!-- ${e.id} (${e.level}) -->\n\n${raw.trim()}`;
 });
 writeFileSync(join(LADDER, 'ladder.md'), preamble + '\n' + bodies.join('\n\n') + '\n');
+
+// Health-check the newest L2 rung (warn-only, never blocks).
+try {
+  const l2 = join(LADDER, 'L2');
+  if (existsSync(l2)) {
+    const newest = readdirSync(l2).filter((f) => f.endsWith('.md'))
+      .map((f) => ({ f, m: statSync(join(l2, f)).mtimeMs })).sort((a, b) => b.m - a.m)[0];
+    if (newest) {
+      for (const w of rungHealth(readFileSync(join(l2, newest.f), 'utf8'))) {
+        console.error(`RUNG HEALTH (${newest.f}): ${w}`);
+      }
+    }
+  }
+} catch (e) { console.error(`rung health check skipped: ${e.message}`); }
 
 // ── Record the fold ──
 appendFileSync(
