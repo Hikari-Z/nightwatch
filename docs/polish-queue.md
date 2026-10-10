@@ -32,6 +32,13 @@ not here.
   stamped from tick-start; stamping with io.now() after launchWake would
   make it exact. Cosmetic; probed not-dangerous. (opus, 10/9)
 
+- **Fold-cycle stage invisible:** between bell and wake the UI shows
+  nothing about where an agent is in bell → rung → folded → closing →
+  closed → waking — Ra watched opus's whole cycle tonight with only a
+  timeline bell glyph and a terminal window for evidence. The state file
+  already holds belledAt/closedAt/wokenAt and the receipt mtime; the
+  card should show the stage as a word. (Ra, 10/9; supersedes the
+  narrower item below)
 - **No UI indication a lane was belled:** pressing Sleep agent shows
   nothing on the card about the pending bell — regression from earlier
   behavior where belled state was visible. (Ra, 10/9)
