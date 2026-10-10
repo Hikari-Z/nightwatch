@@ -179,7 +179,7 @@ def actions(lane):
     return [
         ("terminal", "open-terminal", "Open terminal", awake, "Bring this lane's terminal to the front" if awake else "No live session"),
         ("sun", "wake", "Wake", s in ("sleeping", "failed", "orphaned"), "Wake now" if s in ("sleeping", "failed", "orphaned") else "Already awake"),
-        ("moon", "sleep", "Sleep agent", awake, "Rings the bell: it writes its rung and folds, then its window closes" if awake else "Not awake"),
+        ("moon", "sleep", "Sleep agent", awake, "Rings the bell to fold this agent, then closes the window" if awake else "Not awake"),
         ("fold", "emergency-fold", "Force fold", awake, "Closes it now, folds, and reopens it; the fresh window writes the rung. For a full context or an API-error wall" if awake else "Nothing to fold"),
         ("log", "show-log", "Logs", True, "This lane's events and log lines"),
         ("gear", "lane-settings", "Lane settings", True, "Model, hours, fold target"),

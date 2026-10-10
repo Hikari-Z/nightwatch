@@ -158,7 +158,7 @@ function actions(lane) {
   return [
     ['terminal', 'open-terminal', 'Open terminal', awake, awake ? "Bring this lane's terminal to the front" : 'No live session'],
     ['sun', 'wake', 'Wake', wakeable, wakeable ? 'Wake now' : 'Already awake'],
-    ['moon', 'sleep', 'Sleep agent', awake, awake ? 'Rings the bell: it writes its rung and folds, then its window closes' : 'Not awake'],
+    ['moon', 'sleep', 'Sleep agent', awake, awake ? 'Rings the bell to fold this agent, then closes the window' : 'Not awake'],
     ['fold', 'emergency-fold', 'Force fold', awake, awake ? 'Closes it now, folds, and reopens it; the fresh window writes the rung. For a full context or an API-error wall' : 'Nothing to fold'],
     ['log', 'show-log', 'Logs', true, "This lane's events and log lines"],
     ['gear', 'lane-settings', 'Lane settings', true, 'Model, hours, fold target'],
