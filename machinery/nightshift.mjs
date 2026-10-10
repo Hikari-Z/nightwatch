@@ -1130,7 +1130,7 @@ for (const op of ['--arm', '--disarm']) {
   if (!process.argv.includes(op)) continue;
   const lane = process.argv[process.argv.indexOf(op) + 1];
   if (!lane || !(lane in (CFG.lanes ?? {}))) {
-    console.error(`${op}: unknown lane "${lane ?? ''}" (known: ${Object.keys(CFG.lanes ?? {}).join(', ')})`);
+    console.error(`${op}: unknown agent "${lane ?? ''}" (known: ${Object.keys(CFG.lanes ?? {}).join(', ')})`);
     process.exit(2);
   }
   const now = new Set(armedLanes());
@@ -1151,12 +1151,12 @@ for (const op of ['--arm', '--disarm']) {
 if (process.argv.includes('--fold-now')) {
   const lane = process.argv[process.argv.indexOf('--fold-now') + 1];
   if (!lane || !(lane in (CFG.lanes ?? {}))) {
-    console.error(`--fold-now: unknown lane "${lane ?? ''}" (known: ${Object.keys(CFG.lanes ?? {}).join(', ')})`);
+    console.error(`--fold-now: unknown agent "${lane ?? ''}" (known: ${Object.keys(CFG.lanes ?? {}).join(', ')})`);
     process.exit(2);
   }
   const live = liveSessions().map((x) => ({ ...x, lane: laneOf(x.sessionId) })).filter((x) => x.lane === lane);
   if (!live.length) {
-    console.error(`--fold-now: lane ${lane} is not awake — nothing to fold`);
+    console.error(`--fold-now: agent ${lane} is not awake — nothing to fold`);
     process.exit(3);
   }
   const withinIdx = process.argv.indexOf('--within');
@@ -1199,12 +1199,12 @@ if (process.argv.includes('--fold-now')) {
 if (process.argv.includes('--ring')) {
   const lane = process.argv[process.argv.indexOf('--ring') + 1];
   if (!lane || !(lane in (CFG.lanes ?? {}))) {
-    console.error(`--ring: unknown lane "${lane ?? ''}" (known: ${Object.keys(CFG.lanes ?? {}).join(', ')})`);
+    console.error(`--ring: unknown agent "${lane ?? ''}" (known: ${Object.keys(CFG.lanes ?? {}).join(', ')})`);
     process.exit(2);
   }
   const live = liveSessions().map((s) => ({ ...s, lane: laneOf(s.sessionId) })).filter((s) => s.lane === lane);
   if (!live.length) {
-    console.error(`--ring: lane ${lane} is not awake — nothing to bell`);
+    console.error(`--ring: agent ${lane} is not awake — nothing to bell`);
     process.exit(3);
   }
   if (cannotAnswer(join(PROJECT_DIR, `${live[0].sessionId}.jsonl`))) {
