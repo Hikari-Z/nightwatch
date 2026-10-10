@@ -95,7 +95,7 @@ body { color: var(--nw-ink); font-size: 12px; }
 .nw-lane [data-part="actions"] button[aria-disabled="true"] { opacity: .4; }
 .nw-lane [data-part="actions"] button[data-danger="true"]:not([aria-disabled="true"]) { --g: #d62a1e; color: #fff; }
 .nw-lane [data-part="actions"] button[aria-expanded="true"] { --g: #3d8fe8; color: #fff; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); }
-[data-part="fix"], :is([data-part="buttons"], [data-part="session-row"]) button { --g: #9aa0a8; border: 0; border-radius: 11px; padding: 3px 12px; color: #1c1c1c; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); font: 12px var(--nw-font); }
+[data-part="fix"], .nw-alert [data-part="ack"], :is([data-part="buttons"], [data-part="session-row"]) button { --g: #9aa0a8; border: 0; border-radius: 11px; padding: 3px 12px; color: #1c1c1c; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); font: 12px var(--nw-font); }
 [data-part="fix"]:first-child { --g: #d62a1e; color: #fff; text-shadow: 0 -1px 0 rgb(0 0 0 / .3); background: var(--mt-gel); border: 0; font-weight: 600; }
 [data-part="buttons"] button[data-primary="true"] { --g: #2f86e6; color: #fff; background: var(--mt-gel); border: 0; text-shadow: 0 -1px 0 rgb(0 0 0 / .3); }
 [data-part="buttons"] button[data-danger="true"] { --g: #e3a39e; color: #7a120a; }

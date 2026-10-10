@@ -88,7 +88,7 @@ body { color: var(--nw-ink); }
 .nw-lane [data-part="actions"] button { border-radius: 2px; color: var(--nw-ink-2); }
 .nw-lane [data-part="actions"] button:hover { color: var(--nw-ink); background: var(--ob-gloss); box-shadow: var(--ob-edge); }
 .nw-lane [data-part="actions"] button[aria-expanded="true"] { color: var(--am-hi); background: var(--ob-gloss); box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--am); }
-[data-part="fix"], :is([data-part="buttons"], [data-part="session-row"]) button { border-radius: 2px; border: 0; background: var(--ob-gloss); box-shadow: var(--ob-edge); color: var(--nw-ink); font: 500 11.5px var(--nw-cond); letter-spacing: .1em; text-transform: uppercase; }
+[data-part="fix"], .nw-alert [data-part="ack"], :is([data-part="buttons"], [data-part="session-row"]) button { border-radius: 2px; border: 0; background: var(--ob-gloss); box-shadow: var(--ob-edge); color: var(--nw-ink); font: 500 11.5px var(--nw-cond); letter-spacing: .1em; text-transform: uppercase; }
 [data-part="fix"]:first-child { background: var(--ob-gloss); color: #ffd1c9; box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--nw-failed), 0 6px 14px -8px var(--nw-failed); font-weight: 600; }
 [data-part="buttons"] button[data-primary="true"] { background: var(--ob-gloss); color: var(--am-hi); box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--am); }
 [data-part="buttons"] button[data-danger="true"] { color: #ff8a7a; }

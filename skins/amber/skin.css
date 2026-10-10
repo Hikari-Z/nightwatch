@@ -185,10 +185,14 @@ button { cursor: pointer; }
 .nw-alert [data-part="title"] { font-weight: 600; }
 .nw-alert [data-part="time"] { color: var(--nw-ink-2); grid-column: 3; grid-row: 1; }
 .nw-alert [data-part="cause"] { grid-column: 2 / 4; color: var(--nw-ink-2); font-size: 12px; overflow-wrap: anywhere; }
-.nw-alert [data-part="fixes"], .nw-alarm [data-part="fixes"] { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-[data-part="fix"] { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--nw-seam); background: var(--nw-surface); font-size: 12px; }
+.nw-alarm [data-part="fixes"] { grid-column: 1 / -1; }
+/* The fixes and "Got it" share one row, matched (Ra, 10/9: they sat offset and looked unrelated). With many fixes the
+   row wraps inside its two columns and "Got it" stays at the bottom right. */
+.nw-alert [data-part="fixes"] { grid-column: 1 / 3; }
+.nw-alert [data-part="fixes"], .nw-alarm [data-part="fixes"] { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+[data-part="fix"] { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--nw-seam); background: var(--nw-surface); font-size: 12px; white-space: nowrap; }
 [data-part="fix"]:first-child { background: var(--nw-failed-fill, var(--nw-failed)); border-color: var(--nw-failed-fill, var(--nw-failed)); color: #fff; font-weight: 600; }
-.nw-alert [data-part="ack"] { grid-column: 1 / -1; justify-self: end; display: inline-flex; gap: 4px; align-items: center; border: 0; background: none; color: var(--nw-ink-2); padding: 2px 0; font-size: 12px; }
+.nw-alert [data-part="ack"] { grid-column: 3; align-self: end; justify-self: end; display: inline-flex; gap: 5px; align-items: center; margin-top: 6px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--nw-seam); background: var(--nw-surface); color: var(--nw-ink); font-size: 12px; white-space: nowrap; }
 /* "Got it" hides it on this screen (the runtime's promise; Ra, 10/7: it only dimmed, and looked stuck). The house
    still knows: the log keeps the event, and a new episode shows again. */
 .nw-alert[data-acked="true"] { display: none; }
@@ -788,7 +792,7 @@ body { color: var(--nw-ink); }
 .nw-lane [data-part="actions"] button { border-radius: 2px; color: var(--nw-ink-2); }
 .nw-lane [data-part="actions"] button:hover { color: var(--nw-ink); background: var(--ob-gloss); box-shadow: var(--ob-edge); }
 .nw-lane [data-part="actions"] button[aria-expanded="true"] { color: var(--am-hi); background: var(--ob-gloss); box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--am); }
-[data-part="fix"], :is([data-part="buttons"], [data-part="session-row"]) button { border-radius: 2px; border: 0; background: var(--ob-gloss); box-shadow: var(--ob-edge); color: var(--nw-ink); font: 500 11.5px var(--nw-cond); letter-spacing: .1em; text-transform: uppercase; }
+[data-part="fix"], .nw-alert [data-part="ack"], :is([data-part="buttons"], [data-part="session-row"]) button { border-radius: 2px; border: 0; background: var(--ob-gloss); box-shadow: var(--ob-edge); color: var(--nw-ink); font: 500 11.5px var(--nw-cond); letter-spacing: .1em; text-transform: uppercase; }
 [data-part="fix"]:first-child { background: var(--ob-gloss); color: #ffd1c9; box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--nw-failed), 0 6px 14px -8px var(--nw-failed); font-weight: 600; }
 [data-part="buttons"] button[data-primary="true"] { background: var(--ob-gloss); color: var(--am-hi); box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--am); }
 [data-part="buttons"] button[data-danger="true"] { color: #ff8a7a; }
