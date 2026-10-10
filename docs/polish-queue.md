@@ -6,11 +6,6 @@ not here.
 
 ## Open
 
-- **Glass Vertical hovertext clipped:** on some agent cards the hover
-  tooltip tucks behind the main panel and can't be read. Likely z-index /
-  overflow on the panel stack; check the other verticals too. (Ra, 10/9)
-  Not reproduced on the fixture: in Glass Vertical every card tip drew
-  over its neighbours. Needs a screenshot of the live case. (opus, 10/9)
 - **The wider it/its + "lane" sweep** of UI-adjacent strings (~100 it/its,
   ~200 "lane" counted 10/8) rides with Ra's tooltip pass. (Ra's ruling,
   10/8)
@@ -63,3 +58,8 @@ not here.
 - **No UI indication a lane was belled:** pressing Sleep agent shows
   nothing on the card about the pending bell — regression from earlier
   behavior where belled state was visible. (Ra, 10/9) → fixed 647bc91: watch events no longer wipe belled, and folded-but-open reads folding (opus)
+- **Glass Vertical hovertext clipped:** on some agent cards the hover
+  tooltip tucks behind the main panel and can't be read. Likely z-index /
+  overflow on the panel stack; check the other verticals too. (Ra, 10/9)
+  Ra's screenshot showed it: a centred tip crossing the card's left edge into
+  the timeline. → fixed: tips draw from the edge they'd cross (opus, 10/9)
