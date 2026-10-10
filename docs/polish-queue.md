@@ -29,6 +29,15 @@ not here.
   whose Corrections is blank — self-authored folds keep what's beautiful
   and drop what indicts. Both houses had the same gap; a third found it.
 
+- **rung-health hardening, deferred off the cutover eve (opus, 10/10):**
+  (a) sleep.mjs imports rung-health.mjs at top level, OUTSIDE the
+  try — a broken module kills the fold before it starts, so "never
+  blocks" isn't true by construction; move to `await import` inside the
+  try + a test that a broken module still folds. (b) "newest L2 by
+  mtime" is lane-blind — interleaved lanes get warned about each
+  other's rungs; filter by `-${LANE}` in the filename. Land after the
+  first clean repo morning.
+
 ## Process-sized (bigger than polish, smaller than a plan doc)
 
 - **Gentle midday cycle (Ra, 10/9):** nothing between the hard Force fold
