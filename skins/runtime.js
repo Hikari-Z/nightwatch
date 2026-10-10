@@ -479,10 +479,12 @@
     const limit = $('.nw-app > .nw-head')?.getBoundingClientRect().bottom ?? 0;
     const below = el.getBoundingClientRect().top - 48 < Math.max(limit, 0);
     if (below) el.dataset.tipPos = 'below'; else delete el.dataset.tipPos;
-    // A centred tip that would cross its card's side edge draws from that
-    // edge instead. The neighbouring panel paints over anything that crosses
-    // (Ra, 10/9: in Vertical the timeline hid half of the Sleep button's tip).
-    // Measured one frame later, once :hover has drawn the tip at its real width.
+    // A tip stays inside its card: drawn centred, then slid just far enough
+    // to clear the card's side edges. The neighbouring panel paints over
+    // anything that crosses (Ra, 10/9: in Vertical the timeline hid half of
+    // the Sleep and Logs tips; Logs' tip is too wide to anchor at either edge
+    // of its button). Measured one frame later, once :hover has drawn the tip
+    // at its real width.
     delete el.dataset.tipAlign;
     requestAnimationFrame(() => {
       const s = getComputedStyle(el, '::after');
@@ -492,9 +494,13 @@
       const box = (el.closest('.nw-lane, .nw-persona, .nw-alarm') ?? el.closest('.nw-app > *'))?.getBoundingClientRect();
       if (!box) return;
       const r = el.getBoundingClientRect();
-      const cx = r.left + r.width / 2;
-      if (cx - w / 2 < box.left) el.dataset.tipAlign = 'start';
-      else if (cx + w / 2 > box.right) el.dataset.tipAlign = 'end';
+      const centred = r.left + r.width / 2 - w / 2;
+      const inset = 4;
+      // Clamp into the card; a tip wider than the card starts at its left edge.
+      const left = Math.max(box.left + inset, Math.min(centred, box.right - inset - w));
+      if (Math.abs(left - centred) < 0.5) return;
+      el.style.setProperty('--tip-dx', `${Math.round(left - r.left)}px`);
+      el.dataset.tipAlign = 'shift';
     });
   });
 
