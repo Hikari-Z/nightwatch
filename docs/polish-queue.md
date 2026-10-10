@@ -38,6 +38,16 @@ not here.
   trigger wire, the knob, bench scenarios, and the card's stage word
   showing 'cycling' distinctly from the nightly fold.
 
+## The whimsy shelf (preserved, not promised)
+
+- **Bell chime easter egg:** a 🔔 in an agent's output plays a soft bell
+  in the app. Ra's own verdict: a sound you can't turn off is bad, and a
+  volume control would give the joke away. Shelved as-is. (Ra, 10/9)
+- **Engine-rev throughput:** token rate as a rising/falling engine (or
+  boiler) sound. Pairs suspiciously well with the mp3-deck aesthetic and
+  a machine-noises toggle (off / subtle / full steampunk). (Ra, a while
+  back + 10/9)
+
 ## Done
 
 - **Alert buttons misaligned:** the context-nearly-full alert's "Show log"
