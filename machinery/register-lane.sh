@@ -21,7 +21,14 @@ SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 # config on this machine, and a session must never register into another
 # hub's registry (rehearsal finding, 10/7).
 if [ -n "${WEFT_CONFIG:-}" ]; then
-  REG="$(node "$SELF_DIR/config.mjs" get paths.wakecycle 2>/dev/null || echo "$SELF_DIR")"
+  # A named config that fails to resolve is a REFUSAL, not a fallback:
+  # falling back to this script's folder would register the session into
+  # the CODE directory under the state/code split (walk finding, 10/10 —
+  # config.mjs threw loudly and the || ate it).
+  if ! REG="$(node "$SELF_DIR/config.mjs" get paths.wakecycle 2>/dev/null)"; then
+    echo "register-lane: WEFT_CONFIG is set but unusable ($WEFT_CONFIG) — not registering" >&2
+    exit 1
+  fi
 else
   REG="$SELF_DIR"
 fi
