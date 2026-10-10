@@ -32,6 +32,13 @@ import { loadConfig, reloadConfig, switchboardLane } from './config.mjs';
 import { cannotAnswer } from './deadwake.mjs';
 
 const HOME = homedir();
+
+// Panel children that are the harness's own plumbing, never the agent's
+// work: MCP servers, the doorbell, and caffeinate — Claude Code spawns
+// `caffeinate -i -t 300` for itself during activity, and on 10/10 it
+// deferred the opus lane's orphan fold (pmset receipts). Real work looks
+// like a render, an encode, a daemon a hand started.
+export const INFRA_PROCESS = /mcpl|cc-sock|bridge|inbox-watcher|caffeinate/;
 // One config, one truth (item E; the 10/5 decoy-checkpoint failure is the
 // receipt). Env overrides are applied INSIDE the loader, so the pre-E
 // spellings (WEFT_NIGHT_SLEEP etc.) keep working without a second ?? chain
@@ -334,7 +341,7 @@ const io = {
       for (const child of out.split('\n')) {
         let args = '';
         try { args = execFileSync('ps', ['-o', 'args=', '-p', child], { encoding: 'utf8' }).trim(); } catch { continue; }
-        if (/mcpl|cc-sock|bridge|inbox-watcher/.test(args)) continue;
+        if (INFRA_PROCESS.test(args)) continue;
         busy.push(args.slice(0, 60));
         try {
           const grand = execFileSync('pgrep', ['-P', child], { encoding: 'utf8' }).trim();
@@ -1121,6 +1128,10 @@ async function rehearse() {
   { // Scenario: the bell's own words. The note must name the belled session
     // explicitly, quote the machinery path, and never point at another house.
     const note = ritualNote('main', 'sid-12345678-abcd');
+    check('infra-filter', 'caffeinate is plumbing, not work', INFRA_PROCESS.test('caffeinate -i -t 300'));
+    check('infra-filter', 'the inbox watcher is plumbing', INFRA_PROCESS.test('/bin/bash ./inbox-watcher.sh fable'));
+    check('infra-filter', 'a render is real work', !INFRA_PROCESS.test('node render.mjs --frames 0-8160'));
+    check('infra-filter', 'a hand-started daemon is real work', !INFRA_PROCESS.test('node /Users/x/nightwatch/machinery/nightshift.mjs'));
     check('bell-note', 'names the belled session explicitly', note.includes('--session sid-12345678-abcd'), note.slice(0, 200));
     check('bell-note', 'quotes the machinery sleep.mjs path', note.includes(`node "${join(MACHINERY_DIR, 'sleep.mjs')}"`));
     check('bell-note', 'carries this hub\'s config when one exists', !CFG_FILE || note.includes(`WEFT_CONFIG="${CFG_FILE}"`));
