@@ -283,7 +283,7 @@ fn watch_pointer(app: AppHandle) {
 fn sleep(h: &Hub, lane: Option<&str>) -> Result<String, String> {
     let lane = h.check_lane(lane)?;
     match h.node("nightshift.mjs", &["--ring", &lane]) {
-        Ok(_) => Ok(format!("Rang {lane}'s bell. It will write its rung and fold.")),
+        Ok(_) => Ok(format!("Rang {lane}'s bell. If the agent is listening, the rung gets written and the fold runs; if not, the nightshift folds the session after the grace period.")),
         Err(e) => Err(e.replace("--ring: ", "")),
     }
 }
