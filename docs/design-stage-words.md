@@ -7,8 +7,8 @@ invisible", Ra 10/9; "Gentle midday cycle", Ra 10/9).
 
 The card already prints the lane's raw state in its badge (`belled`, `folding`, `sleeping`, `failed`, …), with a
 tooltip from `STATE_TIP` in `gui/emitter.mjs`. Four of the six skins (Minimal, Glass, Amber, Metal) hide the word when the lane is plainly awake; Brassworks and Wacky show it. So the gap Ra
-named on 10/9 is half closed: the stage is visible, but in the machinery's vocabulary, and two stages of the
-night have no word at all.
+named on 10/9 is half closed: the stage is visible, but in the machinery's vocabulary, and two stages have no
+word at all: a rung written but not yet folded, and the midday cycle, which doesn't exist yet.
 
 ## Stage words
 
