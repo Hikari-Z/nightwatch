@@ -45,8 +45,15 @@ check('summonWindow on wsl writes the script before summoning', () => {
     writeFileSync: (p, c, o) => writes.push([p, c, o.mode]),
     execFileSync: (bin, args) => execs.push(args.at(-1)),
   });
-  assert.deepEqual(writes, [['/h/wake-summon.sh', '#!/bin/sh\necho hi\n', 0o755]]);
-  assert.deepEqual(execs, ['sh "/h/wake-summon.sh"']);
+  assert.deepEqual(writes, [['/h/wake-summon-m.sh', '#!/bin/sh\necho hi\n', 0o755]]);
+  assert.deepEqual(execs, ['sh "/h/wake-summon-m.sh"']);
+});
+check('the summon script is named per lane, so near-simultaneous wakes cannot share one', () => {
+  const writes = [];
+  summonWindow({ title: 'op us!', shellCommand: 'x', scriptDir: '/h' }, {
+    kind: 'wsl', writeFileSync: (p) => writes.push(p), execFileSync: () => {},
+  });
+  assert.deepEqual(writes, ['/h/wake-summon-op_us_.sh']);
 });
 check('wsl summon carries the RAW command, unescaped', () =>
   assert.equal(summonWindowArgv({ title: 'm', shellCommand: RAW }, 'wsl')[0].args.at(-1), RAW));

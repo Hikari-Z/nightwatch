@@ -79,8 +79,12 @@ export function summonWindow({ title, shellCommand, activate, scriptDir }, io = 
   const kind = io.kind ?? platformKind();
   let scriptFile;
   if (kind === 'wsl' && scriptDir) {
-    // One path crosses the interop chain instead of a quoted command.
-    scriptFile = join(scriptDir, 'wake-summon.sh');
+    // One path crosses the interop chain instead of a quoted command. The
+    // file is named per call: both lanes wake seconds apart, and a shared
+    // name could be overwritten before a slow Windows Terminal tab reads it
+    // (the second read's race, 10/12) — two windows waking one lane.
+    const safe = String(title ?? 'nightwatch').replace(/[^A-Za-z0-9_-]/g, '_');
+    scriptFile = join(scriptDir, `wake-summon-${safe}.sh`);
     (io.writeFileSync ?? realWriteFileSync)(scriptFile, `#!/bin/sh\n${shellCommand}\n`, { mode: 0o755 });
   }
   for (const { bin, args } of summonWindowArgv({ title, shellCommand, activate, scriptFile }, kind)) exec(bin, args);
