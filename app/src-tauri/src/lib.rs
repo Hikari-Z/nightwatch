@@ -204,7 +204,7 @@ fn hub_among(sel: Option<&str>, roots: Vec<PathBuf>) -> Result<Hub, String> {
 // The receipt the wake would resume, and the session it was folded from.
 fn receipt_sessions(h: &Hub, lane: &str) -> Result<Vec<String>, String> {
     let p = h.state.join(format!("next-wake.{lane}.json"));
-    let raw = std::fs::read_to_string(&p).map_err(|_| format!("{lane} has no sleep receipt (next-wake.{lane}.json); did it sleep?"))?;
+    let raw = std::fs::read_to_string(&p).map_err(|_| format!("{lane} has no sleep receipt (next-wake.{lane}.json); did they sleep?"))?;
     let j: serde_json::Value = serde_json::from_str(&raw).map_err(|e| format!("next-wake.{lane}.json doesn't parse: {e}"))?;
     Ok(["sessionId", "from"].iter().filter_map(|k| j.get(*k).and_then(|v| v.as_str()).map(String::from)).collect())
 }
@@ -233,7 +233,7 @@ fn wake(h: &Hub, lane: Option<&str>) -> Result<String, String> {
         return Err(format!("Terminal didn't open: {}", String::from_utf8_lossy(&out.stderr).trim()));
     }
     let _ = run("tell application \"Terminal\" to activate".into());
-    Ok(format!("Waking {lane}: a Terminal window is resuming it."))
+    Ok(format!("Waking {lane}: a Terminal window is resuming them."))
 }
 
 // ---------------------------------------------------------------- click-through
@@ -530,7 +530,7 @@ fn toggle_nightly(d: &serde_json::Value) -> Result<String, String> {
         let h = Hub::open(&root)?;
         for lane in h.lanes() { arm(&h, &lane, on)?; }
     }
-    Ok(if on { "Nightly cycle on: every lane will be belled and woken.".into() } else { "Nightly cycle off: no lane will be belled or woken until you turn it back on.".into() })
+    Ok(if on { "Nightly cycle on: every agent will be belled and woken.".into() } else { "Nightly cycle off: no agent will be belled or woken until you turn it back on.".into() })
 }
 
 // One lane's nightly switch: the bell slot on its card (Ra, 10/8). The same
@@ -539,7 +539,7 @@ fn arm_lane(h: &Hub, lane: Option<&str>, d: &serde_json::Value) -> Result<String
     let lane = h.check_lane(lane)?;
     let on = d.get("on").and_then(|x| x.as_bool()).ok_or("arm-lane needs on: true|false")?;
     arm(h, &lane, on)?;
-    Ok(if on { format!("{lane} armed: belled at its sleep time and woken at its wake time.") } else { format!("{lane} disarmed: no bell, fold or wake until it's armed again.") })
+    Ok(if on { format!("{lane} armed: belled at their sleep time and woken at their wake time.") } else { format!("{lane} disarmed: no bell, fold or wake until they're armed again.") })
 }
 
 // One lane's midday cycle switch, beside the bell (Ra, 10/12). On writes the
@@ -553,10 +553,10 @@ fn toggle_midday(h: &Hub, lane: Option<&str>, d: &serde_json::Value) -> Result<S
     let key = format!("lanes.{lane}.middayCycle");
     if on {
         cfg_set(h, &key, &serde_json::json!({"softPct": 0.85, "urgentPct": 0.95, "urgentMin": 10}))?;
-        Ok(format!("{lane}'s midday cycle is on: asked to fold at 85% of its window, and within ten minutes at 95%."))
+        Ok(format!("{lane}'s midday cycle is on: asked to fold at 85% of their window, and within ten minutes at 95%."))
     } else {
         cfg_unset(h, &key)?;
-        Ok(format!("{lane}'s midday cycle is off: it folds only at its nightly bell."))
+        Ok(format!("{lane}'s midday cycle is off: they fold only at their nightly bell."))
     }
 }
 
@@ -567,8 +567,8 @@ fn remove_lane(h: &Hub, lane: Option<&str>) -> Result<String, String> {
     arm(h, &lane, false)?;
     cfg_unset(h, &format!("lanes.{lane}"))?;
     // A lane-list change is structural: the nightshift reads it at boot.
-    restart_daemon(h).map_err(|e| format!("Removed {lane}, but the nightshift didn't restart to drop it: {e}"))?;
-    Ok(format!("Removed {lane} from Nightwatch. Its transcripts, ladder and receipts are still on disk."))
+    restart_daemon(h).map_err(|e| format!("Removed {lane}, but the nightshift didn't restart to drop them: {e}"))?;
+    Ok(format!("Removed {lane} from Nightwatch. Their transcripts, ladder and receipts are still on disk."))
 }
 
 // Fold now (Ra's ruling): ring the real bell; the nightshift owns a 10-minute
@@ -578,7 +578,7 @@ fn remove_lane(h: &Hub, lane: Option<&str>) -> Result<String, String> {
 fn emergency_fold(h: &Hub, lane: Option<&str>) -> Result<String, String> {
     let lane = h.check_lane(lane)?;
     h.node("nightshift.mjs", &["--fold-now", &lane])
-        .map(|_| format!("Force-folding {lane}: its window closes, it folds, and a fresh one opens within a minute. The fresh window writes the rung."))
+        .map(|_| format!("Force-folding {lane}: their window closes, they fold, and a fresh one opens within a minute. The fresh window writes the rung."))
         .map_err(|e| e.replace("--fold-now: ", ""))
 }
 

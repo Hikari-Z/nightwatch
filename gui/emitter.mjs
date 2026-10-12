@@ -142,8 +142,8 @@ function sprite() {
 // ---------------------------------------------------------------- pieces
 const STATE_TIP = {
   awake: 'Awake', belled: 'Bell rung, fold due', folding: 'Folded; the window closes once the session goes quiet',
-  sleeping: 'Asleep until its wake time', waking: 'Waking, waiting for the session to register',
-  orphaned: 'Orphan-folded after its session died; emergency wake next', failed: 'Needs a hand',
+  sleeping: 'Asleep until their wake time', waking: 'Waking, waiting for the session to register',
+  orphaned: 'Orphan-folded after their session died; emergency wake next', failed: 'Needs a hand',
   down: "The nightshift itself isn't running",
 };
 // The working/idle light (10/7), from Claude Code's own session status.
@@ -159,7 +159,7 @@ const STATE_WORD = {
   orphaned: 'Orphaned', failed: 'Needs you', down: 'Down',
 };
 const STAGE_TIP = {
-  cycling: 'Midday fold: folding at its own seam, then reopening right away',
+  cycling: 'Midday fold: folding at their own seam, then reopening right away',
   refreshing: 'Closed, folding, and reopening now',
   rung: 'Rung written; the fold is next',
 };
@@ -184,7 +184,7 @@ function actions(lane) {
     ['terminal', 'open-terminal', 'Open terminal', awake, awake ? "Bring this lane's terminal to the front" : 'No live session'],
     ['sun', 'wake', 'Wake', wakeable, wakeable ? 'Wake now' : 'Already awake'],
     ['moon', 'sleep', 'Sleep agent', awake, awake ? 'Rings the bell to fold this agent, then closes the window' : 'Not awake'],
-    ['fold', 'emergency-fold', 'Force fold', awake, awake ? 'Closes it now, folds, and reopens it; the fresh window writes the rung. For a full context or an API-error wall' : 'Nothing to fold'],
+    ['fold', 'emergency-fold', 'Force fold', awake, awake ? 'Closes them now, folds them, and reopens them; the fresh window writes the rung. For a full context or an API-error wall' : 'Nothing to fold'],
     ['log', 'show-log', 'Logs', true, "This lane's events and log lines"],
     ['gear', 'lane-settings', 'Lane settings', true, 'Model, hours, fold target'],
   ];
@@ -257,11 +257,11 @@ function fold_request(L, nowIso) {
   if (fr.phase === 'requested') {
     // A soft midday request (Ra, 10/12) has no deadline: no countdown, no force.
     if (!fr.deadline) {
-      return `<li data-part="fold-request" data-phase="requested" data-tip="Midday fold: ${esc(laneName(L))} folds at its own seam, then reopens right away">${icon('fold')}`
-        + `<span>Midday fold · at its own seam</span></li>`;
+      return `<li data-part="fold-request" data-phase="requested" data-tip="Midday fold: ${esc(laneName(L))} folds at their own seam, then reopens right away">${icon('fold')}`
+        + `<span>Midday fold · at their own seam</span></li>`;
     }
     const mins = Math.max(0, Math.floor((Date.parse(fr.deadline) - Date.parse(nowIso)) / 60000));
-    return `<li data-part="fold-request" data-phase="requested" data-tip="${what}: if ${esc(laneName(L))} hasn't folded by then, it's folded for it">${icon('fold')}`
+    return `<li data-part="fold-request" data-phase="requested" data-tip="${what}: if ${esc(laneName(L))} hasn't folded by then, they're folded anyway">${icon('fold')}`
       + `<span>${fr.tier ? 'Midday fold' : 'Bell rung'} · forcing in </span><time data-part="countdown" datetime="${esc(fr.deadline)}">${mins}m</time></li>`;
   }
   return `<li data-part="fold-request" data-phase="refreshing" data-tip="${what}: folded; the window closes and a fresh one opens">${icon('fold')}`
@@ -327,7 +327,7 @@ function lane_settings(L) {
         ${copy_session(L)}
         <label data-part="armed"><input type="checkbox"${(L.armed ?? true) ? ' checked' : ''}><span>Nightshift folds and wakes this lane</span></label>
         <label data-part="confirm-remove"><input type="checkbox" data-gate="remove-lane"><span>Allow removing this lane</span></label>
-        <div data-part="buttons"><button type="button" data-action="remove-lane" data-danger="true" aria-disabled="true" data-gated="true" data-tip="Stop managing this lane. Its transcripts and ladder stay on disk. Tick the box above to allow it.">${icon('x')}<span>Remove</span></button>
+        <div data-part="buttons"><button type="button" data-action="remove-lane" data-danger="true" aria-disabled="true" data-gated="true" data-tip="Stop managing this agent. Their transcripts and ladder stay on disk. Tick the box above to allow it.">${icon('x')}<span>Remove</span></button>
           <button type="button" data-action="save-lane" data-primary="true">${icon('check')}<span>Save</span></button></div>
       </section>`;
 }
@@ -456,7 +456,7 @@ function lane_card(L, nowIso = null, tz = undefined) {
   const pct = (v, d) => Math.round((v ?? d) * 100);
   const mid = mc
     ? `<li data-part="midday" data-action="toggle-midday" aria-pressed="true" data-tip="Midday cycle on: a soft bell at ${pct(mc.softPct, 0.85)}% of the window, an urgent one at ${pct(mc.urgentPct, 0.95)}%. Click to turn off.">${icon('cycle')}</li>`
-    : `<li data-part="midday" data-action="toggle-midday" aria-pressed="false" data-tip="Midday cycle off: it folds only at the nightly bell. Click to turn on.">${icon('cycle')}</li>`;
+    : `<li data-part="midday" data-action="toggle-midday" aria-pressed="false" data-tip="Midday cycle off: they fold only at the nightly bell. Click to turn on.">${icon('cycle')}</li>`;
   // Accordion. The viewer opens any lane with an un-acked alarm: trouble
   // never hides behind a closed card.
   const open_ = (L.open || alarm) ? 'true' : 'false';
@@ -779,7 +779,7 @@ function settings_panel(ctx, p, lanesOf) {
     const w = L.window || WINDOWS[L.model] || 0;
     if (!(w && L.ctx / w >= 0.9)) continue;
     laneTrouble++;
-    items.push(`<li data-status="warn" data-lane="${esc(L.id)}">${icon('gauge')} ${esc(laneName(L))} is at ${pyRound(L.ctx / w * 100)}% of its context window — a Force fold would trim it to ~${k(L.target)}</li>`);
+    items.push(`<li data-status="warn" data-lane="${esc(L.id)}">${icon('gauge')} ${esc(laneName(L))} is at ${pyRound(L.ctx / w * 100)}% of their context window — a Force fold would trim them to ~${k(L.target)}</li>`);
   }
   if (!laneTrouble) items.push(`<li data-status="ok">${icon('check')} No lane needs a hand</li>`);
   const who = p ? esc(p.name) : 'Settings';
@@ -892,7 +892,7 @@ function controls(ctx, setup = false) {
   const allAwake = !setup && ctx.LANES.length > 0 && !ctx.LANES.some((L) => ['sleeping', 'failed', 'orphaned'].includes(L.state));
   const sleepTip = "Ring every awake lane's bell: rung, fold, close";
   const primary = setup
-    ? `<button type="button" data-action="setup" data-part="primary" data-tip="Install a persona: name, model, where its memory lives">${icon('wand')}<span>Set up</span></button>`
+    ? `<button type="button" data-action="setup" data-part="primary" data-tip="Install a persona: name, model, where their memory lives">${icon('wand')}<span>Set up</span></button>`
     : allAwake
       ? `<button type="button" data-action="sleep-all" data-part="primary" data-tip="${esc(sleepTip)}">${icon('pause')}<span>Sleep all</span></button>`
       : `<button type="button" data-action="wake-all" data-part="primary" data-tip="Wake every sleeping lane now">${icon('play')}<span>Wake all</span></button>`;
@@ -915,7 +915,7 @@ function confirm() {
   return `
   <div class="nw-confirm" role="alertdialog" aria-label="Confirm emergency fold" data-action="emergency-fold" data-lane="opus">
     <p data-part="title">${icon('fold')} Force-fold opus?</p>
-    <p data-part="body">This folds the session as it stands, without waiting for a rung. The lane's next wake starts with an emergency note so it can write the missing rung itself. Nothing in the transcript is deleted.</p>
+    <p data-part="body">This folds the session as it stands, without waiting for a rung. The agent's next wake starts with an emergency note so they can write the missing rung themself. Nothing in the transcript is deleted.</p>
     <div data-part="buttons"><button type="button" data-action="cancel">Cancel</button>
       <button type="button" data-action="confirm" data-danger="true">${icon('fold')}<span>Force fold</span></button></div>
   </div>`;
@@ -1088,7 +1088,7 @@ ${sprite()}
   <header class="nw-head" data-tauri-drag-region>
     <span class="nw-glyph" data-phase="${ctx.DAEMON.phase}" role="img" aria-label="${ALARM_ARIA[ctx.DAEMON.phase]}" data-tip="${glyph_tip(ctx)}"></span>
     <h1 data-part="title">Nightwatch</h1>
-    <span data-part="schedule" data-tip="Tonight's schedule: the sleep-bell rings at ${ctx.SCHEDULE.sleep} and lanes wake at ${ctx.SCHEDULE.wake}. Change it in a persona's settings (the gear on its card).">${icon('moon')}<time datetime="${ctx.SCHEDULE.sleep}">${ctx.SCHEDULE.sleep}</time>${icon('sun')}<time datetime="${ctx.SCHEDULE.wake}">${ctx.SCHEDULE.wake}</time></span>
+    <span data-part="schedule" data-tip="Tonight's schedule: the sleep-bell rings at ${ctx.SCHEDULE.sleep} and lanes wake at ${ctx.SCHEDULE.wake}. Change it in a persona's settings (the gear on their card).">${icon('moon')}<time datetime="${ctx.SCHEDULE.sleep}">${ctx.SCHEDULE.sleep}</time>${icon('sun')}<time datetime="${ctx.SCHEDULE.wake}">${ctx.SCHEDULE.wake}</time></span>
     <time data-part="clock" datetime="${ctx.NOW}">${hmLocal(ctx.NOW, ctx.TZ)}</time>
     <button type="button" data-action="look-menu" data-part="menu-button" data-menu="look" aria-haspopup="menu" aria-expanded="false" aria-label="Look" data-tip="Appearance and skin">${icon('palette')}</button>
     <button type="button" data-action="view-menu" data-part="menu-button" aria-haspopup="menu" aria-expanded="false" aria-label="View" data-tip="Show or hide panels">${icon('panels')}</button>
