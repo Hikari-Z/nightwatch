@@ -205,6 +205,9 @@ check('midday: at 88% a cycling lane gets a soft request with no deadline', [sof
 check('midday: its bell says midday and promises a reopen, not 08:00', spoolNotes('opus').map((n) => /^\[nightshift\] Midday bell: the opus lane's context is at 88%/.test(n) && /opens a fresh one right away/.test(n)), [true]);
 check('midday: a lane without middayCycle gets nothing', [midState().fable?.foldRequest ?? null, spoolNotes('fable').length], [null, 0]);
 append('s-mid-opus', usageAt(960_000));
+// The soft bell went out half an hour ago: the urgent deadline must count
+// from the escalation, not from the soft request (Fable's second read).
+{ const st0 = midState(); st0.opus.foldRequest.requestedAt -= 30 * 60_000; writeFileSync(join(mid, 'wakecycle', 'nightshift.state.json'), JSON.stringify(st0)); }
 tick(midCfg);
 const urgent = midState().opus?.foldRequest;
 check('midday: at 96% the soft request escalates to urgent, about ten minutes out', [urgent?.tier, Math.round((urgent?.deadline - Date.now()) / 60_000)], ['urgent', 10]);

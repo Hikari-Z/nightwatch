@@ -502,9 +502,15 @@ function tickWith(io) {
         laneState.refreshWake = true;
         laneState.refreshFrom = fr.sessionId; // close THIS session only
         io.saveState(st);
-      } else if (fr.deadline != null && now > fr.deadline) {
+      } else if (fr.deadline != null && now > fr.deadline
+        && !(fr.tier && inSleepWindow(m) && io.quietMs(fr.sessionId) < ORPHAN_QUIET)) {
         // A soft midday request has no deadline (null): only the agent's own
         // fold ends it. Without this guard, null compares as 0 and forces at once.
+        // An urgent midday deadline that falls inside the nightly window
+        // waits for the session to go quiet first (Fable's second read,
+        // 10/12): the agent may be writing its nightly rung, an ordinary turn
+        // with no child process for tryOrphanFold's guard to see. Any fold
+        // of the lane, nightly ones included, meets the request (above).
         const r = tryOrphanFold(io, lane, laneState, st, fr.sessionId, { deferKey: 'foldNowDeferredEmitted' });
         if (r === 'deferred' || r === 'retry') continue;
         if (r === 'done') {
@@ -1054,6 +1060,20 @@ async function rehearse() {
     check('midday-urgent', 'forced once the deadline passes', count(w, 'orphanfold:opus') === 1, w.events.join());
     w.step(3);
     check('midday-urgent', 'and reopened at once', count(w, 'wake:opus') === 1, w.events.join());
+  }
+
+  { // Scenario 19: an urgent midday deadline crossing into the nightly
+    // window waits while the agent is still working (its nightly rung is an
+    // ordinary turn), then forces once the session goes quiet.
+    const w = makeWorld(['opus']);
+    w.day = 1; w.min = 1 * 60 + 50; // 01:50, ten minutes before the bell
+    w.sessions = [{ pid: 32, sessionId: 'sess-o', lane: 'opus', quietMs: 0 }];
+    w.st.opus = { foldRequest: { sessionId: 'sess-o', requestedAt: w.io.now(), deadline: w.io.now() + 10 * 60_000, tier: 'urgent' } };
+    w.step(20); // to 02:10: deadline passed inside the window, still working
+    check('midday-night', 'no force while the agent works inside the nightly window', count(w, 'orphanfold:opus') === 0, w.events.join());
+    w.sessions[0].quietMs = 60 * 60_000; // it goes quiet without folding
+    w.step(3);
+    check('midday-night', 'forced once the session is quiet', count(w, 'orphanfold:opus') >= 1, w.events.join());
   }
 
   { // Scenario 16: the 10/6 23:16 live bug — a freshly-woken session's
