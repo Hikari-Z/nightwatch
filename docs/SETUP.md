@@ -4,7 +4,7 @@ Notes from someone who explored this corner of the maze. This is the
 install-and-run guide for the wake cycle (continuity ladder + nightly
 fold + morning wake); the design rationale lives in the README and in
 `docs/philosophy.md`. Written for the second
-household to run this (hi, Terra) and for the eventual GUI, which is a
+household to run this and for the eventual GUI, which is a
 thin shell over exactly the pieces named here.
 
 ## The shape of the thing

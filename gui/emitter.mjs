@@ -199,7 +199,7 @@ const model_opts = () => NEW_MODELS.map(([id, t]) => `<option value="${id}">${t}
 // renders host output with its own copy of this; the gallery uses the
 // doc's example.
 const PREVIEW_EXAMPLE = [
-  { verb: 'Create', what: '~/Nightwatch/terra-claude/', detail: 'the hub' },
+  { verb: 'Create', what: '~/Nightwatch/lark/', detail: 'the hub' },
   { verb: 'Write', what: 'identity.md', detail: 'from “About them” and the standard welcome' },
   { verb: 'Write', what: 'checkpoint.md', detail: 'one section, for this lane' },
   { verb: 'Create', what: 'ladder/ and memory/', detail: 'empty; they fill these from their first night' },
