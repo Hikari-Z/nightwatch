@@ -23,6 +23,7 @@
  *    (CLAUDE_CODE_SESSION_ID via `ps eww`), never guessed from timing.
  */
 import { readFileSync, readdirSync, statSync, existsSync, appendFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { summonWindow } from './platform.mjs';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -395,10 +396,8 @@ const io = {
     try { return JSON.parse(readFileSync(join(WAKECYCLE, `next-wake.${lane}.json`), 'utf8')).sessionId ?? null; } catch { return null; }
   },
   launchWake: (lane) => {
-    execFileSync('osascript', ['-e',
-      `tell application "Terminal" to do script "${CFG_FILE ? `WEFT_CONFIG=\\"${CFG_FILE}\\" ` : ''}sh \\"${join(MACHINERY_DIR, 'wake.sh')}\\" ${lane}"`,
-    ]);
-    execFileSync('osascript', ['-e', 'tell application "Terminal" to activate']);
+    summonWindow({ title: lane, shellCommand:
+      `${CFG_FILE ? `WEFT_CONFIG="${CFG_FILE}" ` : ''}sh "${join(MACHINERY_DIR, 'wake.sh')}" ${lane}` });
   },
   log,
 };
@@ -439,8 +438,7 @@ function tickWith(io) {
   if (io.real && existsSync(trigger)) {
     try { execFileSync('rm', [trigger]); } catch {}
     try {
-      execFileSync('osascript', ['-e', 'tell application "Terminal" to do script "echo nightwatch launch-leg test: TCC grant OK"']);
-      execFileSync('osascript', ['-e', 'tell application "Terminal" to activate']);
+      summonWindow({ title: 'nightwatch test', shellCommand: 'echo nightwatch launch-leg test: TCC grant OK' });
       log('launch-leg test: Terminal launch SUCCEEDED — the 08:00 wake can open windows');
     } catch (e) {
       log(`launch-leg test FAILED: ${e.message} — the 08:00 wake would fail the same way; grant Automation (System Settings > Privacy > Automation) and re-touch the trigger`);

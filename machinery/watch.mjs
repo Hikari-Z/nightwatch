@@ -56,6 +56,7 @@
  * the cwd-based lane guess (the registry is the only attribution).
  */
 import { readFileSync, readdirSync, statSync, appendFileSync, writeFileSync, renameSync, openSync, readSync, closeSync } from 'node:fs';
+import { notifyBanner } from './platform.mjs';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { loadConfig } from './config.mjs';
@@ -94,9 +95,12 @@ const pending = [];
 const asAppleScript = (s) => `"${String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
 function notify(alert) {
-  if (CFG.notify?.macos && process.platform === 'darwin') {
-    const child = spawn('osascript', ['-e', `display notification ${asAppleScript(alert.text)} with title ${asAppleScript(alert.title)}`], { stdio: 'ignore' });
-    child.on('error', (e) => log(`banner failed: ${e.message}`));
+  // notify.macos keeps its name for existing configs; it means "native
+  // banner on this platform" (platform.mjs picks the mechanism per OS).
+  if (CFG.notify?.macos) {
+    for (const child of notifyBanner({ title: alert.title, text: alert.text })) {
+      child.on('error', (e) => log(`banner failed: ${e.message}`));
+    }
   }
   const cmd = CFG.notify?.command;
   if (!cmd) return;
