@@ -170,14 +170,14 @@ ACTIVITY_TIP = {"working": "working (running inference)", "idle": "idle (session
 # The stage as a word on the card (Ra, 10/12); twin of emitter.mjs's stage().
 STATE_WORD = {
     "awake": "Awake", "belled": "Bell rung", "folding": "Folded", "sleeping": "Asleep", "waking": "Waking",
-    "orphaned": "Orphan-folded", "failed": "Needs a hand", "down": "Down",
+    "orphaned": "Orphaned", "failed": "Needs you", "down": "Down",
 }
 STAGE_TIP = {
     "cycling": "Midday fold: folding at its own seam, then reopening right away",
     "refreshing": "Closed, folding, and reopening now",
     "rung": "Rung written; the fold is next",
 }
-STAGE_WORD = {"cycling": "Cycling", "refreshing": "Refreshing", "rung": "Rung written"}
+STAGE_WORD = {"cycling": "Cycling", "refreshing": "Reopening", "rung": "Rung's in"}
 def stage(L):
     fr = L.get("foldRequest") or {}
     alive = L["state"] in ("awake", "belled", "folding")
@@ -269,13 +269,19 @@ def fold_request(L):
     # A pending Fold now, narrated on the card; the countdown ticks in the runtime.
     fr = L.get("foldRequest")
     if not fr: return ""
+    what = "Midday fold" if fr.get("tier") else "Force fold"
     if fr["phase"] == "requested":
+        # A soft midday request (Ra, 10/12) has no deadline: no countdown, no force.
+        if not fr.get("deadline"):
+            return (f'<li data-part="fold-request" data-phase="requested" data-tip="Midday fold: {esc(lane_name(L))} folds at its own seam, then reopens right away">{icon("fold")}'
+                    f'<span>Midday fold · at its own seam</span></li>')
         from datetime import datetime
         p = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))
         mins = max(0, int((p(fr["deadline"]) - p(NOW)).total_seconds() // 60))
-        return (f'<li data-part="fold-request" data-phase="requested" data-tip="Force fold: if {esc(lane_name(L))} hasn\'t folded by then, it\'s folded for it">{icon("fold")}'
-                f'<span>Bell rung · forcing in </span><time data-part="countdown" datetime="{esc(fr["deadline"])}">{mins}m</time></li>')
-    return (f'<li data-part="fold-request" data-phase="refreshing" data-tip="Force fold: folded; the window closes and a fresh one opens">{icon("fold")}'
+        lead = "Midday fold" if fr.get("tier") else "Bell rung"
+        return (f'<li data-part="fold-request" data-phase="requested" data-tip="{what}: if {esc(lane_name(L))} hasn\'t folded by then, it\'s folded for it">{icon("fold")}'
+                f'<span>{lead} · forcing in </span><time data-part="countdown" datetime="{esc(fr["deadline"])}">{mins}m</time></li>')
+    return (f'<li data-part="fold-request" data-phase="refreshing" data-tip="{what}: folded; the window closes and a fresh one opens">{icon("fold")}'
             f'<span>Folded{" (forced)" if fr.get("forced") else ""} · waking fresh</span></li>')
 
 # Persona rows (Ra, 10/7): the lanes are grouped by persona, each group with
@@ -483,7 +489,7 @@ def lane_card(L, now=None):
         for ic, act, lbl, ok, tip in actions(L))
     ctx_disp = f'~{k(L["ctx"])} of {k(window)}' if L["ctx"] else f'— of {k(window)}'
     return f'''
-    <article class="nw-lane" data-lane="{L["id"]}"{f' data-name="{esc(L["name"])}"' if L.get("name") else ""} data-state="{L["state"]}" data-open="{open_}"{" data-alarm=\"true\"" if alarm else ""}{" data-switchboard=\"true\"" if L["role"]=="switchboard" else ""}{f' data-activity="{L["activity"]}"' if L.get("activity") else ""}>
+    <article class="nw-lane" data-lane="{L["id"]}"{f' data-name="{esc(L["name"])}"' if L.get("name") else ""} data-state="{L["state"]}" data-open="{open_}"{f' data-stage="{stage(L)}"' if stage(L) else ""}{" data-alarm=\"true\"" if alarm else ""}{" data-switchboard=\"true\"" if L["role"]=="switchboard" else ""}{f' data-activity="{L["activity"]}"' if L.get("activity") else ""}>
       <header data-action="toggle-lane">
         <span data-part="avatar" data-model="{L["modelId"]}" aria-hidden="true">{esc(lane_name(L)[0].upper())}</span>
         <div data-part="ident"><h2 data-part="name">{esc(lane_name(L))}</h2>
