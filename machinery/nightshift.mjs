@@ -230,6 +230,24 @@ function transcriptQuietMs(sessionId) {
 // config, and THE BELLED SESSION'S id (--session explicit — an env-inherited
 // id in an unregistered panel would hit sleep.mjs's cross-hub guard with a
 // false refusal; the daemon is the one party that knows the right id).
+// The midday cycle's bells (Ra, 10/12) are this same ritual with their own
+// framing: why it rang (the context level), that the lane reopens at once
+// instead of at the wake hour, and for the urgent tier, the deadline.
+function middayNote(lane, sessionId, midday) {
+  const cmd = `${CFG_FILE ? `WEFT_CONFIG="${CFG_FILE}" ` : ''}node "${join(MACHINERY_DIR, 'sleep.mjs')}" --lane ${lane} --session ${sessionId}`;
+  const level = `the ${lane} lane's context is at ${Math.round(midday.pct * 100)}% of its window`;
+  const urgent = midday.tier === 'urgent';
+  return (
+    `[nightshift] ${urgent ? 'URGENT midday bell' : 'Midday bell'}: ${level}. ` +
+    (urgent
+      ? `Fold within ${midday.deadlineMin} minutes: if no fold has happened by then, the nightshift closes this window, folds it, and opens a fresh one, which writes the rung. `
+      : `There's no deadline: finish what you're doing and fold at your next seam. `) +
+    `The ritual, IN THIS ORDER — write a rung for what you've done since your last one (format and laws: templates/rung.md beside this machinery), run \`${cmd}\`, THEN rewrite the checkpoint. ` +
+    `Running the fold is your "ready" signal: the nightshift closes this window once the session goes quiet and opens a fresh one right away, not at ${WAKE_HOUR}. ` +
+    `Close any background shells or watchers you left running first.`
+  );
+}
+
 function ritualNote(lane, sessionId) {
   return (
     `[nightshift] Sleep-bell for the ${lane} lane: it's the end of the day. When the current work ` +
@@ -244,7 +262,7 @@ function ritualNote(lane, sessionId) {
   );
 }
 
-function ringBell(lane, sessionId, source) {
+function ringBell(lane, sessionId, source, midday) {
   // The bell is a SPOOL NOTE into THE LANE'S OWN spool (spool/<lane>/),
   // heard by that session's own watcher (bell-watcher.sh; the SessionStart
   // hook tells every lane session to arm it). Ra's ruling, 10/8: no lane's
@@ -254,13 +272,13 @@ function ringBell(lane, sessionId, source) {
   // 10/8 twice). The switchboard still routes Discord; it no longer stands
   // between a lane and Nightwatch. A lane with no watcher armed still has
   // the orphan fold as its floor.
-  const ritual = ritualNote(lane, sessionId);
+  const ritual = midday ? middayNote(lane, sessionId, midday) : ritualNote(lane, sessionId);
   try {
     const spool = join(CFG.paths.spool, lane);
     mkdirSync(spool, { recursive: true });
     writeFileSync(join(spool, `${Date.now()}-bell-${lane}.txt`), ritual + '\n');
     log(`rang the sleep-bell for ${lane} (session ${sessionId.slice(0, 8)}…) — spool note written`);
-    emitEvent('bell-rung', { lane, session: sessionId, ...(source ? { source } : {}) });
+    emitEvent('bell-rung', { lane, session: sessionId, ...(source ? { source } : {}), ...(midday ? { midday: midday.tier } : {}) });
   } catch (e) {
     log(`bell spool write FAILED for ${lane}: ${e.message}`);
     emitEvent('bell-failed', { lane, error: e.message, alarm: true });
@@ -484,7 +502,9 @@ function tickWith(io) {
         laneState.refreshWake = true;
         laneState.refreshFrom = fr.sessionId; // close THIS session only
         io.saveState(st);
-      } else if (now > fr.deadline) {
+      } else if (fr.deadline != null && now > fr.deadline) {
+        // A soft midday request has no deadline (null): only the agent's own
+        // fold ends it. Without this guard, null compares as 0 and forces at once.
         const r = tryOrphanFold(io, lane, laneState, st, fr.sessionId, { deferKey: 'foldNowDeferredEmitted' });
         if (r === 'deferred' || r === 'retry') continue;
         if (r === 'done') {
@@ -1215,6 +1235,75 @@ if (process.argv.includes('--fold-now')) {
     ? `fold requested for ${lane}: the session can't take a prompt ("Prompt is too long"), so no bell — folding from the last session that ran, then a fresh wake`
     : now_ ? `force fold for ${lane}: closing, folding and reopening within a minute; the fresh window writes the rung`
     : `fold requested for ${lane}: bell rung, forcing in ${withinMin}m if unfolded`);
+  process.exit(0);
+}
+
+// --midday <lane> soft|urgent [--pct <0..1>]: the midday cycle (Ra, 10/12),
+// fired by the context watch for a lane whose config has middayCycle. Soft:
+// the bell with no deadline; the agent's own fold is its ready signal, and
+// the refresh reopens it at once. Urgent: the bell again with a deadline of
+// urgentMin, after which the daemon forces the fold (Fold now's path) before
+// the window caps. A soft request already pending is escalated, not doubled;
+// a request at the same tier or above is left as it is. The nightly window
+// is the nightly bell's, so midday bells don't ring inside it.
+if (process.argv.includes('--midday')) {
+  const at = process.argv.indexOf('--midday');
+  const lane = process.argv[at + 1];
+  const tier = process.argv[at + 2];
+  const mc = CFG.lanes?.[lane]?.middayCycle;
+  if (!lane || !(lane in (CFG.lanes ?? {}))) {
+    console.error(`--midday: unknown agent "${lane ?? ''}" (known: ${Object.keys(CFG.lanes ?? {}).join(', ')})`);
+    process.exit(2);
+  }
+  if (tier !== 'soft' && tier !== 'urgent') {
+    console.error('--midday: the tier is soft or urgent');
+    process.exit(2);
+  }
+  if (!mc) {
+    console.error(`--midday: agent ${lane} has no middayCycle in its config, so it doesn't cycle at midday`);
+    process.exit(5);
+  }
+  const nowMin_ = nowMin();
+  if (inSleepWindow(nowMin_)) {
+    console.log(`--midday: inside the nightly window; the nightly bell covers ${lane}`);
+    process.exit(0);
+  }
+  const live = liveSessions().map((x) => ({ ...x, lane: laneOf(x.sessionId) })).filter((x) => x.lane === lane);
+  if (!live.length) {
+    console.error(`--midday: agent ${lane} is not awake — nothing to fold`);
+    process.exit(3);
+  }
+  let st = {};
+  try { st = JSON.parse(readFileSync(STATE_FILE, 'utf8')); } catch {}
+  const pending = st[lane]?.foldRequest;
+  if (pending && (pending.tier === 'urgent' || tier === 'soft' || pending.tier === undefined)) {
+    // Fold now's own request, or one at this tier or above, already stands.
+    console.log(`--midday: a fold request for ${lane} already stands (${pending.tier ?? 'fold now'}); left as it is`);
+    process.exit(0);
+  }
+  const pctIdx = process.argv.indexOf('--pct');
+  const pct = pctIdx !== -1 ? Number(process.argv[pctIdx + 1]) : (tier === 'urgent' ? mc.urgentPct ?? 0.95 : mc.softPct ?? 0.85);
+  const urgentMin = mc.urgentMin ?? 10;
+  LIVE_EMIT = true;
+  const sid = live[0].sessionId;
+  const dead = cannotAnswer(join(PROJECT_DIR, `${sid}.jsonl`));
+  if (dead) {
+    log(`DEAD WAKE: ${lane} session ${sid.slice(0, 8)}… can't take a prompt — the midday ${tier} bell forces at once`);
+    emitEvent('dead-wake', { lane, session: sid, alarm: true });
+  } else {
+    ringBell(lane, sid, 'midday', { tier, pct, deadlineMin: urgentMin });
+  }
+  const deadline = dead ? Date.now() : tier === 'urgent' ? Date.now() + urgentMin * 60_000 : null;
+  (st[lane] ??= {}).foldRequest = {
+    sessionId: sid,
+    requestedAt: pending?.requestedAt ?? Date.now(), // an escalation keeps the soft bell's start
+    deadline,
+    tier,
+  };
+  writeFileSync(STATE_FILE, JSON.stringify(st, null, 2));
+  emitEvent('fold-requested', { lane, session: sid, tier, deadline: deadline == null ? null : new Date(deadline).toISOString() });
+  log(`midday ${tier} bell for ${lane} at ${Math.round(pct * 100)}%${deadline == null ? ', no deadline' : `, forcing in ${urgentMin}m if unfolded`}`);
+  console.log(`midday ${tier} bell for ${lane}${deadline == null ? ': no deadline; it folds at its own seam and reopens at once' : `: forcing in ${urgentMin}m if unfolded`}`);
   process.exit(0);
 }
 
