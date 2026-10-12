@@ -147,7 +147,29 @@ const STATE_TIP = {
 };
 // The working/idle light (10/7), from Claude Code's own session status.
 const ACTIVITY_TIP = { working: 'working (running inference)', idle: 'idle (session open)', waiting: 'needs you (a permission prompt or a question)' };
-const state_tip = (L) => STATE_TIP[L.state] + (L.activity && ACTIVITY_TIP[L.activity] ? ` · ${ACTIVITY_TIP[L.activity]}` : '');
+// The stage as a word on the card (Ra, 10/12): data-state stays the
+// machinery's vocabulary for the skins; the word and its tip are the
+// keeper's. A midday fold reads Cycling from bell to reopen; a Force fold
+// reads Refreshing; a bell whose rung has landed reads Rung written.
+const STATE_WORD = {
+  awake: 'Awake', belled: 'Bell rung', folding: 'Folded', sleeping: 'Asleep', waking: 'Waking',
+  orphaned: 'Orphan-folded', failed: 'Needs a hand', down: 'Down',
+};
+const STAGE_TIP = {
+  cycling: 'Midday fold: folding at its own seam, then reopening right away',
+  refreshing: 'Closed, folding, and reopening now',
+  rung: 'Rung written; the fold is next',
+};
+function stage(L) {
+  const alive = L.state === 'awake' || L.state === 'belled' || L.state === 'folding';
+  if (L.foldRequest?.tier && (alive || L.foldRequest.phase === 'refreshing')) return 'cycling';
+  if (L.foldRequest?.phase === 'refreshing') return 'refreshing';
+  if (L.state === 'belled' && L.rungWritten) return 'rung';
+  return null;
+}
+const STAGE_WORD = { cycling: 'Cycling', refreshing: 'Refreshing', rung: 'Rung written' };
+const state_word = (L) => { const s = stage(L); return s ? STAGE_WORD[s] : (STATE_WORD[L.state] ?? L.state); };
+const state_tip = (L) => { const s = stage(L); return (s ? STAGE_TIP[s] : STATE_TIP[L.state]) + (L.activity && ACTIVITY_TIP[L.activity] ? ` · ${ACTIVITY_TIP[L.activity]}` : ''); };
 
 // Which actions make sense in which state. A disabled button stays in the DOM
 // (skins lay out a stable toolbar) with aria-disabled and a tip saying why.
@@ -452,7 +474,7 @@ function lane_card(L, nowIso = null, tz = undefined) {
         <div data-part="ident"><h2 data-part="name">${esc(laneName(L))}</h2>
         <span data-part="model" data-tip="${esc(L.modelId)}">${esc(L.model)}</span></div>
         <span data-part="glance" aria-hidden="true"><span data-part="mini" data-level="${level}" style="--fill: ${pyFixed(Math.min(fill, 1.2), 3)}; --target: ${pyFixed(Math.min(tgt, 1), 3)}"></span>${glance_next}</span>
-        <span data-part="state" data-tip="${esc(state_tip(L))}"><i aria-hidden="true"></i><span>${esc(L.state)}</span></span>
+        <span data-part="state" data-tip="${esc(state_tip(L))}"><i aria-hidden="true"></i><span>${esc(state_word(L))}</span></span>
         <button type="button" data-part="toggle" aria-expanded="${open_}" aria-controls="body-${L.id}" aria-label="${open_ === 'true' ? 'Collapse' : 'Expand'} ${esc(laneName(L))}">${icon('chev')}</button>
       </header>
       <div data-part="body" id="body-${L.id}">

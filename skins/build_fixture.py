@@ -167,9 +167,34 @@ STATE_TIP = {
 }
 # The working/idle light (10/7), from Claude Code's own session status.
 ACTIVITY_TIP = {"working": "working (running inference)", "idle": "idle (session open)", "waiting": "needs you (a permission prompt or a question)"}
+# The stage as a word on the card (Ra, 10/12); twin of emitter.mjs's stage().
+STATE_WORD = {
+    "awake": "Awake", "belled": "Bell rung", "folding": "Folded", "sleeping": "Asleep", "waking": "Waking",
+    "orphaned": "Orphan-folded", "failed": "Needs a hand", "down": "Down",
+}
+STAGE_TIP = {
+    "cycling": "Midday fold: folding at its own seam, then reopening right away",
+    "refreshing": "Closed, folding, and reopening now",
+    "rung": "Rung written; the fold is next",
+}
+STAGE_WORD = {"cycling": "Cycling", "refreshing": "Refreshing", "rung": "Rung written"}
+def stage(L):
+    fr = L.get("foldRequest") or {}
+    alive = L["state"] in ("awake", "belled", "folding")
+    if fr.get("tier") and (alive or fr.get("phase") == "refreshing"):
+        return "cycling"
+    if fr.get("phase") == "refreshing":
+        return "refreshing"
+    if L["state"] == "belled" and L.get("rungWritten"):
+        return "rung"
+    return None
+def state_word(L):
+    s = stage(L)
+    return STAGE_WORD[s] if s else STATE_WORD.get(L["state"], L["state"])
 def state_tip(L):
     a = L.get("activity")
-    return STATE_TIP[L["state"]] + (f" · {ACTIVITY_TIP[a]}" if a in ACTIVITY_TIP else "")
+    s = stage(L)
+    return (STAGE_TIP[s] if s else STATE_TIP[L["state"]]) + (f" · {ACTIVITY_TIP[a]}" if a in ACTIVITY_TIP else "")
 
 # Which actions make sense in which state. A disabled button stays in the DOM
 # (skins lay out a stable toolbar) with aria-disabled and a tip saying why.
@@ -464,7 +489,7 @@ def lane_card(L, now=None):
         <div data-part="ident"><h2 data-part="name">{esc(lane_name(L))}</h2>
         <span data-part="model" data-tip="{esc(L["modelId"])}">{esc(L["model"])}</span></div>
         <span data-part="glance" aria-hidden="true"><span data-part="mini" data-level="{level}" style="--fill: {min(fill,1.2):.3f}; --target: {min(tgt,1):.3f}"></span>{glance_next}</span>
-        <span data-part="state" data-tip="{esc(state_tip(L))}"><i aria-hidden="true"></i><span>{esc(L["state"])}</span></span>
+        <span data-part="state" data-tip="{esc(state_tip(L))}"><i aria-hidden="true"></i><span>{esc(state_word(L))}</span></span>
         <button type="button" data-part="toggle" aria-expanded="{open_}" aria-controls="body-{L["id"]}" aria-label="{"Collapse" if open_=="true" else "Expand"} {esc(lane_name(L))}">{icon("chev")}</button>
       </header>
       <div data-part="body" id="body-{L["id"]}">
