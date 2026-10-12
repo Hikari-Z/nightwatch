@@ -216,7 +216,7 @@ def model_opts():
 # the app shows exactly what apply will do (contract v0.10). The gallery
 # uses the doc's example.
 PREVIEW_EXAMPLE = [
-    dict(verb='Create', what='~/Nightwatch/terra-claude/', detail='the hub'),
+    dict(verb='Create', what='~/Nightwatch/lark/', detail='the hub'),
     dict(verb='Write', what='identity.md', detail='from “About them” and the standard welcome'),
     dict(verb='Write', what='checkpoint.md', detail='one section, for this lane'),
     dict(verb='Create', what='ladder/ and memory/', detail='empty; they fill these from their first night'),

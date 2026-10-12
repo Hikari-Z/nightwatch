@@ -48,17 +48,17 @@ await click('.nw-app > .nw-controls [data-action="setup"]'); await tick();
 await check('Set up opens on "who"', `[document.querySelector('${D}').dataset.open, ${step}]`, ['true', 'who']);
 await click(`${D} [data-action="setup-next"]`); await tick();
 await check('empty "about" is refused in plain words, nothing sent', `[${step}, ${err}, __calls.length]`, ['who', 'Write a paragraph about who they are. It seeds their identity file.', 0]);
-await set(F('about'), 'A careful reader who likes trains.'); await set(F('person'), 'Terra');
+await set(F('about'), 'A careful reader who likes trains.'); await set(F('person'), 'Sam');
 await click(`${D} [data-action="setup-next"]`); await tick();
-await check('a folder with no name is refused', err, 'Give their folder a name, for example ~/Nightwatch/terra-claude.');
-await set(F('hub'), '~/Nightwatch/terra-claude');
+await check('a folder with no name is refused', err, 'Give their folder a name, for example ~/Nightwatch/lark.');
+await set(F('hub'), '~/Nightwatch/moth');
 await click(`${D} [data-action="setup-next"]`); await tick();
 await check('then "their nights"', `[${step}, ${err}]`, ['nights', null]);
 await click(`${D} [data-action="setup-next"]`); await tick();
 await check('Next asks the dry run, then shows its steps', `[${step}, document.querySelectorAll('${D} [data-part="steps"] li').length, document.querySelector('${D} [data-part="steps"] li code').textContent]`,
-  ['preview', 2, '~/Nightwatch/terra-claude']);
+  ['preview', 2, '~/Nightwatch/moth']);
 await check('the spec: unnamed persona, pinned model, global schedule, fresh main lane', lastCall('plan'),
-  { op: 'init', hub: '~/Nightwatch/terra-claude', persona: { name: null, about: 'A careful reader who likes trains.', person: 'Terra' },
+  { op: 'init', hub: '~/Nightwatch/moth', persona: { name: null, about: 'A careful reader who likes trains.', person: 'Sam' },
     schedule: { sleep: '02:00', wake: '08:00' },
     lane: { id: 'main', model: 'claude-fable-5-1', targetTokens: 250000, armed: true, schedule: null, firstSession: { kind: 'fresh' } }, import: null });
 await check('only the preview step shows Create', `[...document.querySelectorAll('${D} [data-part="buttons"] button')].filter(b=>getComputedStyle(b).display!=='none').map(b=>b.dataset.action)`, ['setup-back', 'create-persona']);
@@ -82,7 +82,7 @@ await check('found list, missing items honest', `[...document.querySelectorAll('
   [['ok', 'identity.md'], ['ok', 'name.txt: Lark'], ['ok', 'memory/: 3 files'], ['missing', 'No ladder rungs']]);
 await click(`${D} [data-action="setup-next"]`); await tick();
 await check('then "who", pre-filled', `[${step}, document.querySelector('${F('name')}').value, document.querySelector('${F('about')}').value]`, ['who', 'Lark', 'I am Lark.']);
-await set(F('person'), 'Terra'); await set(F('hub'), '~/Nightwatch/lark');
+await set(F('person'), 'Sam'); await set(F('hub'), '~/Nightwatch/lark');
 await click(`${D} [data-action="setup-next"]`); await tick(); await click(`${D} [data-action="setup-next"]`); await tick();
 await check('the spec carries the import and their own name', `(s=>[s.import, s.persona.name])(${lastCall('plan')})`, [{ from: '/good' }, 'Lark']);
 await ev(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`); await tick();

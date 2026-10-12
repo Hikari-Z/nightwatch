@@ -360,7 +360,7 @@ export function assemble(cfg, io, range = '8h') {
   };
 
   // The persona this config describes: its configured name, else its folder's
-  // name (never a hardcoded "Weft"; Terra's persona is someone else).
+  // name (never a hardcoded "Weft"; another house's persona is someone else).
   const folder = String(cfg.weftRoot ?? '').replace(/\/+$/, '').split('/').pop() || 'persona';
   const personaName = cfg.persona?.name ?? folder.charAt(0).toUpperCase() + folder.slice(1);
   const persona = { id: cfg.persona?.id ?? folder.toLowerCase(), name: personaName };

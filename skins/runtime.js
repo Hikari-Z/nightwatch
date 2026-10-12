@@ -747,7 +747,7 @@
     if (!val(dlg, 'about')) return 'Write a paragraph about who they are. It seeds their identity file.';
     if (!val(dlg, 'person')) return 'Add your name, so they know who you are.';
     const hub = val(dlg, 'hub');
-    if (!hub || /\/$/.test(hub)) return 'Give their folder a name, for example ~/Nightwatch/terra-claude.';
+    if (!hub || /\/$/.test(hub)) return 'Give their folder a name, for example ~/Nightwatch/lark.';
     return null;
   }
   function checkNights(dlg) {

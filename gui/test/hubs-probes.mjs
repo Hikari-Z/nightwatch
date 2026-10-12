@@ -36,7 +36,7 @@ check('registry: junk, a missing file, relative paths read as nothing', J([readR
 check("config file: Set up's name first, else our legacy hub's",
   J([configFileFor('/h/', (p) => p === '/h/nightwatch.config.json'), configFileFor('/h', () => false)]) === J(['/h/nightwatch.config.json', '/h/weft.config.json']), '');
 
-// ---- one hub: nothing changes but the persona learning its hub (Terra's install, every fixture)
+// ---- one hub: nothing changes but the persona learning its hub (a single-persona install, every fixture)
 {
   const one = snap({ persona: 'Weft', lanes: ['fable', 'opus'] });
   const m = mergeSnapshots([{ root: '/hub/weft', snap: one }]);

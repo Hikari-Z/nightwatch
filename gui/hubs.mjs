@@ -10,7 +10,7 @@
 //   {"version": 1, "hubs": [{"path": "/Users/…/origin/weft"}, {"path": "/Users/…/Nightwatch/lark"}]}
 //
 // Lane keys. A lane is (hub, lane). With one hub its id is the lane's own
-// name, unchanged, so a single-persona install (Terra's) and every fixture
+// name, unchanged, so a single-persona install and every fixture
 // look exactly as before. With several, every new persona's first lane is
 // "main", so ids are qualified as "<persona>/<lane>" (unique in the page),
 // the bare name rides along as `name` (cards show it), and `label` names
