@@ -18,7 +18,10 @@ and the page shows the generic backdrop instead of the chosen skin.
   Port 7352 (7350 = the old fleet panel). Launcher:
   `gui/launch-nightwatch.sh` + ~/Applications/Nightwatch.app
   (osacompile applet, ad-hoc signed, dedicated Chrome profile).
-- `gui/handoff/live-sample.html`: a fresh served page for autopsy.
+- `gui/handoff/live-sample.html`: a fresh served page for autopsy. (It turned
+  out to be the viewer's 500 page, not a rendered page: a ZeroDivisionError
+  on an all-zero activity series. Removed before the repo went public; it
+  held local paths and nothing the wiring needed.)
 
 ## My one-root-cause hypothesis (unverified — your call)
 

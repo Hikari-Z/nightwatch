@@ -99,7 +99,11 @@ export const DEFAULTS = {
     armedFile: 'wakecycle/nightshift.armed',
     stateFile: 'wakecycle/nightshift.state.json',
     spool: 'doorbell/spool',
-    transcripts: join(HOME, '.claude', 'projects', '-Users-stellarashtra-origin'),
+    // Claude Code keeps a project's transcripts in a folder named after the
+    // folder it runs in, with every character but letters, digits and '-'
+    // made a '-' (/Users/you/origin → -Users-you-origin). Derived from the
+    // workdir default below, so the two can't drift apart.
+    transcripts: join(HOME, '.claude', 'projects', join(HOME, 'origin').replace(/[^A-Za-z0-9-]/g, '-')),
     // The hub's own copy of every folded session (archive.mjs): the ladder's
     // jsonl: sources, kept where Claude Code's cleanup can't reach them.
     transcriptArchive: 'archive/transcripts',
