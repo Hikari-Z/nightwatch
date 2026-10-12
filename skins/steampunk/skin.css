@@ -27,8 +27,8 @@
   --bw-display: linear-gradient(#1f1829, #2b2238);
   --bw-display-edge: inset 0 1px 4px rgb(0 0 0 / .7), 0 1px 0 rgb(255 236 200 / .45), 0 0 0 1px #3c2a18;
   /* satin bronze: Metal's stretched-noise brush over a warm sheen */
-  --mt-brush: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.004 0.9' numOctaves='2' seed='11'/%3E%3CfeColorMatrix values='0 0 0 0 .18  0 0 0 0 .09  0 0 0 0 0  0 0 0 .2 0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23b)'/%3E%3C/svg%3E");
-  --mt-sheen: linear-gradient(180deg, #dcc199 0%, #c4a072 42%, #a9845a 100%);
+  --mt-brush: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.002 1.6' numOctaves='2' seed='11'/%3E%3CfeColorMatrix values='0 0 0 0 .12  0 0 0 0 .06  0 0 0 0 0  0 0 0 .13 0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23b)'/%3E%3C/svg%3E");
+  --mt-sheen: linear-gradient(180deg, #ecd3a2 0%, #cfa064 20%, #b98a4f 46%, #a5773f 74%, #c0915a 100%);
   --mt-metal: var(--mt-brush), var(--mt-sheen);
   --mt-emboss: 0 1px 0 rgb(255 238 208 / .7);
   --mt-bevel: inset 0 1px 0 rgb(255 240 214 / .75), inset 0 -1px 0 rgb(60 30 0 / .25);
@@ -954,3 +954,15 @@ body { color: var(--nw-ink); font-size: 12px; }
 /* the persona title in the body's serif, engraved */
 .nw-app .nw-persona [data-part="persona-name"] { font: 700 12.5px/1 var(--nw-font); letter-spacing: .16em; }
 .nw-head [data-part="title"] { font: 600 13px var(--nw-font); letter-spacing: .2em; text-transform: uppercase; }
+
+/* Round 1b. The lit accent stays scarce: the default context meter and the throughput bars are lit readouts, so
+   they glow amethyst (high and over keep amber and red); active log filters are amethyst-inked engravings, not
+   filled tabs; a pressed deck toggle is a silver key with an amethyst glyph, so Wake all is the one amethyst dome. */
+.nw-lane :is([data-part="context"]:not([data-level="high"]):not([data-level="over"]), [data-part="throughput"]) { --meter: var(--bw-amethyst); }
+.nw-log [data-part="filters"] label:has(input:checked) { color: var(--bw-amethyst-deep); text-shadow: var(--mt-emboss);
+  background: rgb(143 116 201 / .12); box-shadow: inset 0 0 0 1px rgb(106 80 166 / .55), inset 0 -2px 0 var(--bw-amethyst); }
+.nw-controls :is([data-part="toggles"], [data-part="transport"]) button[aria-pressed="true"] { --g: var(--bw-silver); color: var(--bw-amethyst-deep);
+  text-shadow: none; filter: drop-shadow(0 0 3px rgb(143 116 201 / .45)); }
+/* the collapsed card's mini meter is the same lit readout; the alarm card keeps its red, warmed to sit on bronze */
+.nw-lane [data-part="mini"]:not([data-level="high"]):not([data-level="over"])::before { --g: var(--bw-amethyst); }
+.nw-alert { background: linear-gradient(#f7ddd0, #ebbfa9) !important; }
