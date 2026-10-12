@@ -29,6 +29,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { daemonJob, registryDir, summonWindowArgv } from './platform.mjs';
 
 const WC = dirname(fileURLToPath(import.meta.url));
 const HOME = homedir();
@@ -186,11 +187,13 @@ function initSteps(spec) {
       // The LaunchAgents copy is written in the Start step, AFTER the hub
       // lands — a Move failure must not leave a job pointing at nothing
       // (opus's read, 6c). This step stages the hub-internal copy only.
-      writeFileSync(join(part, 'wakecycle', `house.nightwatch.${slug}.plist`), plistFor(slug, hub));
+      const staged = daemonJob({ slug, hub, machineryDir: WC });
+      writeFileSync(join(part, 'wakecycle', staged.fileName), staged.content);
       // The stuck/spiral watch's job, staged the same way. Its hub copy is
-      // named so the app's daemon lookup (house.nightwatch.*.plist) can't
-      // mistake it for the nightshift's.
-      writeFileSync(join(part, 'wakecycle', 'watch-job.plist'), plistFor(slug, hub, 'watch'));
+      // named so the app's daemon lookup (house.nightwatch.*) can't mistake
+      // it for the nightshift's.
+      const stagedWatch = daemonJob({ slug, hub, jobKind: 'watch', machineryDir: WC });
+      writeFileSync(join(part, 'wakecycle', `watch-job${stagedWatch.fileName.slice(stagedWatch.fileName.lastIndexOf('.'))}`), stagedWatch.content);
     },
   });
   steps.push({
@@ -201,11 +204,12 @@ function initSteps(spec) {
     steps.push({
       verb: 'Start', what: 'the nightshift, with a test', detail: 'loads the background job and proves it can open a Terminal window (the one permission prompt)',
       run() {
-        mkdirSync(join(HOME, 'Library', 'LaunchAgents'), { recursive: true });
-        writeFileSync(join(HOME, 'Library', 'LaunchAgents', `house.nightwatch.${slug}.plist`), plistFor(slug, hub));
+        const job = daemonJob({ slug, hub, machineryDir: WC });
+        mkdirSync(job.installDir, { recursive: true });
+        writeFileSync(join(job.installDir, job.fileName), job.content);
         // The machine registry: every hub the app shows. Append
         // idempotently, deduped by real path (multi-persona plan, 10/7).
-        const regDir = join(HOME, 'Library', 'Application Support', 'Nightwatch');
+        const regDir = registryDir();
         mkdirSync(regDir, { recursive: true });
         const regPath = join(regDir, 'hubs.json');
         let reg = { version: 1, hubs: [] };
@@ -216,9 +220,10 @@ function initSteps(spec) {
           writeFileSync(regPath + '.tmp', JSON.stringify(reg, null, 2) + '\n');
           renameSync(regPath + '.tmp', regPath);
         }
-        execFileSync('launchctl', ['load', join(HOME, 'Library', 'LaunchAgents', `house.nightwatch.${slug}.plist`)]);
-        writeFileSync(join(HOME, 'Library', 'LaunchAgents', `house.nightwatch.${slug}.watch.plist`), plistFor(slug, hub, 'watch'));
-        execFileSync('launchctl', ['load', join(HOME, 'Library', 'LaunchAgents', `house.nightwatch.${slug}.watch.plist`)]);
+        for (const { bin, args } of job.loadArgv(join(job.installDir, job.fileName))) execFileSync(bin, args);
+        const watchJob = daemonJob({ slug, hub, jobKind: 'watch', machineryDir: WC });
+        writeFileSync(join(watchJob.installDir, watchJob.fileName), watchJob.content);
+        for (const { bin, args } of watchJob.loadArgv(join(watchJob.installDir, watchJob.fileName))) execFileSync(bin, args);
         launchLegTest(hub);
       },
     });
@@ -313,32 +318,18 @@ function firstSessionStep(spec, hub, ctx, noActivate, cpPath, laneWc) {
     verb: 'Open', what: `a Terminal window running Claude Code (${spec.lane.model})`, detail: 'a fresh session: their first wake',
     run() {
       if (noActivate) return;
-      // Quoted for paths with spaces (opus's read, 6d); the inner quotes are
-      // escaped for AppleScript's string literal.
+      // Quoted for paths with spaces (opus's read, 6d); platform.mjs owns
+      // each platform's escaping of the raw command.
       const cfgPathForWake = spec.op === 'init' ? join(hub, 'nightwatch.config.json') : (process.env.WEFT_CONFIG ?? '');
-      const sh = `WEFT_CONFIG=\\"${cfgPathForWake}\\" sh \\"${join(WC, 'wake.sh')}\\" ${spec.lane.id}`;
-      spawn('osascript', ['-e', `tell app "Terminal" to do script "${sh}"`], { detached: true, stdio: 'ignore' }).unref();
+      const sh = `WEFT_CONFIG="${cfgPathForWake}" sh "${join(WC, 'wake.sh')}" ${spec.lane.id}`;
+      for (const { bin, args } of summonWindowArgv({ title: spec.lane.id, shellCommand: sh, activate: false })) {
+        spawn(bin, args, { detached: true, stdio: 'ignore' }).unref();
+      }
     },
   };
   return { prep, launch };
 }
 
-// kind 'watch': the stuck/spiral watch's job (watch.mjs) instead of the nightshift's.
-function plistFor(slug, hub, kind = 'nightshift') {
-  const node = process.execPath;
-  const label = kind === 'watch' ? `house.nightwatch.${slug}.watch` : `house.nightwatch.${slug}`;
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>${label}</string>
-  <key>ProgramArguments</key><array><string>${node}</string><string>${join(WC, kind === 'watch' ? 'watch.mjs' : 'nightshift.mjs')}</string></array>
-  <key>EnvironmentVariables</key><dict><key>WEFT_CONFIG</key><string>${join(hub, 'nightwatch.config.json')}</string></dict>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>ThrottleInterval</key><integer>300</integer>
-  <key>StandardErrorPath</key><string>${join(hub, kind === 'watch' ? 'watch.err' : 'nightshift.err')}</string>
-</dict></plist>\n`;
-}
 
 function launchLegTest(hub) {
   // The TCC trap: the nightshift can only open Terminal windows once its
