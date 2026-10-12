@@ -21,6 +21,7 @@
  */
 import { execFileSync as realExecFileSync, spawn as realSpawn } from 'node:child_process';
 import { release, homedir } from 'node:os';
+import { writeFileSync as realWriteFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** 'darwin' | 'wsl' | 'linux'. WSL is Linux wearing a Windows coat: the
@@ -46,7 +47,7 @@ const asAppleScriptText = (s) => String(s).replace(/\\/g, '\\\\').replace(/"/g, 
  * calls byte-identically for the same wire command; WSL asks Windows
  * Terminal through interop; Linux asks the Debian alternatives name.
  */
-export function summonWindowArgv({ title, shellCommand, activate = true }, kind = platformKind()) {
+export function summonWindowArgv({ title, shellCommand, activate = true, scriptFile }, kind = platformKind()) {
   if (kind === 'darwin') {
     return [
       { bin: 'osascript', args: ['-e', `tell application "Terminal" to do script "${asAppleScriptText(shellCommand)}"`] },
@@ -58,9 +59,14 @@ export function summonWindowArgv({ title, shellCommand, activate = true }, kind 
   if (kind === 'wsl') {
     // wt.exe opens a new tab; `wsl.exe --cd ~` re-enters the default distro.
     // The window carries the lane's name so a human can tell wakes apart.
+    // The command crosses WSL interop → a Windows command line → wt (which
+    // reads ';' itself) → wsl.exe → sh, so a caller that can write a file
+    // passes scriptFile and the whole chain carries one path instead — the
+    // second read's quoting-moot suggestion. summonWindow writes it.
+    const run = scriptFile ? `sh "${scriptFile}"` : String(shellCommand);
     return [{
       bin: 'wt.exe',
-      args: ['nt', '--title', String(title ?? 'nightwatch'), 'wsl.exe', '--cd', '~', '--', 'sh', '-lc', String(shellCommand)],
+      args: ['nt', '--title', String(title ?? 'nightwatch'), 'wsl.exe', '--cd', '~', '--', 'sh', '-lc', run],
     }];
   }
   return [{ bin: 'x-terminal-emulator', args: ['-e', 'sh', '-lc', String(shellCommand)] }];
@@ -68,9 +74,16 @@ export function summonWindowArgv({ title, shellCommand, activate = true }, kind 
 
 /** Open the window now. Throws when the platform's terminal refuses — the
  *  callers (wake retry, launch-leg test) own that loudness. */
-export function summonWindow({ title, shellCommand }, io = {}) {
+export function summonWindow({ title, shellCommand, activate, scriptDir }, io = {}) {
   const exec = io.execFileSync ?? realExecFileSync;
-  for (const { bin, args } of summonWindowArgv({ title, shellCommand }, io.kind)) exec(bin, args);
+  const kind = io.kind ?? platformKind();
+  let scriptFile;
+  if (kind === 'wsl' && scriptDir) {
+    // One path crosses the interop chain instead of a quoted command.
+    scriptFile = join(scriptDir, 'wake-summon.sh');
+    (io.writeFileSync ?? realWriteFileSync)(scriptFile, `#!/bin/sh\n${shellCommand}\n`, { mode: 0o755 });
+  }
+  for (const { bin, args } of summonWindowArgv({ title, shellCommand, activate, scriptFile }, kind)) exec(bin, args);
 }
 
 /**
@@ -108,15 +121,19 @@ export function daemonJob({ slug, hub, jobKind = 'nightshift', node = process.ex
   }
   // systemd user unit, WSL and Linux alike. Restart=always mirrors KeepAlive;
   // RestartSec mirrors ThrottleInterval's spirit without launchd's backoff.
+  // systemd splits ExecStart on whitespace and reads % as a specifier, so
+  // every path is quoted and % doubled (the second read's finding: a hub
+  // named "My Agent" must not break its own unit).
+  const sysd = (p) => String(p).replace(/%/g, '%%');
   const content = `[Unit]
 Description=Nightwatch ${jobKind} for ${slug}
 
 [Service]
-ExecStart=${node} ${join(machineryDir, script)}
-Environment=WEFT_CONFIG=${cfg}
+ExecStart="${sysd(node)}" "${sysd(join(machineryDir, script))}"
+Environment="WEFT_CONFIG=${sysd(cfg)}"
 Restart=always
 RestartSec=300
-StandardError=append:${errFile}
+StandardError=append:${sysd(errFile)}
 
 [Install]
 WantedBy=default.target
@@ -156,11 +173,13 @@ export function bannerArgv({ title, text }, kind = platformKind()) {
     }];
   }
   if (kind === 'wsl') {
-    // msg.exe is the no-dependency fallback that reaches the Windows session
-    // from WSL; it shows a dialog, not a toast, but needs nothing installed.
-    // wsl-notify-send, when present, is nicer — the install recipe offers it.
-    return [{ bin: 'powershell.exe', args: ['-NoProfile', '-Command',
-      `New-BurntToastNotification -Text "${String(title).replace(/"/g, '`"')}", "${String(text).replace(/"/g, '`"')}" 2>$null; if (-not $?) { msg.exe * "${String(title).replace(/"/g, '')}: ${String(text).replace(/"/g, '')}" }`] }];
+    // msg.exe, as its own argv: no shell, no PowerShell, nothing that parses
+    // the text. Banner text carries transcript-derived data (a classifier
+    // denial quotes the denied command), so it must never cross a string any
+    // interpreter reads — the second read's injection finding, 10/12. msg
+    // shows a dialog rather than a toast; wsl-notify-send, when installed,
+    // is the nicer upgrade and the install recipe offers it.
+    return [{ bin: 'msg.exe', args: ['*', `${String(title)}: ${String(text)}`] }];
   }
   return [{ bin: 'notify-send', args: [String(title), String(text)] }];
 }

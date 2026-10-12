@@ -92,7 +92,6 @@ const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 // ── notifier ─────────────────────────────────────────────────────────────
 const pending = [];
-const asAppleScript = (s) => `"${String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
 function notify(alert) {
   // notify.macos keeps its name for existing configs; it means "native

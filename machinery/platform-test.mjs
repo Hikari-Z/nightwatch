@@ -36,6 +36,18 @@ check('darwin summon is the two live osascript calls, byte-identical on the wire
     { bin: 'osascript', args: ['-e', 'tell application "Terminal" to activate'] },
   ]);
 });
+check('a wsl summon with a scriptFile carries one path, quoting moot', () =>
+  assert.equal(summonWindowArgv({ title: 'm', shellCommand: 'x', scriptFile: '/h/wake-summon.sh' }, 'wsl')[0].args.at(-1), 'sh "/h/wake-summon.sh"'));
+check('summonWindow on wsl writes the script before summoning', () => {
+  const writes = [], execs = [];
+  summonWindow({ title: 'm', shellCommand: 'echo hi', scriptDir: '/h' }, {
+    kind: 'wsl',
+    writeFileSync: (p, c, o) => writes.push([p, c, o.mode]),
+    execFileSync: (bin, args) => execs.push(args.at(-1)),
+  });
+  assert.deepEqual(writes, [['/h/wake-summon.sh', '#!/bin/sh\necho hi\n', 0o755]]);
+  assert.deepEqual(execs, ['sh "/h/wake-summon.sh"']);
+});
 check('wsl summon carries the RAW command, unescaped', () =>
   assert.equal(summonWindowArgv({ title: 'm', shellCommand: RAW }, 'wsl')[0].args.at(-1), RAW));
 check('wsl summon goes through Windows Terminal interop with the lane title', () => {
@@ -84,12 +96,14 @@ check('darwin watch job differs only where it should', () => {
   assert.ok(job.content.includes('/h/watch.err'));
   assert.ok(job.content.includes('<string>house.nightwatch.weft.watch</string>'));
 });
-check('wsl job is a systemd user unit, enabled now', () => {
+check('wsl job is a systemd user unit, enabled now, quoted against spaces and %', () => {
   const job = daemonJob(J, 'wsl');
   assert.equal(job.fileName, 'house.nightwatch.weft.service');
   assert.equal(job.installDir, join(homedir(), '.config', 'systemd', 'user'));
-  assert.ok(job.content.includes('ExecStart=/usr/local/bin/node /m/nightshift.mjs'));
-  assert.ok(job.content.includes('Environment=WEFT_CONFIG=/h/nightwatch.config.json'));
+  assert.ok(job.content.includes('ExecStart="/usr/local/bin/node" "/m/nightshift.mjs"'));
+  assert.ok(job.content.includes('Environment="WEFT_CONFIG=/h/nightwatch.config.json"'));
+  const spaced = daemonJob({ ...J, hub: '/h/My Agent 100%' }, 'wsl');
+  assert.ok(spaced.content.includes('Environment="WEFT_CONFIG=/h/My Agent 100%%/nightwatch.config.json"'));
   assert.ok(job.content.includes('Restart=always'));
   assert.deepEqual(job.loadArgv(), [
     { bin: 'systemctl', args: ['--user', 'daemon-reload'] },
@@ -116,8 +130,10 @@ check('darwin banner is the live osascript line with escaping', () => {
   assert.deepEqual(argv, [{ bin: 'osascript', args: ['-e',
     'display notification "he said \\"hi\\" \\\\ there" with title "Nightwatch"'] }]);
 });
-check('wsl banner goes through powershell interop', () =>
-  assert.equal(bannerArgv({ title: 't', text: 'x' }, 'wsl')[0].bin, 'powershell.exe'));
+check('wsl banner is msg.exe as plain argv — nothing parses the text', () => {
+  const argv = bannerArgv({ title: 't', text: 'ran $(Remove-Item C:\\x) and $env:USERNAME "quoted"' }, 'wsl');
+  assert.deepEqual(argv, [{ bin: 'msg.exe', args: ['*', 't: ran $(Remove-Item C:\\x) and $env:USERNAME "quoted"'] }]);
+});
 check('linux banner is notify-send', () =>
   assert.deepEqual(bannerArgv({ title: 't', text: 'x' }, 'linux'), [{ bin: 'notify-send', args: ['t', 'x'] }]));
 check('notifyBanner spawns with stdio ignored through injected io', () => {
