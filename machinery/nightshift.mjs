@@ -1029,6 +1029,33 @@ async function rehearse() {
     check('fold-now-forced', 'refresh wake follows the force', count(w, 'wake:fable') === 1, w.events.join());
   }
 
+  { // Scenario 17: midday SOFT (Ra, 10/12) — no deadline, never forced;
+    // the agent's own fold is its ready signal, then the refresh reopens it.
+    const w = makeWorld(['opus']);
+    w.sessions = [{ pid: 30, sessionId: 'sess-o', lane: 'opus', quietMs: 10 * 60_000 }];
+    w.st.opus = { foldRequest: { sessionId: 'sess-o', requestedAt: w.io.now(), deadline: null, tier: 'soft' } };
+    w.step(3 * 60); // three hours, unfolded
+    check('midday-soft', 'a soft request is never forced, however long it waits', count(w, 'orphanfold:') === 0, w.events.join());
+    check('midday-soft', 'and it still stands', w.st.opus.foldRequest?.tier === 'soft', JSON.stringify(w.st.opus));
+    w.nextWake.opus = w.io.now(); // the agent folds at its own seam
+    w.step(1);
+    check('midday-soft', 'its own fold meets it and arms the refresh', !w.st.opus.foldRequest && w.st.opus.refreshWake === true, JSON.stringify(w.st.opus));
+    w.step(3);
+    check('midday-soft', 'closed and reopened at once, not at the wake hour', count(w, 'close:opus') === 1 && count(w, 'wake:opus') === 1, w.events.join());
+  }
+
+  { // Scenario 18: midday URGENT — the deadline passes; forced before the cap.
+    const w = makeWorld(['opus']);
+    w.sessions = [{ pid: 31, sessionId: 'sess-o', lane: 'opus', quietMs: 10 * 60_000 }];
+    w.st.opus = { foldRequest: { sessionId: 'sess-o', requestedAt: w.io.now(), deadline: w.io.now() + 10 * 60_000, tier: 'urgent' } };
+    w.step(8);
+    check('midday-urgent', 'holds inside its ten minutes', count(w, 'orphanfold:') === 0, w.events.join());
+    w.step(4);
+    check('midday-urgent', 'forced once the deadline passes', count(w, 'orphanfold:opus') === 1, w.events.join());
+    w.step(3);
+    check('midday-urgent', 'and reopened at once', count(w, 'wake:opus') === 1, w.events.join());
+  }
+
   { // Scenario 16: the 10/6 23:16 live bug — a freshly-woken session's
     // resumed tail reads hours-quiet, and the refresh close must NOT eat
     // it. Forced path, then the new session is made to read quiet
