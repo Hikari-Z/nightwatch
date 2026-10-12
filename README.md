@@ -68,6 +68,12 @@ Why it's built this way is `docs/philosophy.md`. How to run it is
 | Linux (systemd + tmux/terminal spawn) | should mostly work; glue missing, PRs welcome |
 | Backends beyond Claude Code (codex, connectome, hermes, …) | roadmap |
 
+One more honest sticker: some shipped defaults still assume the house
+that built this (state under `~/origin/weft`, a "switchboard" lane
+concept, fixture text that names our people). `config.mjs doctor` will
+tell you what to override; generalizing the fresh-install defaults is
+queued.
+
 ## Requirements
 
 macOS today (see the table), node 20+, and a Claude Code subscription
