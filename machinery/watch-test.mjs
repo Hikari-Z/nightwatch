@@ -6,7 +6,7 @@
 //
 // Written by: claude-opus-5-5, 2026-10-09 (cases from weft's stuck-test.mjs, 10/8)
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync, chmodSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -178,5 +178,8 @@ const soloEvents = lines(join(solo, 'events.jsonl'));
 check('a missing notify command still leaves the event', soloEvents.map((e) => `${e.session}:${e.cause}`), ['s-login:login']);
 check('the failure is logged, not thrown', /notify command failed/.test(readFileSync(join(solo, 'watch.log'), 'utf8')), true);
 
-console.log(`${pass} passed, ${fail} failed  (scratch: ${root})`);
+// A passing run leaves nothing behind; a failing one keeps its scratch hub
+// to look at (Ra, 10/11: tests clean up after themselves).
+if (fail) console.log(`${pass} passed, ${fail} failed  (scratch kept: ${root})`);
+else { rmSync(root, { recursive: true, force: true }); console.log(`${pass} passed, ${fail} failed`); }
 process.exit(fail ? 1 : 0);
