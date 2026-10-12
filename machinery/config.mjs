@@ -100,6 +100,9 @@ export const DEFAULTS = {
     stateFile: 'wakecycle/nightshift.state.json',
     spool: 'doorbell/spool',
     transcripts: join(HOME, '.claude', 'projects', '-Users-stellarashtra-origin'),
+    // The hub's own copy of every folded session (archive.mjs): the ladder's
+    // jsonl: sources, kept where Claude Code's cleanup can't reach them.
+    transcriptArchive: 'archive/transcripts',
     claudeBin: join(HOME, '.local', 'bin', 'claude'),
     // The directory sessions launch in (their project dir). Our hub works
     // from ~/origin; a fresh Nightwatch hub works from the hub itself.
@@ -372,7 +375,7 @@ if (invokedDirectly) {
   } else if (cmd === 'doctor') {
     let bad = 0;
     for (const [k, p] of Object.entries(cfg.paths)) {
-      if (k === 'sockDir' || k === 'bridgeSockDir' || k === 'events') continue; // runtime-created
+      if (k === 'sockDir' || k === 'bridgeSockDir' || k === 'events' || k === 'transcriptArchive') continue; // runtime-created
       const ok = existsSync(p);
       console.log(`${ok ? 'ok     ' : 'MISSING'} paths.${k} = ${p}`);
       if (!ok) bad++;

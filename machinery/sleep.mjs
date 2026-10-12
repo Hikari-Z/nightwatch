@@ -21,6 +21,7 @@ import { join } from 'node:path';
 
 import { loadConfig, laneConfig } from './config.mjs';
 import { resolveFoldSource } from './deadwake.mjs';
+import { archiveTranscript, catchUpArchive } from './archive.mjs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // Code finds code beside ITSELF (the machinery dir), never in the hub's
@@ -269,6 +270,25 @@ try {
   process.exit(1);
 }
 
+// ── Archive the session that folded, in the hub's own state ──
+// After the trim, so only a real fold archives, and after the dead-wake
+// resolution above, so it's the session that RAN, not the one belled. See
+// archive.mjs for why: the ladder's jsonl: sources must outlive Claude
+// Code's cleanup. The catch-up first brings earlier folds' copies up to
+// date (their sessions kept writing after their folds). A failure here is
+// loud and recorded in the fold row, but never fails the fold: the tail is
+// already written, and tomorrow's wake needs it more than the archive.
+let archived;
+try {
+  const paths = { transcripts: CFG.paths.transcripts, archive: CFG.paths.transcriptArchive };
+  for (const c of catchUpArchive(paths)) if (c.sid !== sessionId) console.error(`archive: caught up ${c.sid.slice(0, 8)} (${c.bytes} bytes)`);
+  archived = archiveTranscript(sessionId, paths);
+  if (archived.keptAside) console.error(`archive: the transcript of ${sessionId.slice(0, 8)} is SMALLER than its archived copy; kept the old copy aside as ${archived.keptAside}`);
+} catch (e) {
+  archived = { error: e.message };
+  console.error(`ARCHIVE FAILED for session ${sessionId.slice(0, 8)}: ${e.message} — the fold continues; its raw transcript is not in ${CFG.paths.transcriptArchive}.`);
+}
+
 // Linn's preamble: the first thing the ladder knows about itself is what it
 // was built on top of.
 const preamble = [
@@ -317,6 +337,7 @@ appendFileSync(
     ...(trimOut.overshoot ? { overshoot: trimOut.overshoot } : {}),
     tail: trimOut.newSessionId,
     ...(deadWake.skipped.length ? { deadWakesSkipped: deadWake.skipped } : {}),
+    ...(archived.error ? { archiveError: archived.error } : { archived: archived.path }),
   }) + '\n',
 );
 // Event-stream twin (GUI phase 1): the planned fold happens HERE, not in the
