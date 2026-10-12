@@ -231,7 +231,7 @@ const STUCK = {
   offline: (a) => ['Can\'t reach the API', `${cap(a)} can't reach the API (connection or DNS). The session retries when the network is back; worth a look if this machine is offline.`],
   slept: (a) => ['Cut off by sleep', `${cap(a)} was cut off mid-reply when this machine went to sleep. A short message in the agent's window resumes the session.`],
   classifier: (a, d) => ['Classifier denials', `${cap(a)} has had ${d.count} tool calls denied by the auto mode classifier in ${mins(W.classifierWindowMs)} minutes${d.reason ? ` (latest: ${d.reason})` : ''}. The session may be circling something; worth a look.`],
-  context: (a, d) => ['Context filling up', `${cap(a)} is at ${Math.round(d.ratio * 100)}% of the context window (${Math.round(d.tokens / 1000)}k of ${Math.round(d.window / 1000)}k). Worth a fold at the next good stopping point.`],
+  context: (a, d) => [d.cycleStalled ? 'Midday fold stalled' : 'Context filling up', `${cap(a)} is at ${Math.round(d.ratio * 100)}% of the context window (${Math.round(d.tokens / 1000)}k of ${Math.round(d.window / 1000)}k). ${d.cycleStalled ? 'The midday cycle hasn\'t folded them: its bell was refused or its deadline passed. Force fold folds them now.' : 'Worth a fold at the next good stopping point.'}`],
   waiting: (a, d) => ['Waiting on you', `${cap(a)} has been waiting for ${mins(d.forMs)} minutes (a permission prompt or a question in the agent's window).`],
 };
 
@@ -283,9 +283,33 @@ function stuckCauses(now, s, entries) {
     const { ratio, tokens, window } = ctx;
     const k = `${s.sid}\u0000context`;
     const was = k in state.active;
-    if (ratio >= W.contextWarn || (was && ratio >= W.contextRearm)) causes.set('context', { key: was ? state.active[k] : String(now), detail: { ratio, tokens, window } });
+    const cycling = !!lanesNow()?.[s.lane]?.middayCycle;
+    if ((ratio >= W.contextWarn || (was && ratio >= W.contextRearm)) && !(cycling && cycleCovers(now, s, ratio))) {
+      causes.set('context', { key: was ? state.active[k] : String(now), detail: { ratio, tokens, window, ...(cycling ? { cycleStalled: true } : {}) } });
+    }
   }
   return causes;
+}
+
+// For a lane on the midday cycle (Ra, 10/12) the context alarm means "the
+// cycle isn't handling it": at softPct the bell already asked for a fold, so
+// the old alarm would only repeat it (it fired 125ms beside the first live
+// bell). It stays quiet while this session's midday request stands: a soft
+// one covers up to urgentPct, above that only the urgent one does, and that
+// stops covering once its deadline is MIDDAY_GRACE_MS past (the nightshift
+// forces at the deadline on its minute tick, so a live session after that
+// means the force didn't land). A bell the nightshift refused (state.midday
+// unset) covers nothing. Lanes without the cycle keep the alarm as it was:
+// there the person is the only responder.
+const MIDDAY_GRACE_MS = 5 * 60_000;
+function cycleCovers(now, s, ratio) {
+  const mc = lanesNow()?.[s.lane]?.middayCycle;
+  if (!mc || !state.midday[s.sid]) return false;
+  let fr;
+  try { fr = JSON.parse(readFileSync(P.stateFile, 'utf8'))?.[s.lane]?.foldRequest; } catch { return false; }
+  if (!fr || fr.sessionId !== s.sid) return false;
+  if (ratio >= (mc.urgentPct ?? 0.95) && fr.tier !== 'urgent') return false;
+  return fr.deadline == null || now <= fr.deadline + MIDDAY_GRACE_MS;
 }
 
 /** The newest real reply's input side against the lane's window, or null. */
@@ -448,10 +472,14 @@ function check() {
       seen.add(k);
       if (state.active[k] === key) continue; // this episode is already told
       state.active[k] = key;
-      log(`STUCK: ${s.lane} (${s.sid.slice(0, 8)}…) — ${cause}`);
-      emit({ at: new Date(now).toISOString(), kind: 'stuck', cause, lane: s.lane, session: s.sid, ...detail, alarm: true });
+      // A full-ish context is a forecast, not a diagnosis (Ra, 10/12): it's
+      // told as context-high, a warning, and only a stalled midday cycle makes
+      // it an alarm. "Stuck" stays for the causes where the agent can't act.
+      const kind = cause === 'context' ? 'context-high' : 'stuck';
+      log(`${kind === 'stuck' ? 'STUCK' : 'CONTEXT HIGH'}: ${s.lane} (${s.sid.slice(0, 8)}…) — ${cause}`);
+      emit({ at: new Date(now).toISOString(), kind, cause, lane: s.lane, session: s.sid, ...detail, alarm: kind === 'stuck' || !!detail.cycleStalled });
       const [title, text] = STUCK[cause](agentLabel(s.lane), detail);
-      notify({ kind: 'stuck', cause, lane: s.lane, session: s.sid, title, text });
+      notify({ kind, cause, lane: s.lane, session: s.sid, title, text });
     }
   }
   // An episode that ended while its session lives gets a clear; a gone
@@ -463,8 +491,9 @@ function check() {
     delete state.active[k];
     if (!liveSids.has(sid)) continue;
     const lane = live.find((s) => s.sid === sid)?.lane;
-    log(`STUCK cleared: ${lane} (${sid.slice(0, 8)}…) — ${cause}`);
-    emit({ at: new Date(now).toISOString(), kind: 'stuck-cleared', cause, lane, session: sid });
+    const kind = cause === 'context' ? 'context-high-cleared' : 'stuck-cleared';
+    log(`${cause === 'context' ? 'CONTEXT HIGH' : 'STUCK'} cleared: ${lane} (${sid.slice(0, 8)}…) — ${cause}`);
+    emit({ at: new Date(now).toISOString(), kind, cause, lane, session: sid });
   }
   for (const sid of Object.keys(state.spiral)) if (!liveSids.has(sid)) delete state.spiral[sid];
   for (const sid of Object.keys(state.midday)) if (!liveSids.has(sid)) delete state.midday[sid];
