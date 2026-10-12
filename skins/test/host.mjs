@@ -27,7 +27,7 @@ const ev = async (expr) => {
   return r.result?.result?.value;
 };
 await send('Page.enable'); await send('Runtime.enable');
-await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__calls=[];window.__fail=false;window.NW_SHELL='tauri';window.NW_HOST={can:a=>['wake','hide-window','sleep','remove-lane','retry-wake','open-terminal','wake-all','sleep-all','restore-checkpoint','restart-daemon','save-lane','save-settings','toggle-nightly','emergency-fold','fold-all','run-doctor'].includes(a),act:(a,o)=>{__calls.push([a,o.lane]);(window.__data??=[]).push(o.data??null);return __fail?Promise.reject('scout is already awake'):Promise.resolve(a==='run-doctor'?'ok config | WOULD nothing':(a==='sleep'?'Rang ':'Waking ')+o.lane)}};window.__errs=[];addEventListener('error',e=>__errs.push(e.message+' @'+e.lineno));addEventListener('unhandledrejection',e=>__errs.push('rej '+e.reason))` });
+await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__calls=[];window.__fail=false;window.NW_SHELL='tauri';window.NW_HOST={can:a=>['wake','hide-window','sleep','remove-lane','retry-wake','open-terminal','wake-all','sleep-all','restore-checkpoint','restart-daemon','save-lane','save-settings','toggle-nightly','toggle-midday','emergency-fold','fold-all','run-doctor'].includes(a),act:(a,o)=>{__calls.push([a,o.lane]);(window.__data??=[]).push(o.data??null);return __fail?Promise.reject('scout is already awake'):Promise.resolve(a==='run-doctor'?'ok config | WOULD nothing':(a==='sleep'?'Rang ':'Waking ')+o.lane)}};window.__errs=[];addEventListener('error',e=>__errs.push(e.message+' @'+e.lineno));addEventListener('unhandledrejection',e=>__errs.push('rej '+e.reason))` });
 const go = async (url) => { await send('Page.navigate', { url }); await sleep(1500); };
 
 let pass = 0, fail = 0;
@@ -63,6 +63,16 @@ await click(SL);
 await check('sleep asks first', `document.querySelector('.nw-app > .nw-confirm [data-part="title"]').textContent.trim()`, "Put opus to sleep?");
 await click('.nw-app > .nw-confirm [data-part="yes"]'); await sleep(200);
 await check('sleep acts with the lane', 'window.__calls', [['sleep', 'opus']]);
+// The midday cycle's switch (Ra, 10/12): off in the fixture; a click asks,
+// then acts with on: true for that lane.
+const MD = '.nw-app > .nw-lanes .nw-lane[data-lane="opus"] [data-action="toggle-midday"]';
+await ev('window.__calls=[]; window.__data=[]');
+await check('midday switch reads off', `document.querySelector('${MD}').getAttribute('aria-pressed')`, 'false');
+await click(MD);
+await check('midday switch asks first', `document.querySelector('.nw-app > .nw-confirm [data-part="title"]').textContent.trim()`, "Turn on opus's midday cycle?");
+await check('nothing acted before yes (midday)', 'window.__calls', []);
+await click('.nw-app > .nw-confirm [data-part="yes"]'); await sleep(200);
+await check('midday switch acts with the lane and on: true', '[window.__calls, window.__data.at(-1)]', [[['toggle-midday', 'opus']], { on: true }]);
 const L = '.nw-app > .nw-lanes .nw-lane[data-lane="scout"]';
 await ev('window.__calls=[]');
 await click(`${L} [data-action="lane-settings"]`);

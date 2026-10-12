@@ -550,6 +550,8 @@ export function assemble(cfg, io, range = '8h') {
       persona, runtime: lc.runtime ?? 'claude-code',
       ...(foldRequest ? { foldRequest } : {}),
       ...(rungWritten ? { rungWritten: true } : {}),
+      // The midday cycle's switch (Ra, 10/12): the lane's setting, or none.
+      ...(cfg.lanes?.[id]?.middayCycle ? { midday: cfg.lanes[id].middayCycle } : {}),
       ...(activity ? { activity } : {}),
       schedule: lc.schedule ? { inherit: false, sleep: lc.schedule.sleep, wake: lc.schedule.wake }
         : { inherit: true, sleep: cfg.schedule.sleep, wake: cfg.schedule.wake },

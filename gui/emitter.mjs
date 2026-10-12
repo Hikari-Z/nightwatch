@@ -122,6 +122,7 @@ export const ICONS = {
   play: '<path d="M7 5l12 7-12 7z"/>',
   pause: '<path d="M8 5v14M16 5v14"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>',
+  cycle: '<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v4h-4"/><circle cx="12" cy="12" r="2.5"/>',
   repeat: '<path d="M17 3l3 3-3 3"/><path d="M4 11V9a3 3 0 0 1 3-3h13"/><path d="M7 21l-3-3 3-3"/><path d="M20 13v2a3 3 0 0 1-3 3H4"/>',
   palette: '<path d="M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.3A4.7 4.7 0 0 0 21 9.7C21 5.9 17 3 12 3z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7" r="1"/>',
   folder: '<path d="M3 7h6l2 2h10v9H3z"/>',
@@ -448,6 +449,14 @@ function lane_card(L, nowIso = null, tz = undefined) {
       : `<li data-part="next" data-action="arm-lane" aria-pressed="true" data-tip="Next ${what}: ${hmLocal(dt, tz)}. Click to disarm.">${icon('bell')}` +
       `<time datetime="${dt}" data-part="countdown">${esc(disp)}</time></li>`;
   }
+  // The midday cycle's switch (Ra, 10/12), beside the bell: lit while the
+  // lane folds itself midday (soft bell, then urgent), a click turns it off
+  // or on. Off, the lane only folds at its nightly bell.
+  const mc = L.midday;
+  const pct = (v, d) => Math.round((v ?? d) * 100);
+  const mid = mc
+    ? `<li data-part="midday" data-action="toggle-midday" aria-pressed="true" data-tip="Midday cycle on: a soft bell at ${pct(mc.softPct, 0.85)}% of the window, an urgent one at ${pct(mc.urgentPct, 0.95)}%. Click to turn off.">${icon('cycle')}</li>`
+    : `<li data-part="midday" data-action="toggle-midday" aria-pressed="false" data-tip="Midday cycle off: it folds only at the nightly bell. Click to turn on.">${icon('cycle')}</li>`;
   // Accordion. The viewer opens any lane with an un-acked alarm: trouble
   // never hides behind a closed card.
   const open_ = (L.open || alarm) ? 'true' : 'false';
@@ -488,7 +497,7 @@ function lane_card(L, nowIso = null, tz = undefined) {
       <div data-part="body" id="body-${L.id}">
       <ul data-part="facts">
         ${uptime_li(L, nowIso)}
-        ${nxt}
+        ${nxt}${mid}
         ${nowIso ? fold_request(L, nowIso) : ''}
       </ul>
       <div data-part="meters">
