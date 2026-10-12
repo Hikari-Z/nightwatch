@@ -479,7 +479,10 @@ function check() {
       log(`${kind === 'stuck' ? 'STUCK' : 'CONTEXT HIGH'}: ${s.lane} (${s.sid.slice(0, 8)}…) — ${cause}`);
       emit({ at: new Date(now).toISOString(), kind, cause, lane: s.lane, session: s.sid, ...detail, alarm: kind === 'stuck' || !!detail.cycleStalled });
       const [title, text] = STUCK[cause](agentLabel(s.lane), detail);
-      notify({ kind, cause, lane: s.lane, session: s.sid, title, text });
+      // Red interrupts; amber doesn't (Ra, 10/12). The one amber that still
+      // notifies is watch.notifyAmberUncycled's, transitional by name.
+      const amber = kind === 'context-high' && !detail.cycleStalled;
+      if (!amber || (W.notifyAmberUncycled && !lanesNow()?.[s.lane]?.middayCycle)) notify({ kind, cause, lane: s.lane, session: s.sid, title, text });
     }
   }
   // An episode that ended while its session lives gets a clear; a gone

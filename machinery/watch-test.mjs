@@ -211,6 +211,16 @@ check('midday: a lane without middayCycle gets nothing', [midState().fable?.fold
 const midCtx = (sid) => lines(join(mid, 'events.jsonl')).filter((e) => e.kind === 'context-high' && e.session === sid);
 check('midday: the soft bell rings and NO context warning goes with it', midCtx('s-mid-opus').length, 0);
 check('midday: a lane without the cycle still gets the context-high warning at 88%', midCtx('s-mid-fable').length, 1);
+// Amber doesn't notify (Ra, 10/12), except the transitional leak: an
+// uncycled lane's keeper is still its responder. With the knob off, the
+// warning is still on the card and in the stream, and nothing is sent.
+const sentFor = (sid) => lines(SENT).filter((m) => m.session === sid || (m.env ?? {}).NIGHTWATCH_ALERT_SESSION === sid);
+check('amber: the uncycled lane leaks its warning as a notification (transitional, default on)', sentFor('s-mid-fable').length, 1);
+writeFileSync(join(mid, 'quiet.config.json'), JSON.stringify({ ...JSON.parse(readFileSync(midCfg, 'utf8')), watch: { notifyAmberUncycled: false } }));
+session('s-mid-quiet'); write('s-mid-quiet', [usageAt(880_000)]);
+writeFileSync(join(mid, 'wakecycle', 'lane.s-mid-quiet'), JSON.stringify({ lane: 'fable' }));
+tick(join(mid, 'quiet.config.json'));
+check('amber: with notifyAmberUncycled off, the warning is told and nothing is sent', [midCtx('s-mid-quiet').length, sentFor('s-mid-quiet').length], [1, 0]);
 append('s-mid-opus', usageAt(960_000));
 // The soft bell went out half an hour ago: the urgent deadline must count
 // from the escalation, not from the soft request (Fable's second read).
