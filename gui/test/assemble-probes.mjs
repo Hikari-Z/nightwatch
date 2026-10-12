@@ -196,7 +196,15 @@ const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
   const urgent = alertOf([stuck('context', 30, { ratio: 0.9 }), stuck('login', 20)]);
   check('the most urgent open cause wins (login over context)', urgent?.kind === 'stuck-login', JSON.stringify(urgent?.kind));
   const cleared = alertOf([stuck('context', 30, { ratio: 0.9 }), stuck('login', 20), { at: iso(5 * 60e3), kind: 'stuck-cleared', cause: 'login', lane: 'fable' }]);
-  check('clearing the urgent one shows the next (context)', cleared?.kind === 'stuck-context' && /90%/.test(cleared.cause), JSON.stringify(cleared));
+  check('clearing the urgent one shows the next (context, from an older stuck/context stream)', cleared?.kind === 'context-high' && /90%/.test(cleared.cause), JSON.stringify(cleared));
+  // context-high (10/12): the warning's own kind opens and closes the same card;
+  // a stalled midday cycle says so in the title.
+  const hi = (agoMin, extra = {}) => ({ at: iso(agoMin * 60e3), kind: 'context-high', cause: 'context', lane: 'fable', session: 'sess-x', ratio: 0.88, alarm: false, ...extra });
+  const warn = alertOf([hi(20)]);
+  check('a context-high event raises the "Context high" card', warn?.kind === 'context-high' && warn.title === 'Context high', JSON.stringify(warn));
+  check('its clear ends it', alertOf([hi(20), { at: iso(5 * 60e3), kind: 'context-high-cleared', cause: 'context', lane: 'fable' }]) == null, 'card stayed');
+  const stalled = alertOf([hi(10, { ratio: 0.96, cycleStalled: true, alarm: true })]);
+  check('a stalled midday cycle titles the card so', stalled?.title === 'Midday fold stalled' && /midday cycle hasn't folded them/.test(stalled.cause), JSON.stringify(stalled));
   const spiralFirst = alertOf([stuck('offline', 20), { at: iso(10 * 60e3), kind: 'spiral-alarm', lane: 'fable', session: 'sess-x', errors: 3, windowMin: 60, alarm: true }]);
   check('a spiral outranks a stuck card', spiralFirst?.kind === 'spiral-alarm', JSON.stringify(spiralFirst?.kind));
   const tips = assemble(cfg, io(ev([stuck('offline', 20), { at: iso(5 * 60e3), kind: 'stuck-cleared', cause: 'offline', lane: 'fable' }])), '8h').LOG.flatMap(([, rows]) => rows.map((r) => JSON.stringify(r)));

@@ -81,13 +81,15 @@ tick();
 const first = lines(EVENTS);
 check('each stuck state is told once, under its own agent', stuckBy(first), {
   's-login': 'fable:login', 's-usage': 'fable:usage-limit', 's-offline': 'opus:offline', 's-slept': 'opus:slept',
-  's-classifier': 'fable:classifier', 's-context': 'opus:context', 's-waiting': 'fable:waiting', 's-toolong': 'opus:too-long',
+  's-classifier': 'fable:classifier', 's-waiting': 'fable:waiting', 's-toolong': 'opus:too-long',
 });
+// A full-ish context is a warning, not a stuck state (Ra, 10/12).
+check('85% context is told as context-high, a warning and not an alarm', first.filter((e) => e.kind === 'context-high').map((e) => [e.session, e.alarm]), [['s-context', false]]);
 check('a spiral (two errors, newest still one) is a spiral-alarm', first.filter((e) => e.kind === 'spiral-alarm').map((e) => `${e.session}:${e.errors}`), ['s-spiral:2']);
 check('one plain error, a recovered session and a fine one say nothing', ['s-plainapi', 's-recovered', 's-fine'].filter((s) => first.some((e) => e.session === s)), []);
 check("another hub's agent and a folded session say nothing", ['s-otherhub', 's-folded'].filter((s) => first.some((e) => e.session === s)), []);
 check('a too-full session is a stuck state, not a spiral', first.filter((e) => e.kind === 'spiral-alarm' && e.session === 's-toolong').length, 0);
-check('every alert event is an alarm', first.every((e) => e.alarm === true), true);
+check('every stuck and spiral event is an alarm', first.filter((e) => e.kind !== 'context-high').every((e) => e.alarm === true), true);
 check('the classifier event counts the denials', first.find((e) => e.cause === 'classifier')?.count, 2);
 check('the context event carries the ratio', Math.round((first.find((e) => e.cause === 'context')?.ratio ?? 0) * 100), 88);
 
@@ -110,7 +112,7 @@ tick();
 check('recovery clears offline, once, and sends nothing', [lines(EVENTS).slice(first.length).map((e) => `${e.kind}:${e.cause}`), lines(SENT).length - sent.length], [['stuck-cleared:offline'], 0]);
 append('s-context', ctx(500_000));
 tick();
-check('context clears only below the re-arm line', lines(EVENTS).slice(first.length + 1).map((e) => `${e.kind}:${e.cause}`), ['stuck-cleared:context']);
+check('context clears only below the re-arm line', lines(EVENTS).slice(first.length + 1).map((e) => `${e.kind}:${e.cause}`), ['context-high-cleared:context']);
 
 // Wake cost (fix 4): the session woken from a fold's tail, found by the
 // tail's entries in its transcript, records its first real request beside
@@ -204,6 +206,11 @@ const soft = midState().opus?.foldRequest;
 check('midday: at 88% a cycling lane gets a soft request with no deadline', [soft?.tier, soft?.deadline, soft?.sessionId], ['soft', null, 's-mid-opus']);
 check('midday: its bell says midday and promises a reopen, not 08:00', spoolNotes('opus').map((n) => /^\[nightshift\] Midday bell: the opus lane's context is at 88%/.test(n) && /opens a fresh one right away/.test(n)), [true]);
 check('midday: a lane without middayCycle gets nothing', [midState().fable?.foldRequest ?? null, spoolNotes('fable').length], [null, 0]);
+// The context alarm beside the bell (Ra, 10/12): on a cycling lane the soft
+// bell is the response, so no alarm; a lane without the cycle keeps it.
+const midCtx = (sid) => lines(join(mid, 'events.jsonl')).filter((e) => e.kind === 'context-high' && e.session === sid);
+check('midday: the soft bell rings and NO context warning goes with it', midCtx('s-mid-opus').length, 0);
+check('midday: a lane without the cycle still gets the context-high warning at 88%', midCtx('s-mid-fable').length, 1);
 append('s-mid-opus', usageAt(960_000));
 // The soft bell went out half an hour ago: the urgent deadline must count
 // from the escalation, not from the soft request (Fable's second read).
@@ -214,6 +221,12 @@ check('midday: at 96% the soft request escalates to urgent, about ten minutes ou
 check('midday: the urgent bell names its deadline', spoolNotes('opus').filter((n) => /^\[nightshift\] URGENT midday bell/.test(n) && /Fold within 10 minutes/.test(n)).length, 1);
 tick(midCfg);
 check('midday: each tier rings once per session', spoolNotes('opus').length, 2);
+check('midday: the urgent request stands before its deadline, still no warning', midCtx('s-mid-opus').length, 0);
+// The deadline blew and the session is still going: the force didn't land,
+// so now the alarm fires, and says the cycle stalled.
+{ const st1 = midState(); st1.opus.foldRequest.deadline = Date.now() - 6 * 60_000; writeFileSync(join(mid, 'wakecycle', 'nightshift.state.json'), JSON.stringify(st1)); }
+tick(midCfg);
+check('midday: deadline blown, the context alarm fires as a stalled cycle, an alarm', midCtx('s-mid-opus').map((e) => [Math.round(e.ratio * 100), e.cycleStalled, e.alarm]), [[96, true, true]]);
 // A soft request outlives a session that ended another way (closed by hand):
 // the lane's next session still gets its own bell, not "already stands".
 writeFileSync(join(mid, 'wakecycle', 'nightshift.state.json'), JSON.stringify({ opus: { foldRequest: { sessionId: 's-gone', requestedAt: now - 3600_000, deadline: null, tier: 'soft' } } }));
