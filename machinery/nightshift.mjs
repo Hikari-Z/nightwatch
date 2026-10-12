@@ -496,7 +496,7 @@ function tickWith(io) {
     const fr = laneState.foldRequest;
     if (fr) {
       if (nwMtime > fr.requestedAt) {
-        io.log(`fold request met for ${lane} — folded on its own; refreshing`);
+        io.log(`fold request met for ${lane} — they folded at their own seam; refreshing`);
         io.emit('fold-request-met', { lane, session: fr.sessionId });
         delete laneState.foldRequest;
         laneState.refreshWake = true;
