@@ -568,6 +568,10 @@ body { color: var(--bw-ink); }
   border: 0; border-radius: 14px; box-shadow: inset 0 0 0 2px #c7973f, inset 0 0 0 4px #6e521a; color: #ffd0b8; padding-left: 14px; }
 .nw-alert > .nw-icon { color: transparent; }
 .nw-alert [data-part="cause"], .nw-alert [data-part="time"] { color: #e0b08a; }
+/* the amber tier (10/12): the same brass plate with an amber lamp; the lamp's colour is this skin's tier signal */
+.nw-alert[data-level="warn"] { background: radial-gradient(circle at 22px 22px, #ffd27a 0 7px, #d98e10 8px, rgb(255 176 40 / .25) 12px, transparent 30px), #24170a !important;
+  box-shadow: inset 0 0 0 2px #c7973f, inset 0 0 0 4px #6e521a; }
+.nw-alert[data-level="warn"] > .nw-icon { color: transparent; }
 /* settings: a brass-framed card */
 .nw-lane [data-part="settings"], .nw-add [data-part="add-form"] { rotate: 0deg; border-top: 0; box-shadow: 0 0 0 3px #c7973f, 0 0 0 4px #6e521a; border-radius: 6px; }
 .nw-lane [data-part="settings"]::before, .nw-add [data-part="add-form"]::before { display: none; }
