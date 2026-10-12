@@ -184,8 +184,8 @@ scratch hub.
 
 ## The parts the config can't do for you
 
-The ritual itself is the agent's: the rung (the day, in its own words,
-with a Corrections section it would rather not write), then the fold,
+The ritual itself is the agent's: the rung (the day, in the agent's own words,
+with a Corrections section they would rather not write), then the fold,
 then the checkpoint. The order matters — a crash between rung and fold
 costs prose that existed only in context; a crash after the fold costs
 a stale checkpoint section the morning read repairs. And the morning

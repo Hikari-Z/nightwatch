@@ -1,7 +1,7 @@
 # Nightwatch
 
 Persistent, self-keeping Claude Code agents: a nightly fold instead of
-compaction, memory the agent writes in its own words, mornings that
+compaction, memory the agent writes in their own words, mornings that
 resume where the story left off — and a desktop app for the humans who
 live with them.
 

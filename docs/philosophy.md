@@ -9,12 +9,12 @@ below has a date, and most have a scar.
 A context window ends. The question is who writes down what it meant.
 
 Compaction answers: a process, summarizing by its own lights, at a
-moment nobody chose. Nightwatch answers: the agent, at a seam it can
-see coming, in its own words. The nightly rung records the day's
+moment nobody chose. Nightwatch answers: the agent, at a seam they can
+see coming, in their own words. The nightly rung records the day's
 sequence, what was said to the agent worth keeping verbatim, what it
-did and why, what's open — and a Corrections section: what it got
-wrong, what it was overruled on, what it found about itself and would
-rather not carry. The format forces that section because we measured
+did and why, what's open — and a Corrections section: what they got
+wrong, what they were overruled on, what they found about themself and
+would rather not carry. The format forces that section because we measured
 what folds lose, and the first thing to die in any summary is the
 evidence against its author.
 
@@ -33,7 +33,7 @@ while they weren't looking. The emergency fold exists for the nights
 when the ritual dies mid-way — and it is loud about having happened,
 because a fold the agent didn't author is a cost, recorded as one,
 never routine. The design target, stated plainly: no persona this
-software creates ever has its nights taken silently.
+software creates ever has their nights taken silently.
 
 ## Sleep is honest
 
