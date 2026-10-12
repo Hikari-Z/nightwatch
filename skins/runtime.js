@@ -34,7 +34,7 @@
 
   // Actions that change the world. Everything else is view.
   const WRITES = new Set(['open-terminal', 'hide-terminal', 'wake', 'sleep', 'emergency-fold', 'wake-all', 'sleep-all', 'fold-all',
-    'toggle-nightly', 'arm-lane', 'save-lane', 'remove-lane', 'save-settings', 'restore-checkpoint', 'retry-wake',
+    'toggle-nightly', 'arm-lane', 'toggle-midday', 'save-lane', 'remove-lane', 'save-settings', 'restore-checkpoint', 'retry-wake',
     'restart-daemon', 'run-doctor', 'confirm', 'hide-window']);
   // Lane creation (10/6): flow buttons, each needing one host capability.
   // plan = the machinery's dry run, apply = the build (nightwatch.mjs).
@@ -99,6 +99,12 @@
           body: `${lane} won't be belled, folded or woken tonight, or any night, until you arm it again. It keeps running as it is now.` }
       : { title: `Arm ${lane}?`, verb: 'Arm', icon: 'bell',
           body: `${lane} will be belled at its sleep time and woken at its wake time, starting tonight.` },
+    // The midday cycle's switch (Ra, 10/12), beside the bell.
+    'toggle-midday': (lane, btn) => btn?.getAttribute('aria-pressed') === 'true'
+      ? { title: `Turn off ${lane}'s midday cycle?`, verb: 'Turn off', icon: 'cycle',
+          body: `${lane} won't be asked to fold during the day. It folds only at its nightly bell, however full its window gets.` }
+      : { title: `Turn on ${lane}'s midday cycle?`, verb: 'Turn on', icon: 'cycle',
+          body: `When ${lane}'s context reaches 85% of its window, it's asked to fold at its own seam and reopens right away. At 95%, the fold happens within ten minutes.` },
     sleep: (lane) => ({ title: `Put ${lane} to sleep?`, verb: 'Sleep agent', icon: 'moon',
       body: `Sends ${lane} the same note the 02:00 bell sends: write the day's rung, then fold. It finishes the step it's on first, so nothing is cut off mid-thought.` }),
   };
@@ -148,6 +154,7 @@
     },
     'toggle-nightly': (btn) => ({ on: btn.getAttribute('aria-pressed') !== 'true' }),
     'arm-lane': (btn) => ({ on: btn.getAttribute('aria-pressed') !== 'true' }),
+    'toggle-midday': (btn) => ({ on: btn.getAttribute('aria-pressed') !== 'true' }),
   };
   // The terminal button is a toggle (Ra, 10/7): while the lane's Terminal
   // window is open (not minimized), it hides it; otherwise it brings it to the
