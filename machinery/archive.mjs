@@ -20,7 +20,7 @@
  * Writes are stage-then-rename, so a crash mid-copy leaves the previous
  * archive whole and never a half file under the real name.
  */
-import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** Copy one session's transcript into the archive. Returns what it did. */
@@ -54,6 +54,13 @@ export function archiveTranscript(sid, { transcripts, archive }) {
  */
 export function catchUpArchive({ transcripts, archive }) {
   if (!existsSync(archive)) return [];
+  // A copy that crashed mid-way leaves <sid>.jsonl.partial-<pid>. Remove
+  // those whose process is gone, and only those: both lanes fold at the same
+  // bell, so another fold's copy may be in flight right now.
+  for (const f of readdirSync(archive)) {
+    const m = f.match(/\.partial-(\d+)$/);
+    if (m && !alive(Number(m[1]))) rmSync(join(archive, f), { force: true });
+  }
   const done = [];
   for (const f of readdirSync(archive)) {
     const m = f.match(/^([0-9a-f-]{36})\.jsonl$/);
@@ -63,4 +70,8 @@ export function catchUpArchive({ transcripts, archive }) {
     if (statSync(src).size > statSync(join(archive, f)).size) done.push(archiveTranscript(m[1], { transcripts, archive }));
   }
   return done;
+}
+
+function alive(pid) {
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
 }

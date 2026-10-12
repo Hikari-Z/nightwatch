@@ -162,6 +162,21 @@ try {
     check('7 A\'s archive caught up with its post-fold turns', same(join(h.transcripts, `${A}.jsonl`), join(h.archive, `${A}.jsonl`)));
     check('7 B is archived too', same(join(h.transcripts, `${B}.jsonl`), join(h.archive, `${B}.jsonl`)));
   }
+  // 8. A crashed copy's staging file is swept; a live process's is left alone
+  //    (both lanes fold at one bell).
+  {
+    const h = hub();
+    transcript(h, A, 4);
+    sleep(h, A);
+    const dead = spawnSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' }).stdout;
+    writeFileSync(join(h.archive, `${A}.jsonl.partial-${dead}`), 'half');
+    writeFileSync(join(h.archive, `${A}.jsonl.partial-${process.pid}`), 'in flight');
+    transcript(h, B, 4);
+    const r = sleep(h, B);
+    check('8 the next fold succeeds', r.code === 0, r.err);
+    check('8 a dead process\'s staging file is swept', !existsSync(join(h.archive, `${A}.jsonl.partial-${dead}`)));
+    check('8 a live process\'s staging file is left alone', existsSync(join(h.archive, `${A}.jsonl.partial-${process.pid}`)));
+  }
 } finally {
   for (const r of roots) rmSync(r, { recursive: true, force: true });
 }
