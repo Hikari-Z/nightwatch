@@ -174,7 +174,7 @@ input[type="checkbox"] { accent-color: #8a8272; }
 .nw-event [data-part="time"] { color: var(--nw-ink-2); }
 .nw-event [data-part="lane"] { font: 500 11px var(--nw-cond); text-transform: uppercase; letter-spacing: .12em; color: var(--nw-ink-2); }
 .nw-event > .nw-icon { color: var(--nw-ink-2); }
-.nw-event[data-status="failed"] > .nw-icon { color: var(--nw-failed); }
+.nw-event[data-status="failed"] > .nw-icon { color: var(--nw-failed); } .nw-event[data-status="warn"] > .nw-icon { color: var(--nw-warn); }
 .nw-event[data-alarm="true"] [data-part="what"] { color: #ff9a8c; font-weight: 500; }
 .nw-event [data-part="kept"] { background: linear-gradient(90deg, rgb(255 176 0 / .14) calc(var(--kept) * 100%), transparent 0) no-repeat; color: var(--nw-ink); }
 .nw-event[data-level="over"] [data-part="est"] { color: var(--nw-warn); }
