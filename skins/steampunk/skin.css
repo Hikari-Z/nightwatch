@@ -347,7 +347,7 @@ button { cursor: pointer; }
   background: var(--c); box-shadow: 0 0 8px var(--c), 0 0 0 2px #120f2b;
   transform: rotate(calc(var(--t) * 270deg - 135deg)) translateY(calc(var(--r) * -1)); }
 .nw-strip[data-mode="compressed"] .nw-node::before { transform: rotate(calc(var(--t) * 270deg - 135deg)) translateY(calc((var(--r) - var(--stack) * 17px) * -1)); }
-.nw-node[data-status="failed"] { --c: var(--mw-failed); } .nw-node[data-status="deferred"] { --c: var(--mw-belled); }
+.nw-node[data-status="failed"] { --c: var(--mw-failed); } .nw-node[data-status="warn"] { --c: #f0a020; } /* the amber tier's mark (10/12) */ .nw-node[data-status="deferred"] { --c: var(--mw-belled); }
 .nw-node[data-status="pending"] { --c: #8b84b8; } .nw-node[data-status="manual"] { --c: var(--mw-manual); }
 .nw-node[data-alarm="true"]::before { width: 20px; height: 20px; margin: -10px 0 0 -10px; background: radial-gradient(circle, #fff 0 25%, var(--c) 30%); }
 /* Dots anchor to .nw-timeline, so nothing between may be positioned: the
@@ -383,6 +383,7 @@ button { cursor: pointer; }
 .nw-event [data-part="what"] { grid-area: what; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nw-event [data-part="lane"] { grid-area: lane; text-transform: uppercase; }
 .nw-event[data-alarm="true"] [data-part="what"], .nw-event[data-status="failed"] [data-part="count"] { color: #b91c1c; font-weight: 700; }
+.nw-event[data-status="warn"] [data-part="what"] { color: #9a5c00; font-weight: 700; } /* amber ink on the receipt (10/12) */
 .nw-event [data-part="detail"] { grid-area: detail; display: flex; gap: 10px; font-size: 11px; }
 .nw-event [data-part="kept"]::before { content: "KEPT "; }
 .nw-event [data-part="est"] { font-weight: 700; }

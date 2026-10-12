@@ -204,6 +204,10 @@ const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
   check('a context-high event raises the "Context high" card', warn?.kind === 'context-high' && warn.title === 'Context high', JSON.stringify(warn));
   check('its clear ends it', alertOf([hi(20), { at: iso(5 * 60e3), kind: 'context-high-cleared', cause: 'context', lane: 'fable' }]) == null, 'card stayed');
   const stalled = alertOf([hi(10, { ratio: 0.96, cycleStalled: true, alarm: true })]);
+  // Its marks (Ra, 10/12): an amber context node and log row, red when stalled.
+  const marks = (rows) => { const s = assemble(cfg, io(ev(rows)), '8h'); return [s.NIGHT.fable.map((n) => [n[0], n[1], n[4]]), s.LOG.flatMap(([, r]) => r).filter((r) => r[2] === 'context').map((r) => [r[3], r[4]])]; };
+  check('context-high draws an amber node and log row with its percentage', JSON.stringify(marks([hi(20)])) === JSON.stringify([[['context', 'warn', 'Context high, 88%']], [['warn', 'Context high, 88%']]]), JSON.stringify(marks([hi(20)])));
+  check('a stalled one draws red', JSON.stringify(marks([hi(10, { ratio: 0.96, cycleStalled: true, alarm: true })])[0]) === JSON.stringify([['context', 'failed', 'Midday fold stalled, 96%']]), JSON.stringify(marks([hi(10, { ratio: 0.96, cycleStalled: true, alarm: true })])));
   check('a stalled midday cycle titles the card so', stalled?.title === 'Midday fold stalled' && /midday cycle hasn't folded them/.test(stalled.cause), JSON.stringify(stalled));
   const spiralFirst = alertOf([stuck('offline', 20), { at: iso(10 * 60e3), kind: 'spiral-alarm', lane: 'fable', session: 'sess-x', errors: 3, windowMin: 60, alarm: true }]);
   check('a spiral outranks a stuck card', spiralFirst?.kind === 'spiral-alarm', JSON.stringify(spiralFirst?.kind));

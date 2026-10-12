@@ -290,8 +290,8 @@ const STUCK_CARD = {
 // Lane-tagged events that report on a session rather than move it through
 // the bell → fold → close → wake cycle.
 const NOT_LIFECYCLE = new Set(['stuck', 'stuck-cleared', 'context-high', 'context-high-cleared', 'spiral-alarm', 'wake-cost', 'orphan-fold-deferred']);
-const KIND_MAP = { 'fold-requested': 'bell', 'fold-request-met': 'fold', 'fold-forced': 'fold', 'bell-rung': 'bell', folded: 'fold', 'panel-closed': 'close', 'wake-launched': 'launch', 'wake-exec': 'launch', 'wake-confirmed': 'wake', 'wake-failed': 'wake-failed', 'already-awake': 'wake', 'stale-receipt': 'wake-failed', 'orphan-fold-done': 'fold', 'orphan-fold-failed': 'wake-failed', 'daemon-up': 'heartbeat', 'daemon-alive': 'heartbeat', 'daemon-down': 'wake-failed', 'bell-failed': 'wake-failed', 'spiral-alarm': 'wake-failed', stuck: 'wake-failed', 'stuck-cleared': 'wake', 'dead-wake': 'wake-failed' };
-const TIP = { 'fold-requested': 'Fold requested (bell + deadline)', 'fold-request-met': 'Fold request met — refreshing', 'fold-forced': 'Fold FORCED at deadline — refreshing', 'bell-rung': 'Bell rung (spool note)', folded: 'Folded', 'panel-closed': 'Panel closed, slept and quiet', 'wake-launched': 'Wake launched', 'wake-exec': 'Wake reached exec', 'wake-confirmed': 'Wake confirmed (registry)', 'wake-failed': 'Wake failed', 'already-awake': 'Already awake', 'stale-receipt': 'Stale sleep receipt', 'orphan-fold-done': 'Orphan fold', 'orphan-fold-failed': 'Orphan fold FAILED', 'daemon-up': 'Nightshift up', 'daemon-alive': 'Nightshift alive', 'daemon-down': 'Nightshift DOWN', 'bell-failed': 'Bell FAILED', 'spiral-alarm': 'API error spiral', stuck: 'Stuck', 'stuck-cleared': 'Recovered', 'dead-wake': 'Dead wake: too full to answer, folded from the last session that ran' };
+const KIND_MAP = { 'fold-requested': 'bell', 'fold-request-met': 'fold', 'fold-forced': 'fold', 'bell-rung': 'bell', folded: 'fold', 'panel-closed': 'close', 'wake-launched': 'launch', 'wake-exec': 'launch', 'wake-confirmed': 'wake', 'wake-failed': 'wake-failed', 'already-awake': 'wake', 'stale-receipt': 'wake-failed', 'orphan-fold-done': 'fold', 'orphan-fold-failed': 'wake-failed', 'daemon-up': 'heartbeat', 'daemon-alive': 'heartbeat', 'daemon-down': 'wake-failed', 'bell-failed': 'wake-failed', 'spiral-alarm': 'wake-failed', stuck: 'wake-failed', 'stuck-cleared': 'wake', 'context-high': 'context', 'dead-wake': 'wake-failed' };
+const TIP = { 'fold-requested': 'Fold requested (bell + deadline)', 'fold-request-met': 'Fold request met — refreshing', 'fold-forced': 'Fold FORCED at deadline — refreshing', 'bell-rung': 'Bell rung (spool note)', folded: 'Folded', 'panel-closed': 'Panel closed, slept and quiet', 'wake-launched': 'Wake launched', 'wake-exec': 'Wake reached exec', 'wake-confirmed': 'Wake confirmed (registry)', 'wake-failed': 'Wake failed', 'already-awake': 'Already awake', 'stale-receipt': 'Stale sleep receipt', 'orphan-fold-done': 'Orphan fold', 'orphan-fold-failed': 'Orphan fold FAILED', 'daemon-up': 'Nightshift up', 'daemon-alive': 'Nightshift alive', 'daemon-down': 'Nightshift DOWN', 'bell-failed': 'Bell FAILED', 'spiral-alarm': 'API error spiral', stuck: 'Stuck', 'stuck-cleared': 'Recovered', 'context-high': 'Context high', 'dead-wake': 'Dead wake: too full to answer, folded from the last session that ran' };
 
 const RANGE_HOURS = { '8h': 8, '24h': 24, '3d': 72, '7d': 168 };
 const RANGE_LABEL = { '8h': 'Last 8 hours', '24h': 'Last 24 hours', '3d': 'Last 3 days', '7d': 'Last 7 days' };
@@ -334,8 +334,12 @@ export function assemble(cfg, io, range = '8h') {
     if (!kind) continue;
     const lane = e.lane ?? 'nightshift';
     // An overshoot (fix 5) is the fold's own news: the next wake runs larger than its target.
-    const tip = `${TIP[e.kind] ?? e.kind}${e.kept ? `, ${e.kept}/${e.total} kept` : ''}${e.overshoot ? `, ${e.overshoot.ratio}x its target` : ''}${e.cause ? ` (${e.cause})` : ''}`;
-    const status = e.alarm ? 'failed' : (e.kind === 'already-awake' ? 'manual' : 'ok');
+    // Context high (Ra, 10/12) is an amber mark: its ratio, not its cause, and the warn status; a stalled
+    // midday cycle is the same event as an alarm, drawn red.
+    const ctxHigh = e.kind === 'context-high';
+    const tip = ctxHigh ? `${e.cycleStalled ? 'Midday fold stalled' : 'Context high'}, ${Math.round((e.ratio ?? 0) * 100)}%`
+      : `${TIP[e.kind] ?? e.kind}${e.kept ? `, ${e.kept}/${e.total} kept` : ''}${e.overshoot ? `, ${e.overshoot.ratio}x its target` : ''}${e.cause ? ` (${e.cause})` : ''}`;
+    const status = e.alarm ? 'failed' : ctxHigh ? 'warn' : (e.kind === 'already-awake' ? 'manual' : 'ok');
     if (ts >= nightStart && lane !== 'nightshift') {
       (NIGHT[lane] ??= []).push([kind, status, Math.max(0, Math.min(1, (ts - nightStart) / span)), hm(e.at), tip, 1]);
     }

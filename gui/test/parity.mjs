@@ -103,10 +103,14 @@ const CASES = {
     const at = ['2026-10-05T12:40-07:00', '12:40'];
     const log = ['log', 'show-log', 'Show log', 'Open the log at this alert'];
     return { snap: { LANES: [
-      { ...L[0], alert: { kind: 'context-high', level: 'warn', icon: 'gauge', at, title: 'Context high', cause: 'At 88% of their context window. Worth a fold at their next seam.', fixes: [log] } },
-      { ...L[1], alert: { kind: 'stuck-login', at, title: 'Logged out', cause: "The session says its login expired. They can't do anything until someone runs /login in their window.", fixes: [log] } },
+      { ...L[0], open: false, alert: { kind: 'context-high', level: 'warn', icon: 'gauge', at, title: 'Context high', cause: 'At 88% of their context window. Worth a fold at their next seam.', fixes: [log] } },
+      { ...L[1], open: false, alert: { kind: 'stuck-login', at, title: 'Logged out', cause: "The session says its login expired. They can't do anything until someone runs /login in their window.", fixes: [log] } },
       ...L.slice(2),
-    ] } };
+    ],
+    // and its marks: an amber context node on the timeline and a Context row in the log
+    NIGHT: { ...FIXTURE.NIGHT, [L[0].id]: [...(FIXTURE.NIGHT[L[0].id] ?? []), ['context', 'warn', 0.7, '06:10', 'Context high, 88%', 1]] },
+    LOG: [['Oct 5', [['06:10', L[0].id, 'context', 'warn', 'Context high, 88%', null, 1], ...(FIXTURE.LOG[0]?.[1] ?? [])]], ...FIXTURE.LOG.slice(1)],
+    } };
   },
   quiet: () => ({
     snap: {
