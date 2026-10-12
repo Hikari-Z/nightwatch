@@ -57,8 +57,9 @@
  */
 import { readFileSync, readdirSync, statSync, appendFileSync, writeFileSync, renameSync, openSync, readSync, closeSync } from 'node:fs';
 import { notifyBanner } from './platform.mjs';
-import { spawn } from 'node:child_process';
-import { join } from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadConfig } from './config.mjs';
 
 const CFG = loadConfig();
@@ -214,7 +215,7 @@ function windowFor(lane, model) {
 // ── state ────────────────────────────────────────────────────────────────
 // active: `${sid}\u0000${cause}` → episode key; spiral: sid → last alert ms;
 // costed: tails whose wake cost is recorded; costSeen: tail → woken transcript mtime last read.
-let state = { active: {}, spiral: {}, costed: [], costSeen: {} };
+let state = { active: {}, spiral: {}, midday: {}, costed: [], costSeen: {} };
 try { state = { ...state, ...JSON.parse(readFileSync(P.watchState, 'utf8')) }; } catch { /* first run */ }
 function saveState() {
   try { writeFileSync(P.watchState + '.tmp', JSON.stringify(state)); renameSync(P.watchState + '.tmp', P.watchState); }
@@ -277,17 +278,52 @@ function stuckCauses(now, s, entries) {
   if (denials.length >= W.classifierThreshold) {
     causes.set('classifier', { key: denials[0].at, detail: { count: denials.length, reason: denials[denials.length - 1].reason } });
   }
-  const reply = [...entries].reverse().find((e) => e.type === 'assistant' && e.message?.usage && !e.isApiErrorMessage);
-  const u = reply?.message?.usage;
-  const window = windowFor(s.lane, reply?.message?.model);
-  if (u && window) {
-    const tokens = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-    const ratio = tokens / window;
+  const ctx = contextOf(s, entries);
+  if (ctx) {
+    const { ratio, tokens, window } = ctx;
     const k = `${s.sid}\u0000context`;
     const was = k in state.active;
     if (ratio >= W.contextWarn || (was && ratio >= W.contextRearm)) causes.set('context', { key: was ? state.active[k] : String(now), detail: { ratio, tokens, window } });
   }
   return causes;
+}
+
+/** The newest real reply's input side against the lane's window, or null. */
+function contextOf(s, entries) {
+  const reply = [...entries].reverse().find((e) => e.type === 'assistant' && e.message?.usage && !e.isApiErrorMessage);
+  const u = reply?.message?.usage;
+  const window = windowFor(s.lane, reply?.message?.model);
+  if (!u || !window) return null;
+  const tokens = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+  return { ratio: tokens / window, tokens, window };
+}
+
+// ── the midday cycle's trigger (Ra, 10/12) ───────────────────────────────
+// For a lane whose config has middayCycle: a soft bell when the context
+// reaches softPct, an urgent one at urgentPct. Each tier is asked once per
+// session; the nightshift owns the request, its deadline, the nightly-window
+// rule and the escalation. A refusal (the session isn't registered yet, say)
+// isn't recorded, so the next poll asks again.
+const NIGHTSHIFT = join(dirname(fileURLToPath(import.meta.url)), 'nightshift.mjs');
+const TIER_RANK = { soft: 1, urgent: 2 };
+function middayCheck(s, entries) {
+  const mc = CFG.lanes?.[s.lane]?.middayCycle;
+  if (!mc) return;
+  const ctx = contextOf(s, entries);
+  if (!ctx) return;
+  const tier = ctx.ratio >= (mc.urgentPct ?? 0.95) ? 'urgent' : ctx.ratio >= (mc.softPct ?? 0.85) ? 'soft' : null;
+  if (!tier || TIER_RANK[tier] <= (TIER_RANK[state.midday[s.sid]] ?? 0)) return;
+  const r = spawnSync(process.execPath, [NIGHTSHIFT, '--midday', s.lane, tier, '--pct', ctx.ratio.toFixed(3), '--session', s.sid], {
+    env: { ...process.env, ...(CFG.__configFile ? { WEFT_CONFIG: CFG.__configFile } : {}) },
+    encoding: 'utf8', timeout: 20_000,
+  });
+  const said = `${(r.stdout ?? '').trim()} ${(r.stderr ?? '').trim()}`.trim();
+  if (r.status === 0) {
+    state.midday[s.sid] = tier;
+    log(`MIDDAY ${tier}: ${s.lane} (${s.sid.slice(0, 8)}…) at ${Math.round(ctx.ratio * 100)}% — ${said}`);
+  } else {
+    log(`midday ${tier} for ${s.lane} not rung (exit ${r.status ?? r.error?.code}): ${said}`);
+  }
 }
 
 // ── wake cost (fix 4) ────────────────────────────────────────────────────
@@ -389,6 +425,7 @@ function check() {
   for (const s of live) {
     const entries = tailEntries(join(P.transcripts, `${s.sid}.jsonl`));
     spiralCheck(now, s, entries);
+    try { middayCheck(s, entries); } catch (e) { log(`midday check failed: ${e.message}`); }
     for (const [cause, { key, detail }] of stuckCauses(now, s, entries)) {
       const k = `${s.sid}\u0000${cause}`;
       seen.add(k);
@@ -413,6 +450,7 @@ function check() {
     emit({ at: new Date(now).toISOString(), kind: 'stuck-cleared', cause, lane, session: sid });
   }
   for (const sid of Object.keys(state.spiral)) if (!liveSids.has(sid)) delete state.spiral[sid];
+  for (const sid of Object.keys(state.midday)) if (!liveSids.has(sid)) delete state.midday[sid];
   try { wakeCostCheck(now); } catch (e) { log(`wake-cost check failed: ${e.message}`); }
   if (JSON.stringify(state) !== before) saveState();
 }

@@ -84,6 +84,18 @@ const CASES = {
       }],
     },
   }),
+  // The stage words and midday requests (Ra, 10/12): a bell with its rung in,
+  // a soft midday request (no deadline), an urgent one, and a reopening.
+  stages: () => {
+    const L = FIXTURE.LANES;
+    const set = (i, extra) => ({ ...L[i], ...extra });
+    return { snap: { LANES: [
+      set(0, { state: 'belled', rungWritten: true }),
+      set(1, { state: 'awake', foldRequest: { phase: 'requested', deadline: null, tier: 'soft' } }),
+      set(2, { state: 'awake', foldRequest: { phase: 'requested', deadline: '2026-10-05T13:20-07:00', tier: 'urgent' } }),
+      ...L.slice(3).map((x) => ({ ...x, state: 'sleeping', foldRequest: { phase: 'refreshing', forced: true } })),
+    ] } };
+  },
   quiet: () => ({
     snap: {
       NOW: '2026-10-06T08:05-07:00',

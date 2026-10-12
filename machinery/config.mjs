@@ -264,6 +264,10 @@ const LANE_KEYS = {
   // 10/6). modelName above stays the human-facing display label.
   model: 'string',
   schedule: { sleep: 'time', wake: 'time' },
+  // The midday cycle (Ra, 10/12): present = on for this lane. A soft bell at
+  // softPct of the window (no timer: the agent's own fold is its "ready"),
+  // an urgent one at urgentPct that forces the fold after urgentMin.
+  middayCycle: { softPct: 'number', urgentPct: 'number', urgentMin: 'number' },
 };
 const ALLOWED = {
   weftRoot: 'string', timezone: 'string', defaultLane: 'string',

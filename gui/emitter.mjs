@@ -147,7 +147,31 @@ const STATE_TIP = {
 };
 // The working/idle light (10/7), from Claude Code's own session status.
 const ACTIVITY_TIP = { working: 'working (running inference)', idle: 'idle (session open)', waiting: 'needs you (a permission prompt or a question)' };
-const state_tip = (L) => STATE_TIP[L.state] + (L.activity && ACTIVITY_TIP[L.activity] ? ` · ${ACTIVITY_TIP[L.activity]}` : '');
+// The stage as a word on the card (Ra, 10/12): data-state stays the
+// machinery's vocabulary for the skins; the word and its tip are the
+// keeper's. A midday fold reads Cycling from bell to reopen; a Force fold
+// reads Reopening; a bell whose rung has landed reads Rung's in. One short
+// vocabulary for every skin (Ra, 10/12): each word fits the narrowest card
+// (Glass) without truncating the model name, measured.
+const STATE_WORD = {
+  awake: 'Awake', belled: 'Bell rung', folding: 'Folded', sleeping: 'Asleep', waking: 'Waking',
+  orphaned: 'Orphaned', failed: 'Needs you', down: 'Down',
+};
+const STAGE_TIP = {
+  cycling: 'Midday fold: folding at its own seam, then reopening right away',
+  refreshing: 'Closed, folding, and reopening now',
+  rung: 'Rung written; the fold is next',
+};
+function stage(L) {
+  const alive = L.state === 'awake' || L.state === 'belled' || L.state === 'folding';
+  if (L.foldRequest?.tier && (alive || L.foldRequest.phase === 'refreshing')) return 'cycling';
+  if (L.foldRequest?.phase === 'refreshing') return 'refreshing';
+  if (L.state === 'belled' && L.rungWritten) return 'rung';
+  return null;
+}
+const STAGE_WORD = { cycling: 'Cycling', refreshing: 'Reopening', rung: "Rung's in" };
+const state_word = (L) => { const s = stage(L); return s ? STAGE_WORD[s] : (STATE_WORD[L.state] ?? L.state); };
+const state_tip = (L) => { const s = stage(L); return (s ? STAGE_TIP[s] : STATE_TIP[L.state]) + (L.activity && ACTIVITY_TIP[L.activity] ? ` · ${ACTIVITY_TIP[L.activity]}` : ''); };
 
 // Which actions make sense in which state. A disabled button stays in the DOM
 // (skins lay out a stable toolbar) with aria-disabled and a tip saying why.
@@ -228,12 +252,18 @@ function schedule_fields(L) {
 function fold_request(L, nowIso) {
   const fr = L.foldRequest;
   if (!fr) return '';
+  const what = fr.tier ? 'Midday fold' : 'Force fold';
   if (fr.phase === 'requested') {
+    // A soft midday request (Ra, 10/12) has no deadline: no countdown, no force.
+    if (!fr.deadline) {
+      return `<li data-part="fold-request" data-phase="requested" data-tip="Midday fold: ${esc(laneName(L))} folds at its own seam, then reopens right away">${icon('fold')}`
+        + `<span>Midday fold · at its own seam</span></li>`;
+    }
     const mins = Math.max(0, Math.floor((Date.parse(fr.deadline) - Date.parse(nowIso)) / 60000));
-    return `<li data-part="fold-request" data-phase="requested" data-tip="Force fold: if ${esc(laneName(L))} hasn't folded by then, it's folded for it">${icon('fold')}`
-      + `<span>Bell rung · forcing in </span><time data-part="countdown" datetime="${esc(fr.deadline)}">${mins}m</time></li>`;
+    return `<li data-part="fold-request" data-phase="requested" data-tip="${what}: if ${esc(laneName(L))} hasn't folded by then, it's folded for it">${icon('fold')}`
+      + `<span>${fr.tier ? 'Midday fold' : 'Bell rung'} · forcing in </span><time data-part="countdown" datetime="${esc(fr.deadline)}">${mins}m</time></li>`;
   }
-  return `<li data-part="fold-request" data-phase="refreshing" data-tip="Force fold: folded; the window closes and a fresh one opens">${icon('fold')}`
+  return `<li data-part="fold-request" data-phase="refreshing" data-tip="${what}: folded; the window closes and a fresh one opens">${icon('fold')}`
     + `<span>Folded${fr.forced ? ' (forced)' : ''} · waking fresh</span></li>`;
 }
 
@@ -446,13 +476,13 @@ function lane_card(L, nowIso = null, tz = undefined) {
     `${act === 'lane-settings' ? (L.settingsOpen ? ' aria-expanded="true"' : ' aria-expanded="false"') : ''}>${icon(ic)}</button>`).join('');
   const ctx_disp = L.ctx ? `~${k(L.ctx)} of ${k(window_)}` : `— of ${k(window_)}`;
   return `
-    <article class="nw-lane" data-lane="${L.id}"${L.name ? ` data-name="${esc(L.name)}"` : ''} data-state="${L.state}" data-open="${open_}"${alarm ? ' data-alarm="true"' : ''}${L.role === 'switchboard' ? ' data-switchboard="true"' : ''}${L.activity ? ` data-activity="${L.activity}"` : ''}>
+    <article class="nw-lane" data-lane="${L.id}"${L.name ? ` data-name="${esc(L.name)}"` : ''} data-state="${L.state}" data-open="${open_}"${stage(L) ? ` data-stage="${stage(L)}"` : ''}${alarm ? ' data-alarm="true"' : ''}${L.role === 'switchboard' ? ' data-switchboard="true"' : ''}${L.activity ? ` data-activity="${L.activity}"` : ''}>
       <header data-action="toggle-lane">
         <span data-part="avatar" data-model="${L.modelId}" aria-hidden="true">${esc(laneName(L)[0].toUpperCase())}</span>
         <div data-part="ident"><h2 data-part="name">${esc(laneName(L))}</h2>
         <span data-part="model" data-tip="${esc(L.modelId)}">${esc(L.model)}</span></div>
         <span data-part="glance" aria-hidden="true"><span data-part="mini" data-level="${level}" style="--fill: ${pyFixed(Math.min(fill, 1.2), 3)}; --target: ${pyFixed(Math.min(tgt, 1), 3)}"></span>${glance_next}</span>
-        <span data-part="state" data-tip="${esc(state_tip(L))}"><i aria-hidden="true"></i><span>${esc(L.state)}</span></span>
+        <span data-part="state" data-tip="${esc(state_tip(L))}"><i aria-hidden="true"></i><span>${esc(state_word(L))}</span></span>
         <button type="button" data-part="toggle" aria-expanded="${open_}" aria-controls="body-${L.id}" aria-label="${open_ === 'true' ? 'Collapse' : 'Expand'} ${esc(laneName(L))}">${icon('chev')}</button>
       </header>
       <div data-part="body" id="body-${L.id}">
