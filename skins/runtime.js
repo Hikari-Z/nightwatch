@@ -71,42 +71,42 @@
   // .nw-confirm and a viewer-chrome .nw-toast.
   const CONFIRM = {
     wake: (lane) => ({ title: `Wake ${lane} now?`, verb: 'Wake', icon: 'sun',
-      body: `Opens a Terminal window that resumes ${lane} from its last sleep, the same way the 08:00 wake does. If ${lane} is already awake, nothing happens.` }),
+      body: `Opens a Terminal window that resumes ${lane} from their last sleep, the same way the 08:00 wake does. If ${lane} is already awake, nothing happens.` }),
     'retry-wake': (lane) => ({ title: `Try waking ${lane} again?`, verb: 'Retry wake', icon: 'retry',
-      body: `Opens a Terminal window that resumes ${lane} from its last sleep. If the checkpoint is still missing, restore it first or this attempt fails the same way.` }),
+      body: `Opens a Terminal window that resumes ${lane} from their last sleep. If the checkpoint is still missing, restore it first or this attempt fails the same way.` }),
     'wake-all': () => ({ title: 'Wake every sleeping lane?', verb: 'Wake all', icon: 'play',
-      body: 'Each sleeping lane gets its own Terminal window, resuming from its last sleep. Lanes already awake are left alone.' }),
+      body: 'Each sleeping agent gets their own Terminal window, resuming from their last sleep. Agents already awake are left alone.' }),
     'sleep-all': () => ({ title: 'Ring every awake lane\'s bell?', verb: 'Ring all bells', icon: 'pause',
-      body: 'Every awake lane gets the 02:00 note: write the day\'s rung, then fold. Each finishes the step it\'s on first.' }),
+      body: 'Every awake agent gets the 02:00 note: write the day\'s rung, then fold. Each finishes the step they\'re on first.' }),
     'restore-checkpoint': () => ({ title: 'Restore the checkpoint?', verb: 'Restore', icon: 'restore',
       body: 'Copies the newest timestamped archive back to the checkpoint path. Only runs if the checkpoint is missing; it never replaces one that exists.' }),
     'restart-daemon': () => ({ title: 'Restart the nightshift?', verb: 'Restart', icon: 'retry',
       body: 'Relaunches the background job that rings bells and wakes lanes. Lanes keep running; only the watcher restarts.' }),
     'emergency-fold': (lane) => ({ title: `Force-fold ${lane}?`, verb: 'Force fold', icon: 'fold', danger: true,
-      body: `Closes ${lane}'s window now, folds it, and opens a fresh one straight away. The fresh window writes the rung for the day. For a full context or an API-error wall; for a normal bedtime, use Sleep agent.` }),
+      body: `Closes ${lane}'s window now, folds them, and opens a fresh one straight away. The fresh window writes the rung for the day. For a full context or an API-error wall; for a normal bedtime, use Sleep agent.` }),
     'fold-all': () => ({ title: 'Force-fold every awake lane?', verb: 'Force-fold all', icon: 'fold', danger: true,
-      body: 'Each awake lane is closed now, folded, and reopened fresh; each fresh window writes its own rung. Lanes that are asleep are left alone.' }),
+      body: 'Each awake agent is closed now, folded, and reopened fresh; each fresh window writes their own rung. Agents that are asleep are left alone.' }),
     'remove-lane': (lane) => ({ title: `Remove ${lane} from Nightwatch?`, verb: 'Remove', icon: 'x',
-      body: `The nightshift stops belling and waking ${lane}, and it leaves this window. Its transcripts, ladder and receipts stay on disk.` }),
+      body: `The nightshift stops belling and waking ${lane}, and they leave this window. Their transcripts, ladder and receipts stay on disk.` }),
     'toggle-nightly': (lane, btn) => btn?.getAttribute('aria-pressed') === 'true'
       ? { title: 'Turn the nightly cycle off?', verb: 'Turn off', icon: 'repeat',
-          body: 'No lane will be belled, folded or woken tonight until you turn it back on. Lanes keep running as they are.' }
+          body: 'No agent will be belled, folded or woken tonight until you turn it back on. Agents keep running as they are.' }
       : { title: 'Turn the nightly cycle on?', verb: 'Turn on', icon: 'repeat',
-          body: 'Every lane will be belled at its sleep time and woken at its wake time.' },
+          body: 'Every agent will be belled at their sleep time and woken at their wake time.' },
     // One lane's nightly switch: the bell slot on its card (Ra, 10/8).
     'arm-lane': (lane, btn) => btn?.getAttribute('aria-pressed') === 'true'
       ? { title: `Disarm ${lane}?`, verb: 'Disarm', icon: 'bell-off',
-          body: `${lane} won't be belled, folded or woken tonight, or any night, until you arm it again. It keeps running as it is now.` }
+          body: `${lane} won't be belled, folded or woken tonight, or any night, until you arm them again. They keep running as they are now.` }
       : { title: `Arm ${lane}?`, verb: 'Arm', icon: 'bell',
-          body: `${lane} will be belled at its sleep time and woken at its wake time, starting tonight.` },
+          body: `${lane} will be belled at their sleep time and woken at their wake time, starting tonight.` },
     // The midday cycle's switch (Ra, 10/12), beside the bell.
     'toggle-midday': (lane, btn) => btn?.getAttribute('aria-pressed') === 'true'
       ? { title: `Turn off ${lane}'s midday cycle?`, verb: 'Turn off', icon: 'cycle',
-          body: `${lane} won't be asked to fold during the day. It folds only at its nightly bell, however full its window gets.` }
+          body: `${lane} won't be asked to fold during the day. They fold only at their nightly bell, however full their window gets.` }
       : { title: `Turn on ${lane}'s midday cycle?`, verb: 'Turn on', icon: 'cycle',
-          body: `When ${lane}'s context reaches 85% of its window, it's asked to fold at its own seam and reopens right away. At 95%, the fold happens within ten minutes.` },
+          body: `When ${lane}'s context reaches 85% of their window, they're asked to fold at their own seam and reopen right away. At 95%, the fold happens within ten minutes.` },
     sleep: (lane) => ({ title: `Put ${lane} to sleep?`, verb: 'Sleep agent', icon: 'moon',
-      body: `Sends ${lane} the same note the 02:00 bell sends: write the day's rung, then fold. It finishes the step it's on first, so nothing is cut off mid-thought.` }),
+      body: `Sends ${lane} the same note the 02:00 bell sends: write the day's rung, then fold. They finish the step they're on first, so nothing is cut off mid-thought.` }),
   };
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   function ask({ title, body, verb, icon, danger = false }) {

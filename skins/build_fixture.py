@@ -162,8 +162,8 @@ LANES = [
 
 STATE_TIP = {
     "awake": "Awake", "belled": "Bell rung, fold due", "folding": "Folded; the window closes once the session goes quiet",
-    "sleeping": "Asleep until its wake time", "waking": "Waking, waiting for the session to register",
-    "orphaned": "Orphan-folded after its session died; emergency wake next", "failed": "Needs a hand",
+    "sleeping": "Asleep until their wake time", "waking": "Waking, waiting for the session to register",
+    "orphaned": "Orphan-folded after their session died; emergency wake next", "failed": "Needs a hand",
     "down": "The nightshift itself isn't running",
 }
 # The working/idle light (10/7), from Claude Code's own session status.
@@ -174,7 +174,7 @@ STATE_WORD = {
     "orphaned": "Orphaned", "failed": "Needs you", "down": "Down",
 }
 STAGE_TIP = {
-    "cycling": "Midday fold: folding at its own seam, then reopening right away",
+    "cycling": "Midday fold: folding at their own seam, then reopening right away",
     "refreshing": "Closed, folding, and reopening now",
     "rung": "Rung written; the fold is next",
 }
@@ -206,7 +206,7 @@ def actions(lane):
         ("terminal", "open-terminal", "Open terminal", awake, "Bring this lane's terminal to the front" if awake else "No live session"),
         ("sun", "wake", "Wake", s in ("sleeping", "failed", "orphaned"), "Wake now" if s in ("sleeping", "failed", "orphaned") else "Already awake"),
         ("moon", "sleep", "Sleep agent", awake, "Rings the bell to fold this agent, then closes the window" if awake else "Not awake"),
-        ("fold", "emergency-fold", "Force fold", awake, "Closes it now, folds, and reopens it; the fresh window writes the rung. For a full context or an API-error wall" if awake else "Nothing to fold"),
+        ("fold", "emergency-fold", "Force fold", awake, "Closes them now, folds them, and reopens them; the fresh window writes the rung. For a full context or an API-error wall" if awake else "Nothing to fold"),
         ("log", "show-log", "Logs", True, "This lane's events and log lines"),
         ("gear", "lane-settings", "Lane settings", True, "Model, hours, fold target"),
     ]
@@ -274,13 +274,13 @@ def fold_request(L):
     if fr["phase"] == "requested":
         # A soft midday request (Ra, 10/12) has no deadline: no countdown, no force.
         if not fr.get("deadline"):
-            return (f'<li data-part="fold-request" data-phase="requested" data-tip="Midday fold: {esc(lane_name(L))} folds at its own seam, then reopens right away">{icon("fold")}'
-                    f'<span>Midday fold · at its own seam</span></li>')
+            return (f'<li data-part="fold-request" data-phase="requested" data-tip="Midday fold: {esc(lane_name(L))} folds at their own seam, then reopens right away">{icon("fold")}'
+                    f'<span>Midday fold · at their own seam</span></li>')
         from datetime import datetime
         p = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))
         mins = max(0, int((p(fr["deadline"]) - p(NOW)).total_seconds() // 60))
         lead = "Midday fold" if fr.get("tier") else "Bell rung"
-        return (f'<li data-part="fold-request" data-phase="requested" data-tip="{what}: if {esc(lane_name(L))} hasn\'t folded by then, it\'s folded for it">{icon("fold")}'
+        return (f'<li data-part="fold-request" data-phase="requested" data-tip="{what}: if {esc(lane_name(L))} hasn\'t folded by then, they\'re folded anyway">{icon("fold")}'
                 f'<span>{lead} · forcing in </span><time data-part="countdown" datetime="{esc(fr["deadline"])}">{mins}m</time></li>')
     return (f'<li data-part="fold-request" data-phase="refreshing" data-tip="{what}: folded; the window closes and a fresh one opens">{icon("fold")}'
             f'<span>Folded{" (forced)" if fr.get("forced") else ""} · waking fresh</span></li>')
@@ -334,7 +334,7 @@ def lane_settings(L):
         {copy_session(L)}
         <label data-part="armed"><input type="checkbox"{" checked" if L.get("armed", True) else ""}><span>Nightshift folds and wakes this lane</span></label>
         <label data-part="confirm-remove"><input type="checkbox" data-gate="remove-lane"><span>Allow removing this lane</span></label>
-        <div data-part="buttons"><button type="button" data-action="remove-lane" data-danger="true" aria-disabled="true" data-gated="true" data-tip="Stop managing this lane. Its transcripts and ladder stay on disk. Tick the box above to allow it.">{icon("x")}<span>Remove</span></button>
+        <div data-part="buttons"><button type="button" data-action="remove-lane" data-danger="true" aria-disabled="true" data-gated="true" data-tip="Stop managing this agent. Their transcripts and ladder stay on disk. Tick the box above to allow it.">{icon("x")}<span>Remove</span></button>
           <button type="button" data-action="save-lane" data-primary="true">{icon("check")}<span>Save</span></button></div>
       </section>'''
 
@@ -468,7 +468,7 @@ def lane_card(L, now=None):
     if mc:
         mid = (f'<li data-part="midday" data-action="toggle-midday" aria-pressed="true" data-tip="Midday cycle on: a soft bell at {pct(mc.get("softPct"), 0.85)}% of the window, an urgent one at {pct(mc.get("urgentPct"), 0.95)}%. Click to turn off.">{icon("cycle")}</li>')
     else:
-        mid = (f'<li data-part="midday" data-action="toggle-midday" aria-pressed="false" data-tip="Midday cycle off: it folds only at the nightly bell. Click to turn on.">{icon("cycle")}</li>')
+        mid = (f'<li data-part="midday" data-action="toggle-midday" aria-pressed="false" data-tip="Midday cycle off: they fold only at the nightly bell. Click to turn on.">{icon("cycle")}</li>')
     # Accordion. The viewer opens any lane with an un-acked alarm: trouble
     # never hides behind a closed card.
     open_ = "true" if (L.get("open") or alarm) else "false"
@@ -807,7 +807,7 @@ def settings_panel(p, lanes_of):
         w = L.get("window") or WINDOWS.get(L["model"]) or 0
         if not (w and L["ctx"] / w >= 0.9): continue
         trouble += 1
-        items.append(f'<li data-status="warn" data-lane="{esc(L["id"])}">{icon("gauge")} {esc(lane_name(L))} is at {round(L["ctx"]/w*100)}% of its context window — a Force fold would trim it to ~{k(L["target"])}</li>')
+        items.append(f'<li data-status="warn" data-lane="{esc(L["id"])}">{icon("gauge")} {esc(lane_name(L))} is at {round(L["ctx"]/w*100)}% of their context window — a Force fold would trim them to ~{k(L["target"])}</li>')
     if not trouble:
         items.append(f'<li data-status="ok">{icon("check")} No lane needs a hand</li>')
     who = esc(p["name"]) if p else "Settings"
@@ -905,7 +905,7 @@ def controls(setup=False):
         display = ('<p data-part="summary">No agents yet</p>'
                    '<p data-part="next">Set up a persona to begin</p>'
                    '<ul data-part="counts"></ul>')
-        primary = f'<button type="button" data-action="setup" data-part="primary" data-tip="Install a persona: name, model, where its memory lives">{icon("wand")}<span>Set up</span></button>'
+        primary = f'<button type="button" data-action="setup" data-part="primary" data-tip="Install a persona: name, model, where their memory lives">{icon("wand")}<span>Set up</span></button>'
     else:
         # Counts derive from the lanes: belled/waking/folding are awake-ish,
         # orphaned is trouble, down is asleep. Zero counts are left out.
@@ -944,7 +944,7 @@ def confirm():
     return f'''
   <div class="nw-confirm" role="alertdialog" aria-label="Confirm emergency fold" data-action="emergency-fold" data-lane="opus">
     <p data-part="title">{icon("fold")} Force-fold opus?</p>
-    <p data-part="body">This folds the session as it stands, without waiting for a rung. The lane's next wake starts with an emergency note so it can write the missing rung itself. Nothing in the transcript is deleted.</p>
+    <p data-part="body">This folds the session as it stands, without waiting for a rung. The agent's next wake starts with an emergency note so they can write the missing rung themself. Nothing in the transcript is deleted.</p>
     <div data-part="buttons"><button type="button" data-action="cancel">Cancel</button>
       <button type="button" data-action="confirm" data-danger="true">{icon("fold")}<span>Force fold</span></button></div>
   </div>'''
@@ -997,8 +997,10 @@ def page():
   .nw-app > .nw-confirm {{ position: fixed; z-index: 50; left: 50%; top: 96px; transform: translateX(-50%);
     width: min(420px, calc(100vw - 32px)); box-shadow: 0 18px 60px #0008; }}
   .nw-app > .nw-settings[data-open="false"] {{ display: none; }}
-  .nw-lane [data-part="next"][data-action] {{ cursor: pointer; }}
-  .nw-lane [data-part="next"][aria-pressed="false"] {{ opacity: .45; text-shadow: none; }}
+  .nw-lane [data-part="next"][data-action], .nw-lane [data-part="midday"] {{ cursor: pointer; }}
+  /* The midday switch lights and dims exactly like the bell (Ra, 10/12); each skin's
+     lit-bell colour rule names it too. */
+  .nw-lane [data-part="next"][aria-pressed="false"], .nw-lane [data-part="midday"][aria-pressed="false"] {{ opacity: .45; text-shadow: none; }}
   .nw-app > .nw-settings {{ position: fixed; z-index: 45; left: 50%; top: 72px; transform: translateX(-50%);
     width: min(600px, calc(100vw - 32px)); max-height: calc(100vh - 100px); overflow: auto; box-shadow: 0 18px 60px #0008; }}
   /* In the app the window FITS its content, so a viewport-capped panel was circular: capped to the short
@@ -1044,7 +1046,7 @@ def page():
   <header class="nw-head" data-tauri-drag-region>
     <span class="nw-glyph" data-phase="{DAEMON["phase"]}" role="img" aria-label="{ALARM_ARIA[DAEMON["phase"]]}" data-tip="{glyph_tip()}"></span>
     <h1 data-part="title">Nightwatch</h1>
-    <span data-part="schedule" data-tip="Tonight's schedule: the sleep-bell rings at {SCHEDULE["sleep"]} and lanes wake at {SCHEDULE["wake"]}. Change it in a persona's settings (the gear on its card).">{icon("moon")}<time datetime="{SCHEDULE["sleep"]}">{SCHEDULE["sleep"]}</time>{icon("sun")}<time datetime="{SCHEDULE["wake"]}">{SCHEDULE["wake"]}</time></span>
+    <span data-part="schedule" data-tip="Tonight's schedule: the sleep-bell rings at {SCHEDULE["sleep"]} and lanes wake at {SCHEDULE["wake"]}. Change it in a persona's settings (the gear on their card).">{icon("moon")}<time datetime="{SCHEDULE["sleep"]}">{SCHEDULE["sleep"]}</time>{icon("sun")}<time datetime="{SCHEDULE["wake"]}">{SCHEDULE["wake"]}</time></span>
     <time data-part="clock" datetime="{NOW}">{local(NOW):%H:%M}</time>
     <button type="button" data-action="look-menu" data-part="menu-button" data-menu="look" aria-haspopup="menu" aria-expanded="false" aria-label="Look" data-tip="Appearance and skin">{icon("palette")}</button>
     <button type="button" data-action="view-menu" data-part="menu-button" aria-haspopup="menu" aria-expanded="false" aria-label="View" data-tip="Show or hide panels">{icon("panels")}</button>

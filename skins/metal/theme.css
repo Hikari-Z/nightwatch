@@ -73,7 +73,7 @@ body { color: var(--nw-ink); font-size: 12px; }
 .nw-lane [data-part="toggle"] { --g: #9aa0a8; width: 18px; height: 18px; border-radius: 50%; color: #233; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); }
 .nw-lane [data-part="toggle"] .nw-icon { width: 12px; height: 12px; }
 .nw-lane [data-part="facts"] { color: var(--nw-ink-2); text-shadow: var(--mt-emboss); font-size: 11px; }
-.nw-lane [data-part="next"], .nw-lane [data-part="glance"] time { color: #1c1c1c; }
+.nw-lane [data-part="next"], .nw-lane [data-part="midday"], .nw-lane [data-part="glance"] time { color: #1c1c1c; }
 
 /* meters: aqua progress bars with the barber-pole stripe */
 .nw-lane :is([data-part="context"] [data-part="bar"], [data-part="throughput"] svg:not(.nw-icon)) { height: 13px; border-radius: 7px; background: linear-gradient(#e6e6e6, #ffffff);

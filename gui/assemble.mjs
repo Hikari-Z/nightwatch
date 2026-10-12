@@ -278,14 +278,14 @@ function transcriptStats(cfg, io, sid) {
 // `window`: the fix happens in the lane's own window (a /login, a prompt).
 const STUCK_ORDER = ['too-long', 'login', 'usage-limit', 'offline', 'waiting', 'classifier', 'context', 'slept'];
 const STUCK_CARD = {
-  'too-long': { title: 'Too full to answer', window: false, cause: () => 'Every prompt comes back "Prompt is too long", so pokes and the sleep bell can\'t reach it. Fold now folds it from the last session that actually ran and opens a fresh window; if that window says the same, /clear it.' },
-  login: { title: 'Logged out', window: true, cause: () => 'The session says its login expired. It can\'t do anything until someone runs /login in its window.' },
-  'usage-limit': { title: 'Usage limit reached', window: false, cause: () => 'Stopped until the usage limit resets, or until its model is switched (/model).' },
-  offline: { title: 'Can\'t reach the API', window: false, cause: () => 'Connection or DNS failure. It retries on its own once the network is back.' },
-  waiting: { title: 'Waiting on you', window: true, cause: (e) => `Waiting for ${Math.round((e.forMs ?? 0) / 60000)} minutes on a permission prompt or a question in its window.` },
-  classifier: { title: 'Classifier stops', window: false, cause: (e) => `${e.count} tool calls denied by the auto mode classifier in 30 minutes${e.reason ? ` (latest: ${e.reason})` : ''}. It may be circling something.` },
-  context: { title: 'Context nearly full', window: false, cause: (e) => `At ${Math.round((e.ratio ?? 0) * 100)}% of its context window. Worth a fold at its next seam.` },
-  slept: { title: 'Cut off by sleep', window: true, cause: () => 'This machine went to sleep mid-reply. A short poke in its window resumes it.' },
+  'too-long': { title: 'Too full to answer', window: false, cause: () => 'Every prompt comes back "Prompt is too long", so pokes and the sleep bell can\'t reach them. Fold now folds them from the last session that actually ran and opens a fresh window; if that window says the same, /clear it.' },
+  login: { title: 'Logged out', window: true, cause: () => 'The session says its login expired. They can\'t do anything until someone runs /login in their window.' },
+  'usage-limit': { title: 'Usage limit reached', window: false, cause: () => 'Stopped until the usage limit resets, or until their model is switched (/model).' },
+  offline: { title: 'Can\'t reach the API', window: false, cause: () => 'Connection or DNS failure. They retry on their own once the network is back.' },
+  waiting: { title: 'Waiting on you', window: true, cause: (e) => `Waiting for ${Math.round((e.forMs ?? 0) / 60000)} minutes on a permission prompt or a question in their window.` },
+  classifier: { title: 'Classifier stops', window: false, cause: (e) => `${e.count} tool calls denied by the auto mode classifier in 30 minutes${e.reason ? ` (latest: ${e.reason})` : ''}. They may be circling something.` },
+  context: { title: 'Context nearly full', window: false, cause: (e) => `At ${Math.round((e.ratio ?? 0) * 100)}% of their context window. Worth a fold at their next seam.` },
+  slept: { title: 'Cut off by sleep', window: true, cause: () => 'This machine went to sleep mid-reply. A short poke in their window resumes them.' },
 };
 // Lane-tagged events that report on a session rather than move it through
 // the bell → fold → close → wake cycle.
@@ -471,7 +471,7 @@ export function assemble(cfg, io, range = '8h') {
             kind: 'spiral-alarm',
             at: [sp.at, hm(sp.at)],
             title: 'API error spiral',
-            cause: `${sp.errors} API errors in ${sp.windowMin}m, newest still an error. Often a cold-cache recompute after a quiet gap — a short poke message usually kickstarts it.`,
+            cause: `${sp.errors} API errors in ${sp.windowMin}m, newest still an error. Often a cold-cache recompute after a quiet gap — a short poke message usually kickstarts them.`,
             fixes: [
               ['log', 'show-log', 'Show log', 'Open the nightshift log at this alert'],
             ],
@@ -499,7 +499,7 @@ export function assemble(cfg, io, range = '8h') {
           title: how.title,
           cause: how.cause(pick),
           fixes: how.window
-            ? [['terminal', 'open-terminal', 'Open its window', 'Bring the lane\'s Terminal window forward'], ['log', 'show-log', 'Show log', 'Open the log at this alert']]
+            ? [['terminal', 'open-terminal', 'Open their window', 'Bring the agent\'s Terminal window forward'], ['log', 'show-log', 'Show log', 'Open the log at this alert']]
             : [['log', 'show-log', 'Show log', 'Open the log at this alert']],
         };
       }

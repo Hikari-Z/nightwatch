@@ -176,7 +176,7 @@ button { cursor: pointer; }
 /* The deck clocks, time up and time to the bell, centred as a pair (Ra, 10/7). */
 .nw-lane [data-part="facts"] { list-style: none; margin: 0; padding: 8px 12px; display: flex; flex-wrap: wrap; justify-content: center; gap: 3px 22px; color: var(--nw-ink-2); font-size: 12px; }
 .nw-lane [data-part="facts"] li { display: inline-flex; align-items: center; gap: 4px; }
-.nw-lane [data-part="next"] { color: var(--nw-ink); }
+.nw-lane [data-part="next"], .nw-lane [data-part="midday"] { color: var(--nw-ink); }
 .nw-lane [data-part="meters"] { display: grid; gap: 7px; padding: 9px 12px 10px; }
 /* Both meters speak one language: icon, a 14px sunk track with a 2px inset
    fill in the lane's colour, a mono readout in a fixed column. Context fills
