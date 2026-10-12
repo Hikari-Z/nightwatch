@@ -254,7 +254,7 @@ function laneAddSteps(spec) {
   // and the config entry — the thing that makes the lane EXIST — last.
   // A failure anywhere leaves no claimed lane behind.
   const claimStep = {
-    verb: 'Add', what: `lane "${lane.id}" to ${ctx.name ?? 'the persona'}`, detail: `${lane.model}, ${spec.lane.schedule ? 'its own schedule' : 'the global schedule'}, ${Math.round(target / 1000)}k${lane.armed === false ? ', not armed' : ''}`,
+    verb: 'Add', what: `lane "${lane.id}" to ${ctx.name ?? 'the persona'}`, detail: `${lane.model}, ${spec.lane.schedule ? 'their own schedule' : 'the global schedule'}, ${Math.round(target / 1000)}k${lane.armed === false ? ', not armed' : ''}`,
     run() {
       cfg.lanes[lane.id] = { targetTokens: target, model: lane.model, ...(spec.lane.schedule ? { schedule: spec.lane.schedule } : {}) };
       writeFileSync(cfgPath + '.tmp', JSON.stringify(cfg, null, 2) + '\n');
@@ -298,7 +298,7 @@ function firstSessionStep(spec, hub, ctx, noActivate, cpPath, laneWc) {
   const cp = cpPath ?? join(hub, 'checkpoint.md');
   if (fs.kind === 'adopt') {
     const prep = {
-      verb: 'Adopt', what: `running session ${String(fs.sessionId).slice(0, 8)}…`, detail: `registers it as the "${spec.lane.id}" lane; nothing is closed or restarted now — but from tonight the nightshift bells it at sleep time and closes it once it has folded`,
+      verb: 'Adopt', what: `running session ${String(fs.sessionId).slice(0, 8)}…`, detail: `registers it as the "${spec.lane.id}" lane; nothing is closed or restarted now — but from tonight the nightshift bells them at sleep time and closes the window once they've folded`,
       run() {
         // The pid makes the liveness checks see the adopted session the way
         // they see a woken one; sourced from Claude Code's own session file.
