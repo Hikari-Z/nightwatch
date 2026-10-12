@@ -470,8 +470,11 @@ function lane_card(L, nowIso = null, tz = undefined) {
     const a = L.alert;
     const fixes = a.fixes.map(([ic, act, lbl, tip]) =>
       `<button type="button" data-action="${act}" data-part="fix" data-tip="${esc(tip)}">${icon(ic)}<span>${esc(lbl)}</span></button>`).join('');
-    alert = `<div class="nw-alert" role="alert" data-kind="${a.kind}" data-acked="false" data-ack-id="${esc(L.id)}:${a.kind}:${esc(String(a.at[0]))}">` +
-      `${icon('warn')}<p data-part="title">${esc(a.title)}</p>` +
+    // An amber card (level warn, Ra 10/12) is important, not urgent: role
+    // status, not alert, so a screen reader doesn't interrupt for it either.
+    const warn = a.level === 'warn';
+    alert = `<div class="nw-alert" role="${warn ? 'status' : 'alert'}"${warn ? ' data-level="warn"' : ''} data-kind="${a.kind}" data-acked="false" data-ack-id="${esc(L.id)}:${a.kind}:${esc(String(a.at[0]))}">` +
+      `${icon(a.icon ?? 'warn')}<p data-part="title">${esc(a.title)}</p>` +
       `<p data-part="cause">${esc(a.cause)}</p>` +
       `${time_el(a.at, ' data-part="time"')}` +
       `<div data-part="fixes">${fixes}</div>` +

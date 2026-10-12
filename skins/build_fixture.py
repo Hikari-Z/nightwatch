@@ -482,8 +482,10 @@ def lane_card(L, now=None):
         fixes = "".join(
             f'<button type="button" data-action="{act}" data-part="fix" data-tip="{esc(tip)}">{icon(ic)}<span>{esc(lbl)}</span></button>'
             for ic, act, lbl, tip in a["fixes"])
-        alert = (f'<div class="nw-alert" role="alert" data-kind="{a["kind"]}" data-acked="false" data-ack-id="{esc(L["id"])}:{a["kind"]}:{esc(str(a["at"][0]))}">'
-                 f'{icon("warn")}<p data-part="title">{esc(a["title"])}</p>'
+        # An amber card (level warn, Ra 10/12); twin of emitter.mjs.
+        warn = a.get("level") == "warn"
+        alert = (f'<div class="nw-alert" role="{"status" if warn else "alert"}"{" data-level=" + chr(34) + "warn" + chr(34) if warn else ""} data-kind="{a["kind"]}" data-acked="false" data-ack-id="{esc(L["id"])}:{a["kind"]}:{esc(str(a["at"][0]))}">'
+                 f'{icon(a.get("icon") or "warn")}<p data-part="title">{esc(a["title"])}</p>'
                  f'<p data-part="cause">{esc(a["cause"])}</p>'
                  f'{time_el(a["at"], " data-part=\"time\"")}'
                  f'<div data-part="fixes">{fixes}</div>'
