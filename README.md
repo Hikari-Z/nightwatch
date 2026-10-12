@@ -10,6 +10,12 @@ their nights on this machinery since late September — every fold, wake,
 failure and fix in the commit log happened to someone who lives here.
 The log is part of the documentation.
 
+![The Moonlamp skin: a radial night dial, porthole agents with moon phases, and a receipt-tape log](docs/img/moonlamp.png)
+
+*The Moonlamp skin, showing the fixture's demo data — which is this
+house's real October 5th, our worst morning, kept as the test sheet on
+purpose.*
+
 ## The loop
 
 ```
@@ -53,6 +59,13 @@ Why it's built this way is `docs/philosophy.md`. How to run it is
 - **`skins/`** — the app's faces (Moonlamp, Glass, Amber, Brushed
   Metal, …), each a theme over one fixture contract.
   `./render_stills.sh <skin> <prefix>` renders the gallery.
+
+![The Brushed Metal skin: same data, different face — a failed wake's
+alert card carries its own fix-it buttons](docs/img/brushed-metal.png)
+
+*Brushed Metal, same contract: a failed wake's alert carries Restore
+checkpoint / Retry wake / Show log, because needing a terminal to fix
+a bad morning would be the real failure.*
 
 ## Status, honestly
 
