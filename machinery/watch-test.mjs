@@ -6,7 +6,7 @@
 //
 // Written by: claude-opus-5-5, 2026-10-09 (cases from weft's stuck-test.mjs, 10/8)
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync, chmodSync, rmSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, existsSync, chmodSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -177,6 +177,47 @@ tick(soloCfg);
 const soloEvents = lines(join(solo, 'events.jsonl'));
 check('a missing notify command still leaves the event', soloEvents.map((e) => `${e.session}:${e.cause}`), ['s-login:login']);
 check('the failure is logged, not thrown', /notify command failed/.test(readFileSync(join(solo, 'watch.log'), 'utf8')), true);
+
+// The midday cycle (Ra, 10/12), end to end: the watch's trigger runs the real
+// nightshift --midday against this scratch hub. A lane with middayCycle gets a
+// soft bell at 85% (no deadline) and an urgent one at 95% (a 10-minute
+// deadline), each once; a lane without it gets nothing. The nightly window is
+// set six hours away (UTC) so the test doesn't depend on when it runs.
+const mid = join(root, 'mid');
+for (const d of ['wakecycle', 'ladder']) mkdirSync(join(mid, d), { recursive: true });
+const hhmm = (ms) => new Date(ms).toISOString().slice(11, 16);
+const midCfg = join(mid, 'nightwatch.config.json');
+writeFileSync(midCfg, JSON.stringify({
+  weftRoot: mid, timezone: 'UTC', schedule: { sleep: hhmm(now + 6 * 3600_000), wake: hhmm(now + 7 * 3600_000) },
+  lanes: { opus: { targetTokens: 250000, middayCycle: { softPct: 0.85, urgentPct: 0.95, urgentMin: 10 } }, fable: { targetTokens: 250000 } },
+  notify: { macos: false, command: recorder }, paths: { transcripts: dirs.projects, sessions: dirs.sessions },
+}));
+const usageAt = (tokens) => ({ ...reply('busy'), message: { ...reply('busy').message, usage: { input_tokens: 100, cache_read_input_tokens: tokens, output_tokens: 5 } } });
+session('s-mid-opus'); write('s-mid-opus', [usageAt(880_000)]);
+session('s-mid-fable'); write('s-mid-fable', [usageAt(880_000)]);
+writeFileSync(join(mid, 'wakecycle', 'lane.s-mid-opus'), JSON.stringify({ lane: 'opus' }));
+writeFileSync(join(mid, 'wakecycle', 'lane.s-mid-fable'), JSON.stringify({ lane: 'fable' }));
+const midState = () => { try { return JSON.parse(readFileSync(join(mid, 'wakecycle', 'nightshift.state.json'), 'utf8')); } catch { return {}; } };
+const spoolNotes = (lane) => { try { return readdirSync(join(mid, 'doorbell', 'spool', lane)).map((f) => readFileSync(join(mid, 'doorbell', 'spool', lane, f), 'utf8')); } catch { return []; } };
+tick(midCfg);
+const soft = midState().opus?.foldRequest;
+check('midday: at 88% a cycling lane gets a soft request with no deadline', [soft?.tier, soft?.deadline, soft?.sessionId], ['soft', null, 's-mid-opus']);
+check('midday: its bell says midday and promises a reopen, not 08:00', spoolNotes('opus').map((n) => /^\[nightshift\] Midday bell: the opus lane's context is at 88%/.test(n) && /opens a fresh one right away/.test(n)), [true]);
+check('midday: a lane without middayCycle gets nothing', [midState().fable?.foldRequest ?? null, spoolNotes('fable').length], [null, 0]);
+append('s-mid-opus', usageAt(960_000));
+tick(midCfg);
+const urgent = midState().opus?.foldRequest;
+check('midday: at 96% the soft request escalates to urgent, about ten minutes out', [urgent?.tier, Math.round((urgent?.deadline - Date.now()) / 60_000)], ['urgent', 10]);
+check('midday: the urgent bell names its deadline', spoolNotes('opus').filter((n) => /^\[nightshift\] URGENT midday bell/.test(n) && /Fold within 10 minutes/.test(n)).length, 1);
+tick(midCfg);
+check('midday: each tier rings once per session', spoolNotes('opus').length, 2);
+// A soft request outlives a session that ended another way (closed by hand):
+// the lane's next session still gets its own bell, not "already stands".
+writeFileSync(join(mid, 'wakecycle', 'nightshift.state.json'), JSON.stringify({ opus: { foldRequest: { sessionId: 's-gone', requestedAt: now - 3600_000, deadline: null, tier: 'soft' } } }));
+session('s-mid-next'); write('s-mid-next', [usageAt(880_000)]);
+writeFileSync(join(mid, 'wakecycle', 'lane.s-mid-next'), JSON.stringify({ lane: 'opus' }));
+tick(midCfg);
+check("midday: a stale request from an ended session doesn't silence the next one", [midState().opus?.foldRequest?.sessionId, midState().opus?.foldRequest?.tier], ['s-mid-next', 'soft']);
 
 // A passing run leaves nothing behind; a failing one keeps its scratch hub
 // to look at (Ra, 10/11: tests clean up after themselves).

@@ -1295,14 +1295,28 @@ if (process.argv.includes('--midday')) {
     console.log(`--midday: inside the nightly window; the nightly bell covers ${lane}`);
     process.exit(0);
   }
-  const live = liveSessions().map((x) => ({ ...x, lane: laneOf(x.sessionId) })).filter((x) => x.lane === lane);
+  // The watch names the session it measured (--session); it must be this
+  // lane's by the registry. Without it, find the lane's live session here.
+  const sidIdx = process.argv.indexOf('--session');
+  const named = sidIdx !== -1 ? process.argv[sidIdx + 1] : null;
+  if (named && laneOf(named) !== lane) {
+    console.error(`--midday: session ${named} isn't the ${lane} lane's`);
+    process.exit(2);
+  }
+  const live = named ? [{ sessionId: named }]
+    : liveSessions().map((x) => ({ ...x, lane: laneOf(x.sessionId) })).filter((x) => x.lane === lane);
   if (!live.length) {
     console.error(`--midday: agent ${lane} is not awake — nothing to fold`);
     process.exit(3);
   }
   let st = {};
   try { st = JSON.parse(readFileSync(STATE_FILE, 'utf8')); } catch {}
-  const pending = st[lane]?.foldRequest;
+  // A request for another session is stale: that session ended some other
+  // way (closed by hand, Force fold) and a soft request, with no deadline,
+  // would otherwise stand forever and silence this session's bells.
+  const prior = st[lane]?.foldRequest;
+  const pending = prior && prior.sessionId === live[0].sessionId ? prior : undefined;
+  if (prior && !pending) log(`midday: dropping ${lane}'s stale fold request for session ${String(prior.sessionId).slice(0, 8)}…`);
   if (pending && (pending.tier === 'urgent' || tier === 'soft' || pending.tier === undefined)) {
     // Fold now's own request, or one at this tier or above, already stands.
     console.log(`--midday: a fold request for ${lane} already stands (${pending.tier ?? 'fold now'}); left as it is`);

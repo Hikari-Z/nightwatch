@@ -313,7 +313,7 @@ function middayCheck(s, entries) {
   if (!ctx) return;
   const tier = ctx.ratio >= (mc.urgentPct ?? 0.95) ? 'urgent' : ctx.ratio >= (mc.softPct ?? 0.85) ? 'soft' : null;
   if (!tier || TIER_RANK[tier] <= (TIER_RANK[state.midday[s.sid]] ?? 0)) return;
-  const r = spawnSync(process.execPath, [NIGHTSHIFT, '--midday', s.lane, tier, '--pct', ctx.ratio.toFixed(3)], {
+  const r = spawnSync(process.execPath, [NIGHTSHIFT, '--midday', s.lane, tier, '--pct', ctx.ratio.toFixed(3), '--session', s.sid], {
     env: { ...process.env, ...(CFG.__configFile ? { WEFT_CONFIG: CFG.__configFile } : {}) },
     encoding: 'utf8', timeout: 20_000,
   });
