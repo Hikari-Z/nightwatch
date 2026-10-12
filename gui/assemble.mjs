@@ -284,7 +284,7 @@ const STUCK_CARD = {
   offline: { title: 'Can\'t reach the API', window: false, cause: () => 'Connection or DNS failure. They retry on their own once the network is back.' },
   waiting: { title: 'Waiting on you', window: true, cause: (e) => `Waiting for ${Math.round((e.forMs ?? 0) / 60000)} minutes on a permission prompt or a question in their window.` },
   classifier: { title: 'Classifier stops', window: false, cause: (e) => `${e.count} tool calls denied by the auto mode classifier in 30 minutes${e.reason ? ` (latest: ${e.reason})` : ''}. They may be circling something.` },
-  context: { title: 'Context nearly full', window: false, cause: (e) => `At ${Math.round((e.ratio ?? 0) * 100)}% of their context window. Worth a fold at their next seam.` },
+  context: { title: 'Context nearly full', window: false, cause: (e) => `At ${Math.round((e.ratio ?? 0) * 100)}% of their context window. ${e.cycleStalled ? 'The midday cycle hasn\'t folded them: its bell was refused or its deadline passed. Force fold folds them now.' : 'Worth a fold at their next seam.'}` },
   slept: { title: 'Cut off by sleep', window: true, cause: () => 'This machine went to sleep mid-reply. A short poke in their window resumes them.' },
 };
 // Lane-tagged events that report on a session rather than move it through
