@@ -67,7 +67,7 @@ body { color: var(--nw-ink); }
 .nw-lane[data-state="failed"] [data-part="state"] { color: var(--nw-failed); }
 .nw-lane [data-part="toggle"] { color: var(--nw-ink-2); }
 .nw-lane [data-part="facts"] { font-family: var(--nw-mono); font-size: 11px; color: var(--nw-ink-2); }
-.nw-lane [data-part="next"], .nw-lane [data-part="glance"] time { color: var(--am-hi); text-shadow: 0 0 8px var(--am-glow); }
+.nw-lane [data-part="next"], .nw-lane [data-part="midday"][aria-pressed="true"], .nw-lane [data-part="glance"] time { color: var(--am-hi); text-shadow: 0 0 8px var(--am-glow); }
 
 /* instruments: a hairline on a tick scale. Context is a thin lit bar over a
    10% scale; throughput is hairline columns over the same scale. */

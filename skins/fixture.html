@@ -41,8 +41,10 @@
   .nw-app > .nw-confirm { position: fixed; z-index: 50; left: 50%; top: 96px; transform: translateX(-50%);
     width: min(420px, calc(100vw - 32px)); box-shadow: 0 18px 60px #0008; }
   .nw-app > .nw-settings[data-open="false"] { display: none; }
-  .nw-lane [data-part="next"][data-action] { cursor: pointer; }
-  .nw-lane [data-part="next"][aria-pressed="false"] { opacity: .45; text-shadow: none; }
+  .nw-lane [data-part="next"][data-action], .nw-lane [data-part="midday"] { cursor: pointer; }
+  /* The midday switch lights and dims exactly like the bell (Ra, 10/12); each skin's
+     lit-bell colour rule names it too. */
+  .nw-lane [data-part="next"][aria-pressed="false"], .nw-lane [data-part="midday"][aria-pressed="false"] { opacity: .45; text-shadow: none; }
   .nw-app > .nw-settings { position: fixed; z-index: 45; left: 50%; top: 72px; transform: translateX(-50%);
     width: min(600px, calc(100vw - 32px)); max-height: calc(100vh - 100px); overflow: auto; box-shadow: 0 18px 60px #0008; }
   /* In the app the window FITS its content, so a viewport-capped panel was circular: capped to the short
