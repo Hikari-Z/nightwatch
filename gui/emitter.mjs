@@ -438,6 +438,8 @@ function lane_card(L, nowIso = null, tz = undefined) {
   const level = fill >= 0.9 ? 'over' : fill >= 0.75 ? 'high' : 'ok';
   const [pts, peak, total] = spark(L.series);
   const alarm = 'alert' in L && L.alert != null;
+  // An amber card waits to be looked at (Ra, 10/12); only a red one opens its card.
+  const red = alarm && L.alert.level !== 'warn';
   let nxt = '';
   if (L.next) {
     const [what, dt, disp] = L.next;
@@ -459,7 +461,7 @@ function lane_card(L, nowIso = null, tz = undefined) {
     : `<li data-part="midday" data-action="toggle-midday" aria-pressed="false" data-tip="Midday cycle off: they fold only at the nightly bell. Click to turn on.">${icon('cycle')}</li>`;
   // Accordion. The viewer opens any lane with an un-acked alarm: trouble
   // never hides behind a closed card.
-  const open_ = (L.open || alarm) ? 'true' : 'false';
+  const open_ = (L.open || red) ? 'true' : 'false';
   let glance_next = '';
   if (L.next) {
     const [what, dt, disp] = L.next;
@@ -517,7 +519,7 @@ function lane_card(L, nowIso = null, tz = undefined) {
 }
 
 // NightStrip: repeated nodes are GROUPED (one fact with data-count="3").
-const NODE_ICON = { bell: 'bell', fold: 'fold', close: 'moon', launch: 'launch', 'wake-failed': 'warn', wake: 'sun' };
+const NODE_ICON = { bell: 'bell', fold: 'fold', close: 'moon', launch: 'launch', 'wake-failed': 'warn', wake: 'sun', context: 'gauge' };
 
 function node_li(ctx, [kind, st, t, tm, tip, c], lanes = null, stack = 0) {
   let lane_attr = lanes ? ` data-lanes="${lanes.join(' ')}"` : '';
@@ -699,8 +701,8 @@ function night(ctx) {
 // kind. Heartbeats start hidden, which is the filter doing its job.
 const LOG_KINDS = [['bell', 'bell', 'Bells', true], ['fold', 'fold', 'Folds', true], ['close', 'moon', 'Closes', true],
   ['launch', 'launch', 'Launches', true], ['wake', 'sun', 'Wakes', true], ['wake-failed', 'warn', 'Failures', true],
-  ['heartbeat', 'check', 'Heartbeats', false]];
-const LOG_ICON = { bell: 'bell', fold: 'fold', close: 'moon', launch: 'launch', wake: 'sun', 'wake-failed': 'warn', heartbeat: 'check' };
+  ['context', 'gauge', 'Context', true], ['heartbeat', 'check', 'Heartbeats', false]];
+const LOG_ICON = { bell: 'bell', fold: 'fold', close: 'moon', launch: 'launch', wake: 'sun', 'wake-failed': 'warn', context: 'gauge', heartbeat: 'check' };
 
 function log(ctx) {
   const shown = Object.fromEntries(LOG_KINDS.map(([kind, , , on]) => [kind, on]));
@@ -773,7 +775,8 @@ function settings_panel(ctx, p, lanesOf) {
     if (!L.alert) continue;
     laneTrouble++;
     const fix = L.alert.fixes?.[0];
-    items.push(`<li data-status="failed" data-lane="${esc(L.id)}">${icon('warn')} ${esc(laneName(L))}: ${esc(L.alert.title)}` +
+    const amber = L.alert.level === 'warn';
+    items.push(`<li data-status="${amber ? 'warn' : 'failed'}" data-lane="${esc(L.id)}">${icon(amber ? 'gauge' : 'warn')} ${esc(laneName(L))}: ${esc(L.alert.title)}` +
       (fix ? `<button type="button" data-action="${fix[1]}" data-part="fix">${icon(fix[0])}<span>${esc(fix[2])}</span></button>` : '') + `</li>`);
   }
   for (const L of lanesOf) {

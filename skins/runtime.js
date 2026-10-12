@@ -318,7 +318,8 @@
     if (t) { t.setAttribute('aria-expanded', String(open)); t.setAttribute('aria-label', `${open ? 'Collapse' : 'Expand'} ${lane.dataset.lane}`); }
     if (persist && lane.dataset.lane) { (state.lanes ??= {})[lane.dataset.lane] = open; save(); }
   }
-  const hasLiveAlarm = (lane) => !!$('.nw-alert[data-acked="false"]', lane);
+  // Only a red card holds its lane open; an amber one waits to be looked at (Ra, 10/12).
+  const hasLiveAlarm = (lane) => !!$('.nw-alert[data-acked="false"]:not([data-level="warn"])', lane);
   // A persona folds like a lane (10/7): its name and a one-line summary stay,
   // its cards and Add agent tuck away. Remembered per persona; a persona with
   // an un-acked alarm on any card never stays folded.

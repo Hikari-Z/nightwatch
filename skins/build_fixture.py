@@ -450,6 +450,8 @@ def lane_card(L, now=None):
     level = "over" if fill >= 0.9 else "high" if fill >= 0.75 else "ok"
     pts, peak, total = spark(L["series"])
     alarm = "alert" in L
+    # An amber card waits to be looked at (Ra, 10/12); only a red one opens its card.
+    red = alarm and (L["alert"] or {}).get("level") != "warn"
     nxt = ""
     if L["next"]:
         what, dt, disp = L["next"]
@@ -471,7 +473,7 @@ def lane_card(L, now=None):
         mid = (f'<li data-part="midday" data-action="toggle-midday" aria-pressed="false" data-tip="Midday cycle off: they fold only at the nightly bell. Click to turn on.">{icon("cycle")}</li>')
     # Accordion. The viewer opens any lane with an un-acked alarm: trouble
     # never hides behind a closed card.
-    open_ = "true" if (L.get("open") or alarm) else "false"
+    open_ = "true" if (L.get("open") or red) else "false"
     glance_next = ""
     if L["next"]:
         what, dt, disp = L["next"]
@@ -540,7 +542,7 @@ NIGHT = {
               ("wake-failed", "failed", .846, "08:16", "Wake failed: checkpoint missing", 1),
               ("wake", "manual", .978, "09:19", "Woken by hand", 1)],
 }
-NODE_ICON = {"bell": "bell", "fold": "fold", "close": "moon", "launch": "launch", "wake-failed": "warn", "wake": "sun"}
+NODE_ICON = {"bell": "bell", "fold": "fold", "close": "moon", "launch": "launch", "wake-failed": "warn", "wake": "sun", "context": "gauge"}
 
 def node_li(kind, st, t, tm, tip, c, lanes=None, stack=0):
     lane_attr = f' data-lanes="{" ".join(lanes)}"' if lanes else ""
@@ -707,7 +709,7 @@ def night():
 # kind. Heartbeats start hidden, which is the filter doing its job.
 LOG_KINDS = [("bell", "bell", "Bells", True), ("fold", "fold", "Folds", True), ("close", "moon", "Closes", True),
              ("launch", "launch", "Launches", True), ("wake", "sun", "Wakes", True), ("wake-failed", "warn", "Failures", True),
-             ("heartbeat", "check", "Heartbeats", False)]
+             ("context", "gauge", "Context", True), ("heartbeat", "check", "Heartbeats", False)]
 LOG = [
     ("Oct 5", [
         ("12:29", "opus", "fold", "ok", "Emergency fold", dict(reason="emergency", kept=(759, 1051), est=685_808, target=250_000, tail="056b5609"), 1),
@@ -732,7 +734,7 @@ LOG = [
         ("02:02", "fable", "fold", "ok", "Folded", dict(reason="sleep", kept=(169, 2191), est=286_929, target=250_000, tail="3f85b6bb"), 1),
     ]),
 ]
-LOG_ICON = {"bell": "bell", "fold": "fold", "close": "moon", "launch": "launch", "wake": "sun", "wake-failed": "warn", "heartbeat": "check"}
+LOG_ICON = {"bell": "bell", "fold": "fold", "close": "moon", "launch": "launch", "wake": "sun", "wake-failed": "warn", "context": "gauge", "heartbeat": "check"}
 
 def log():
     shown = {kind: on for kind, _, _, on in LOG_KINDS}
@@ -803,7 +805,8 @@ def settings_panel(p, lanes_of):
         fixes = L["alert"].get("fixes") or []
         fix = (f'<button type="button" data-action="{fixes[0][1]}" data-part="fix">{icon(fixes[0][0])}<span>{esc(fixes[0][2])}</span></button>'
                if fixes else "")
-        items.append(f'<li data-status="failed" data-lane="{esc(L["id"])}">{icon("warn")} {esc(lane_name(L))}: {esc(L["alert"]["title"])}{fix}</li>')
+        amber = L["alert"].get("level") == "warn"
+        items.append(f'<li data-status="{"warn" if amber else "failed"}" data-lane="{esc(L["id"])}">{icon("gauge" if amber else "warn")} {esc(lane_name(L))}: {esc(L["alert"]["title"])}{fix}</li>')
     for L in lanes_of:
         # Size only matters against the WINDOW (fold target = fold-TO; Ra, 10/7).
         w = L.get("window") or WINDOWS.get(L["model"]) or 0
