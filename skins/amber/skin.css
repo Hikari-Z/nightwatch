@@ -197,6 +197,7 @@ button { cursor: pointer; }
 .nw-alert [data-part="fixes"], .nw-alarm [data-part="fixes"] { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 [data-part="fix"] { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--nw-seam); background: var(--nw-surface); font-size: 12px; white-space: nowrap; }
 [data-part="fix"]:first-child { background: var(--nw-failed-fill, var(--nw-failed)); border-color: var(--nw-failed-fill, var(--nw-failed)); color: #fff; font-weight: 600; }
+.nw-alert[data-level="warn"] [data-part="fix"]:first-child { background: color-mix(in srgb, var(--nw-warn) 78%, #000); border-color: color-mix(in srgb, var(--nw-warn) 78%, #000); } /* the amber tier's first fix is amber, not red (10/12) */
 .nw-alert [data-part="ack"] { grid-column: 3; align-self: end; justify-self: end; display: inline-flex; gap: 5px; align-items: center; margin-top: 6px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--nw-seam); background: var(--nw-surface); color: var(--nw-ink); font-size: 12px; white-space: nowrap; }
 /* "Got it" hides it on this screen (the runtime's promise; Ra, 10/7: it only dimmed, and looked stuck). The house
    still knows: the log keeps the event, and a new episode shows again. */
@@ -807,6 +808,7 @@ body { color: var(--nw-ink); }
 .nw-lane [data-part="actions"] button[aria-expanded="true"] { color: var(--am-hi); background: var(--ob-gloss); box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--am); }
 [data-part="fix"], .nw-alert [data-part="ack"], :is([data-part="buttons"], [data-part="session-row"]) button { border-radius: 2px; border: 0; background: var(--ob-gloss); box-shadow: var(--ob-edge); color: var(--nw-ink); font: 500 11.5px var(--nw-cond); letter-spacing: .1em; text-transform: uppercase; }
 [data-part="fix"]:first-child { background: var(--ob-gloss); color: #ffd1c9; box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--nw-failed), 0 6px 14px -8px var(--nw-failed); font-weight: 600; }
+.nw-alert[data-level="warn"] [data-part="fix"]:first-child { color: #ffdcbf; box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--nw-warn), 0 6px 14px -8px var(--nw-warn); }
 [data-part="buttons"] button[data-primary="true"] { background: var(--ob-gloss); color: var(--am-hi); box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--am); }
 [data-part="buttons"] button[data-danger="true"] { color: #ff8a7a; }
 /* A confirm's danger button (Fold now, Fold all) is the act itself, not Remove's quiet link: it takes the

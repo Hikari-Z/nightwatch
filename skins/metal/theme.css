@@ -97,6 +97,7 @@ body { color: var(--nw-ink); font-size: 12px; }
 .nw-lane [data-part="actions"] button[aria-expanded="true"] { --g: #3d8fe8; color: #fff; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); }
 [data-part="fix"], .nw-alert [data-part="ack"], :is([data-part="buttons"], [data-part="session-row"]) button { --g: #9aa0a8; border: 0; border-radius: 11px; padding: 3px 12px; color: #1c1c1c; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); font: 12px var(--nw-font); }
 [data-part="fix"]:first-child { --g: #d62a1e; color: #fff; text-shadow: 0 -1px 0 rgb(0 0 0 / .3); background: var(--mt-gel); border: 0; font-weight: 600; }
+.nw-alert[data-level="warn"] [data-part="fix"]:first-child { --g: #c27a0a; }
 [data-part="buttons"] button[data-primary="true"] { --g: #2f86e6; color: #fff; background: var(--mt-gel); border: 0; text-shadow: 0 -1px 0 rgb(0 0 0 / .3); }
 [data-part="buttons"] button[data-danger="true"] { --g: #e3a39e; color: #7a120a; }
 /* A confirm's danger button is the act itself: a red gel with white text, like the alert's first fix (10/6). */
