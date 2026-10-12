@@ -46,11 +46,13 @@ const asAppleScriptText = (s) => String(s).replace(/\\/g, '\\\\').replace(/"/g, 
  * calls byte-identically for the same wire command; WSL asks Windows
  * Terminal through interop; Linux asks the Debian alternatives name.
  */
-export function summonWindowArgv({ title, shellCommand }, kind = platformKind()) {
+export function summonWindowArgv({ title, shellCommand, activate = true }, kind = platformKind()) {
   if (kind === 'darwin') {
     return [
       { bin: 'osascript', args: ['-e', `tell application "Terminal" to do script "${asAppleScriptText(shellCommand)}"`] },
-      { bin: 'osascript', args: ['-e', 'tell application "Terminal" to activate'] },
+      // The app-driven first wake passes activate: false — summoning a window
+      // mid-Set-up must not steal focus from the app doing the setting up.
+      ...(activate ? [{ bin: 'osascript', args: ['-e', 'tell application "Terminal" to activate'] }] : []),
     ];
   }
   if (kind === 'wsl') {

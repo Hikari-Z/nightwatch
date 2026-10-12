@@ -245,9 +245,10 @@ fi
 MYTTY="$(tty 2>/dev/null || true)"
 case "$MYTTY" in
   /dev/tty*)
-    nohup osascript -e 'delay 1' \
-      -e "tell application \"Terminal\" to close (every window whose tty of selected tab is \"$MYTTY\")" \
-      >/dev/null 2>&1 &
+    # platform.mjs owns the per-OS answer (darwin closes the Terminal
+    # window; elsewhere the window belongs to the summoner and this is a
+    # no-op). Cosmetic either way: failure is ignored.
+    nohup node "$WAKECYCLE_DIR/platform.mjs" close-tty "$MYTTY" >/dev/null 2>&1 &
     ;;
 esac
 exit $RC

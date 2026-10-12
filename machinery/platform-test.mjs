@@ -46,6 +46,11 @@ check('linux summon uses the alternatives terminal', () => {
   const argv = summonWindowArgv({ title: 'x', shellCommand: 'echo hi' }, 'linux');
   assert.deepEqual(argv, [{ bin: 'x-terminal-emulator', args: ['-e', 'sh', '-lc', 'echo hi'] }]);
 });
+check('activate: false drops only the focus steal (the app-driven wake)', () => {
+  const argv = summonWindowArgv({ title: 'm', shellCommand: 'c', activate: false }, 'darwin');
+  assert.equal(argv.length, 1);
+  assert.ok(argv[0].args[1].includes('do script'));
+});
 check('summonWindow executes the argv in order through injected io', () => {
   const ran = [];
   summonWindow({ title: 't', shellCommand: 'c' }, { kind: 'darwin', execFileSync: (bin, args) => ran.push([bin, args[0]]) });
