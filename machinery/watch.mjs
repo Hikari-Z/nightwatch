@@ -60,7 +60,7 @@ import { notifyBanner } from './platform.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig } from './config.mjs';
+import { loadConfig, loadConfigFrom } from './config.mjs';
 
 const CFG = loadConfig();
 const W = CFG.watch;
@@ -305,9 +305,26 @@ function contextOf(s, entries) {
 // rule and the escalation. A refusal (the session isn't registered yet, say)
 // isn't recorded, so the next poll asks again.
 const NIGHTSHIFT = join(dirname(fileURLToPath(import.meta.url)), 'nightshift.mjs');
+// The card's midday switch (Ra, 10/12) edits the config while this watch
+// runs, so the lanes' settings are re-read whenever the file changes, as the
+// nightshift reloads its own; nothing needs a restart to take a switch.
+let lanesSeen = { mtime: null, lanes: CFG.lanes };
+function lanesNow() {
+  const file = CFG.__configFile;
+  if (!file) return CFG.lanes;
+  try {
+    const mtime = statSync(file).mtimeMs;
+    if (mtime !== lanesSeen.mtime) {
+      const fresh = loadConfigFrom(file).lanes; // loadConfig() caches: it would hand back the old lanes
+      if (lanesSeen.mtime !== null) log(`config reloaded — midday cycle on: [${Object.entries(fresh ?? {}).filter(([, l]) => l?.middayCycle).map(([k]) => k).join(', ')}]`);
+      lanesSeen = { mtime, lanes: fresh };
+    }
+  } catch (e) { log(`config reload failed, keeping the last good lanes: ${e.message}`); }
+  return lanesSeen.lanes;
+}
 const TIER_RANK = { soft: 1, urgent: 2 };
 function middayCheck(s, entries) {
-  const mc = CFG.lanes?.[s.lane]?.middayCycle;
+  const mc = lanesNow()?.[s.lane]?.middayCycle;
   if (!mc) return;
   const ctx = contextOf(s, entries);
   if (!ctx) return;

@@ -5,7 +5,7 @@
 // real is read or written. Run: node machinery/watch-test.mjs
 //
 // Written by: claude-opus-5-5, 2026-10-09 (cases from weft's stuck-test.mjs, 10/8)
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, existsSync, chmodSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -221,6 +221,36 @@ session('s-mid-next'); write('s-mid-next', [usageAt(880_000)]);
 writeFileSync(join(mid, 'wakecycle', 'lane.s-mid-next'), JSON.stringify({ lane: 'opus' }));
 tick(midCfg);
 check("midday: a stale request from an ended session doesn't silence the next one", [midState().opus?.foldRequest?.sessionId, midState().opus?.foldRequest?.tier], ['s-mid-next', 'soft']);
+
+// The card's midday switch (10/12) edits the config while the watch runs: the
+// running watch picks it up on its next poll, no restart. A lane at 88% with
+// the cycle off is left alone; switched on mid-run, it gets its soft bell.
+{
+  const live = join(root, 'live');
+  for (const d of ['wakecycle', 'ladder']) mkdirSync(join(live, d), { recursive: true });
+  const liveCfg = join(live, 'nightwatch.config.json');
+  const cfgWith = (midday) => JSON.stringify({
+    weftRoot: live, timezone: 'UTC', schedule: { sleep: hhmm(now + 6 * 3600_000), wake: hhmm(now + 7 * 3600_000) },
+    watch: { pollMs: 300 },
+    lanes: { opus: { targetTokens: 250000, ...(midday ? { middayCycle: { softPct: 0.85, urgentPct: 0.95, urgentMin: 10 } } : {}) } },
+    notify: { macos: false, command: recorder }, paths: { transcripts: dirs.projects, sessions: dirs.sessions },
+  });
+  writeFileSync(liveCfg, cfgWith(false));
+  session('s-live'); write('s-live', [usageAt(880_000)]);
+  writeFileSync(join(live, 'wakecycle', 'lane.s-live'), JSON.stringify({ lane: 'opus' }));
+  const nap = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  const w = spawn(process.execPath, [join(HERE, 'watch.mjs')], { env: { ...process.env, WEFT_CONFIG: liveCfg }, stdio: 'ignore' });
+  try {
+    nap(1500);
+    const before = (() => { try { return JSON.parse(readFileSync(join(live, 'wakecycle', 'nightshift.state.json'), 'utf8')); } catch { return {}; } })();
+    check('switch: with the cycle off, a lane at 88% gets no request', before.opus?.foldRequest ?? null, null);
+    writeFileSync(liveCfg, cfgWith(true)); // the card's switch, turned on
+    nap(2500);
+    const after = (() => { try { return JSON.parse(readFileSync(join(live, 'wakecycle', 'nightshift.state.json'), 'utf8')); } catch { return {}; } })();
+    check('switch: turned on mid-run, the running watch rings the soft bell', after.opus?.foldRequest?.tier ?? null, 'soft');
+    check('switch: the watch logs the reload', /config reloaded — midday cycle on: \[opus\]/.test(readFileSync(join(live, 'watch.log'), 'utf8')), true);
+  } finally { w.kill(); }
+}
 
 // A passing run leaves nothing behind; a failing one keeps its scratch hub
 // to look at (Ra, 10/11: tests clean up after themselves).
