@@ -401,11 +401,16 @@ export function assemble(cfg, io, range = '8h') {
       // A request whose deadline passed 30m ago without a met or forced
       // event was lost (a daemon restart, say); it isn't pending any more.
       const dl = Date.parse(laneEvents[iReq].deadline ?? '');
-      if (!done) { if (!(dl + 30 * 60_000 < nowMs)) foldRequest = { phase: 'requested', deadline: laneEvents[iReq].deadline }; }
+      // A midday request (Ra, 10/12) carries its tier: soft has no deadline,
+      // so it's never lost to the 30-minute rule; only its own fold ends it.
+      const tier = laneEvents[iReq].tier;
+      if (!done) {
+        if (tier === 'soft' || !(dl + 30 * 60_000 < nowMs)) foldRequest = { phase: 'requested', deadline: laneEvents[iReq].deadline, ...(tier ? { tier } : {}) };
+      }
       // Refreshing ends with any word that the wake happened or won't
       // (10/8: an already-awake left "waking fresh" on the card for hours).
       else if (!after.slice(after.indexOf(done) + 1).some((e) => ['wake-confirmed', 'already-awake', 'wake-failed', 'stale-receipt'].includes(e.kind))) {
-        foldRequest = { phase: 'refreshing', forced: done.kind === 'fold-forced' };
+        foldRequest = { phase: 'refreshing', forced: done.kind === 'fold-forced', ...(laneEvents[iReq].tier ? { tier: laneEvents[iReq].tier } : {}) };
         refreshFoldedSid = done.session;
       }
     }
@@ -419,6 +424,16 @@ export function assemble(cfg, io, range = '8h') {
     // quiet (Ra, 10/9: after the fold the card went back to plain awake, and
     // nothing showed where the agent was in the cycle).
     if (alive && last?.kind === 'folded') state = 'folding';
+    // Rung written (Ra, 10/12): belled, and a rung for this lane has landed
+    // in the ladder since the bell, so the fold is next. Rungs are named
+    // <date>-<lane>.md, with -2, -3 for a second that day.
+    let rungWritten = false;
+    if (state === 'belled' && last?.at && cfg.paths.ladder) {
+      const L2 = joinPath(cfg.paths.ladder, 'L2');
+      const mine = new RegExp(`-${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(-\\d+)?\\.md$`);
+      const bellMs = Date.parse(last.at);
+      rungWritten = io.readDir(L2).some((f) => mine.test(f) && (io.stat(joinPath(L2, f))?.mtimeMs ?? 0) > bellMs);
+    }
     if (!alive) {
       if (last?.kind === 'wake-failed') state = 'failed';
       else if (last?.kind === 'orphan-fold-done') state = 'orphaned';
@@ -534,6 +549,7 @@ export function assemble(cfg, io, range = '8h') {
       // settings", the default).
       persona, runtime: lc.runtime ?? 'claude-code',
       ...(foldRequest ? { foldRequest } : {}),
+      ...(rungWritten ? { rungWritten: true } : {}),
       ...(activity ? { activity } : {}),
       schedule: lc.schedule ? { inherit: false, sleep: lc.schedule.sleep, wake: lc.schedule.wake }
         : { inherit: true, sleep: cfg.schedule.sleep, wake: cfg.schedule.wake },
