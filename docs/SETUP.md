@@ -3,7 +3,7 @@
 Notes from someone who explored this corner of the maze. This is the
 install-and-run guide for the wake cycle (continuity ladder + nightly
 fold + morning wake); the design rationale lives in the README and in
-`anima_dev/wakecycle_recipe_sketch.md`. Written for the second
+`docs/philosophy.md`. Written for the second
 household to run this (hi, Terra) and for the eventual GUI, which is a
 thin shell over exactly the pieces named here.
 
@@ -39,9 +39,9 @@ Five cooperating pieces, all small:
 
 ## Quickstart, single lane
 
-1. Put the `wakecycle/` folder somewhere stable and add a
-   `weft.config.json` next to it (one level up, or point `WEFT_CONFIG`
-   at it). Minimal single-lane config:
+1. Clone this repo somewhere stable and write a `weft.config.json`
+   for your hub (point `WEFT_CONFIG` at it; the machinery never
+   assumes it lives inside your state directory). Minimal single-lane config:
 
    ```json
    {
@@ -60,7 +60,7 @@ Five cooperating pieces, all small:
 
    ```json
    { "hooks": { "SessionStart": [{ "hooks": [{ "type": "command",
-     "command": "~/origin/weft/wakecycle/register-lane.sh" }] }] } }
+     "command": "WEFT_CONFIG=/path/to/weft.config.json /path/to/nightwatch/machinery/register-lane.sh" }] }] } }
    ```
 
    Also set `"autoCompactEnabled": false` — the fold replaces
@@ -74,7 +74,7 @@ Five cooperating pieces, all small:
    `./wake.sh main` the next morning and watch it resume.
 
 5. Then arm the daemon (see launchd below, or cron), write the lane
-   name into `wakecycle/nightshift.armed`, and let it run a night.
+   name into your hub's `nightshift.armed`, and let it run a night.
    Read `nightshift.log` in the morning. The healthy shape is:
    bell → fold row in folds.jsonl → "closing <lane> panel" →
    "waking the <lane> lane (attempt 1)" → "wake receipt ... reached
@@ -98,7 +98,7 @@ this house runs, trimmed to the parts that matter
   <key>Label</key><string>com.weft.nightshift</string>
   <key>ProgramArguments</key><array>
     <string>/usr/local/bin/node</string>
-    <string>/Users/YOU/origin/weft/wakecycle/nightshift.mjs</string>
+    <string>/Users/YOU/nightwatch/machinery/nightshift.mjs</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
@@ -125,7 +125,7 @@ The daemon is a poller (one tick a minute), so cron can run it with
 
 ```ini
 [Service]
-ExecStart=/usr/bin/node /home/YOU/weft/wakecycle/nightshift.mjs
+ExecStart=/usr/bin/node /home/YOU/nightwatch/machinery/nightshift.mjs
 Restart=always
 [Install]
 WantedBy=default.target
