@@ -84,6 +84,9 @@ for (const skin of ['minimal', 'glass', 'amber', 'metal', 'wacky', 'steampunk'])
     await check(`${skin}: the ${m} menu is whole and on top`, `(m=>{const r=m.getBoundingClientRect();const top=document.elementFromPoint(r.x+r.width/2,r.bottom-8);return r.bottom<=innerHeight&&r.right<=innerWidth&&!!top&&m.contains(top)})(document.querySelector('[data-menu="${m}"]'))`, true);
     await ev(`document.querySelector('[data-action="${m}-menu"]').click()`);
   }
+  // The midday switch lights and dims exactly like the bell (Ra, 10/12): same
+  // colour, opacity and glow in both states, and on differs from off.
+  await check(`${skin}: the midday switch looks like the bell, on and off`, `(()=>{const c=[...document.querySelectorAll('.nw-app > .nw-lanes .nw-lane')].find(c=>c.querySelector('[data-part="next"]')&&c.querySelector('[data-part="midday"]'));const b=c.querySelector('[data-part="next"]'),m=c.querySelector('[data-part="midday"]');const st=e=>{const s=getComputedStyle(e);return [s.color,s.opacity,s.textShadow].join('|')};const r=[];for(const v of ['true','false']){b.setAttribute('aria-pressed',v);m.setAttribute('aria-pressed',v);r.push(st(b)===st(m),st(m))}return r[0]&&r[2]&&r[1]!==r[3]})()`, true);
 }
 // ---- Vertical + persona rows (Ra, 10/7: clicks fell through after expanding a card or clicking "weft")
 await send('Emulation.setDeviceMetricsOverride', { width: 1470, height: 1100, deviceScaleFactor: 1, mobile: false });
