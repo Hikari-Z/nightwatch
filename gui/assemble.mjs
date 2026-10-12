@@ -499,6 +499,10 @@ export function assemble(cfg, io, range = '8h') {
           kind: pick.cause === 'context' ? 'context-high' : `stuck-${pick.cause}`,
           at: [pick.at, hm(pick.at)],
           title: pick.cause === 'context' && pick.cycleStalled ? 'Midday fold stalled' : how.title,
+          // Three tiers (Ra, 10/12): red = act now, amber = important but not
+          // urgent, neutral = routine. Context-high is amber's first citizen;
+          // a stalled midday cycle is red again.
+          ...(pick.cause === 'context' && !pick.cycleStalled ? { level: 'warn', icon: 'gauge' } : {}),
           cause: how.cause(pick),
           fixes: how.window
             ? [['terminal', 'open-terminal', 'Open their window', 'Bring the agent\'s Terminal window forward'], ['log', 'show-log', 'Show log', 'Open the log at this alert']]

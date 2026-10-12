@@ -90,6 +90,7 @@ body { color: var(--nw-ink); }
 .nw-lane [data-part="actions"] button[aria-expanded="true"] { color: var(--am-hi); background: var(--ob-gloss); box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--am); }
 [data-part="fix"], .nw-alert [data-part="ack"], :is([data-part="buttons"], [data-part="session-row"]) button { border-radius: 2px; border: 0; background: var(--ob-gloss); box-shadow: var(--ob-edge); color: var(--nw-ink); font: 500 11.5px var(--nw-cond); letter-spacing: .1em; text-transform: uppercase; }
 [data-part="fix"]:first-child { background: var(--ob-gloss); color: #ffd1c9; box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--nw-failed), 0 6px 14px -8px var(--nw-failed); font-weight: 600; }
+.nw-alert[data-level="warn"] [data-part="fix"]:first-child { color: #ffdcbf; box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--nw-warn), 0 6px 14px -8px var(--nw-warn); }
 [data-part="buttons"] button[data-primary="true"] { background: var(--ob-gloss); color: var(--am-hi); box-shadow: var(--ob-edge), inset 0 -2px 0 -1px var(--am); }
 [data-part="buttons"] button[data-danger="true"] { color: #ff8a7a; }
 /* A confirm's danger button (Fold now, Fold all) is the act itself, not Remove's quiet link: it takes the
@@ -107,6 +108,12 @@ input[type="checkbox"] { accent-color: #8a8272; }
 .nw-alert [data-part="title"] { color: #ffb3a8; font: 500 13px var(--nw-cond); text-transform: uppercase; letter-spacing: .12em; }
 .nw-alert [data-part="cause"] { color: var(--nw-ink-2); }
 .nw-alert [data-part="time"] { color: #ff8a7a; }
+/* The amber tier in the Amber skin has to read as a state, not the theme: it keeps the alarm's whole
+   structure (tinted panel, left rule, glowing lamp, uppercase title) in a hotter orange than the ink. */
+.nw-alert[data-level="warn"] { background: linear-gradient(90deg, rgb(255 138 42 / .12), transparent 70%), var(--ob-matte) !important; box-shadow: var(--ob-edge), inset 2px 0 0 var(--nw-warn); }
+.nw-alert[data-level="warn"] > .nw-icon { color: var(--nw-warn); filter: drop-shadow(0 0 4px var(--nw-warn)); }
+.nw-alert[data-level="warn"] [data-part="title"] { color: #ffb070; }
+.nw-alert[data-level="warn"] [data-part="time"] { color: #ff9a50; }
 
 /* add rail */
 .nw-add > [data-part="add"] { color: var(--nw-ink-2); background: var(--ob-gloss) !important; font-family: var(--nw-cond); text-transform: uppercase; letter-spacing: .2em; }

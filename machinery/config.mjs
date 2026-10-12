@@ -66,6 +66,13 @@ export const DEFAULTS = {
     waitingMs: 15 * 60_000,
     contextWarn: 0.85,
     contextRearm: 0.80,
+    // TRANSITIONAL (Ra, 10/12), not policy: amber is the agent's normal
+    // operating stream and never needs the keeper, so amber alerts don't
+    // notify. While the house is still being built, a lane WITHOUT the midday
+    // cycle has no automatic answer to a filling context; its keeper still is
+    // one, so its amber context warning leaks a notification. Set false for the
+    // doctrine as ruled; remove once every lane cycles.
+    notifyAmberUncycled: true,
   },
   // Where a watch alert goes besides the app's own card (events.jsonl, always
   // written). macos: a Notification Center banner. command: an executable

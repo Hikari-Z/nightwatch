@@ -191,6 +191,9 @@ button { cursor: pointer; }
   display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: start;
   background: repeating-linear-gradient(90deg, var(--mw-wood) 0 22px, #9a5f2a 22px 24px); border: 3px solid #5c3613; box-shadow: 0 5px 0 #4a2a10; }
 .nw-alert > .nw-icon { width: 26px; height: 26px; color: var(--mw-awake); grid-row: span 2; }
+/* The amber tier (Ra, 10/12): a lighter sign hung straight, with an amber lamp; the tilted heavy sign stays the alarm. */
+.nw-alert[data-level="warn"] { rotate: 0deg; border-width: 2px; box-shadow: 0 3px 0 #4a2a10; }
+.nw-alert[data-level="warn"] > .nw-icon { color: #ffb000; }
 .nw-alert [data-part="title"] { font-size: 14px; font-weight: 700; }
 .nw-alert [data-part="cause"] { font: 11px var(--mw-type); color: #ffdca8; overflow-wrap: anywhere; }
 .nw-alert [data-part="time"] { grid-column: 2; font-size: 11px; color: #ffdca8; }
@@ -198,6 +201,7 @@ button { cursor: pointer; }
 [data-part="fix"] { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 0; border-radius: 99px; font: 700 12px var(--mw-font);
   color: var(--mw-ink); background: var(--mw-paper); box-shadow: 0 3px 0 #5c3613; }
 [data-part="fix"]:first-child { color: #fff; background: radial-gradient(circle at 35% 30%, #ff9a9a, var(--mw-failed) 60%, #9e1111); box-shadow: 0 3px 0 #5e0a0a; }
+.nw-alert[data-level="warn"] [data-part="fix"]:first-child { background: radial-gradient(circle at 35% 30%, #ffe08a, #d98e10 60%, #7e5206); box-shadow: 0 3px 0 #4e3204; }
 .nw-alert [data-part="ack"] { position: absolute; right: -10px; bottom: -12px; width: 40px; height: 40px; border-radius: 50%; border: 0; display: grid; place-items: center;
   background: radial-gradient(circle at 35% 30%, #a6ffb5, #2f8f5b 60%, #14532d); box-shadow: 0 3px 0 #0b3b1f; color: #fff; font-size: 0; }
 .nw-alert [data-part="ack"] .nw-icon { display: none; }
@@ -564,6 +568,10 @@ body { color: var(--bw-ink); }
   border: 0; border-radius: 14px; box-shadow: inset 0 0 0 2px #c7973f, inset 0 0 0 4px #6e521a; color: #ffd0b8; padding-left: 14px; }
 .nw-alert > .nw-icon { color: transparent; }
 .nw-alert [data-part="cause"], .nw-alert [data-part="time"] { color: #e0b08a; }
+/* the amber tier (10/12): the same brass plate with an amber lamp; the lamp's colour is this skin's tier signal */
+.nw-alert[data-level="warn"] { background: radial-gradient(circle at 22px 22px, #ffd27a 0 7px, #d98e10 8px, rgb(255 176 40 / .25) 12px, transparent 30px), #24170a !important;
+  box-shadow: inset 0 0 0 2px #c7973f, inset 0 0 0 4px #6e521a; }
+.nw-alert[data-level="warn"] > .nw-icon { color: transparent; }
 /* settings: a brass-framed card */
 .nw-lane [data-part="settings"], .nw-add [data-part="add-form"] { rotate: 0deg; border-top: 0; box-shadow: 0 0 0 3px #c7973f, 0 0 0 4px #6e521a; border-radius: 6px; }
 .nw-lane [data-part="settings"]::before, .nw-add [data-part="add-form"]::before { display: none; }

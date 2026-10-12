@@ -96,6 +96,18 @@ const CASES = {
       ...L.slice(3).map((x) => ({ ...x, state: 'sleeping', foldRequest: { phase: 'refreshing', forced: true } })),
     ] } };
   },
+  // The severity tiers (Ra, 10/12): an amber context-high card beside a red
+  // stuck card, so both twins render the warn level and its own glyph.
+  tiers: () => {
+    const L = FIXTURE.LANES;
+    const at = ['2026-10-05T12:40-07:00', '12:40'];
+    const log = ['log', 'show-log', 'Show log', 'Open the log at this alert'];
+    return { snap: { LANES: [
+      { ...L[0], alert: { kind: 'context-high', level: 'warn', icon: 'gauge', at, title: 'Context high', cause: 'At 88% of their context window. Worth a fold at their next seam.', fixes: [log] } },
+      { ...L[1], alert: { kind: 'stuck-login', at, title: 'Logged out', cause: "The session says its login expired. They can't do anything until someone runs /login in their window.", fixes: [log] } },
+      ...L.slice(2),
+    ] } };
+  },
   quiet: () => ({
     snap: {
       NOW: '2026-10-06T08:05-07:00',

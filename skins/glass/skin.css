@@ -200,6 +200,9 @@ button { cursor: pointer; }
 /* alert slot */
 .nw-alert { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: start; align-content: start; padding: 10px 12px; background: color-mix(in srgb, var(--nw-failed) 9%, var(--nw-surface)) !important; box-shadow: inset 3px 0 0 var(--nw-failed); }
 .nw-alert > .nw-icon { color: var(--nw-failed); grid-row: span 2; margin-top: 1px; }
+/* The amber tier (Ra, 10/12): important, not urgent. The same card in the warn colour. */
+.nw-alert[data-level="warn"] { background: color-mix(in srgb, var(--nw-warn) 10%, var(--nw-surface)) !important; box-shadow: inset 3px 0 0 var(--nw-warn); }
+.nw-alert[data-level="warn"] > .nw-icon { color: var(--nw-warn); }
 .nw-alert [data-part="title"] { font-weight: 600; }
 .nw-alert [data-part="time"] { color: var(--nw-ink-2); grid-column: 3; grid-row: 1; }
 .nw-alert [data-part="cause"] { grid-column: 2 / 4; color: var(--nw-ink-2); font-size: 12px; overflow-wrap: anywhere; }
@@ -210,6 +213,7 @@ button { cursor: pointer; }
 .nw-alert [data-part="fixes"], .nw-alarm [data-part="fixes"] { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 [data-part="fix"] { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--nw-seam); background: var(--nw-surface); font-size: 12px; white-space: nowrap; }
 [data-part="fix"]:first-child { background: var(--nw-failed-fill, var(--nw-failed)); border-color: var(--nw-failed-fill, var(--nw-failed)); color: #fff; font-weight: 600; }
+.nw-alert[data-level="warn"] [data-part="fix"]:first-child { background: color-mix(in srgb, var(--nw-warn) 78%, #000); border-color: color-mix(in srgb, var(--nw-warn) 78%, #000); } /* the amber tier's first fix is amber, not red (10/12) */
 .nw-alert [data-part="ack"] { grid-column: 3; align-self: end; justify-self: end; display: inline-flex; gap: 5px; align-items: center; margin-top: 6px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--nw-seam); background: var(--nw-surface); color: var(--nw-ink); font-size: 12px; white-space: nowrap; }
 /* "Got it" hides it on this screen (the runtime's promise; Ra, 10/7: it only dimmed, and looked stuck). The house
    still knows: the log keeps the event, and a new episode shows again. */
@@ -787,8 +791,10 @@ html[data-gallery="1"] .nw-gallery { grid-area: gallery; display: grid; grid-tem
 
 /* alert: red-tinted glass */
 .nw-alert { background: rgb(255 59 48 / .12) !important; box-shadow: inset 3px 0 0 var(--nw-failed); border-top-color: transparent !important; }
+.nw-alert[data-level="warn"] { background: rgb(255 159 10 / .13) !important; box-shadow: inset 3px 0 0 var(--nw-warn); }
 [data-part="fix"], .nw-alert [data-part="ack"] { border-radius: 8px; background: rgb(255 255 255 / .55); border-color: var(--nw-seam); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 [data-part="fix"]:first-child { background: var(--nw-failed); box-shadow: 0 2px 8px rgb(255 59 48 / .35); }
+.nw-alert[data-level="warn"] [data-part="fix"]:first-child { background: color-mix(in srgb, var(--nw-warn) 82%, #000); box-shadow: 0 2px 8px rgb(255 159 10 / .35); }
 :is([data-part="buttons"], [data-part="session-row"]) button { border-radius: 8px; background: rgb(255 255 255 / .5); }
 .nw-lane [data-part="settings"], .nw-add [data-part="add-form"] { background: var(--nw-sunk) !important; border-radius: 0 0 var(--gl-r) var(--gl-r); }
 .nw-lane [data-part="actions"] button:hover { background: var(--nw-hover); }

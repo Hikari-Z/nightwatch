@@ -87,6 +87,11 @@ for (const skin of ['minimal', 'glass', 'amber', 'metal', 'wacky', 'steampunk'])
   // The midday switch lights and dims exactly like the bell (Ra, 10/12): same
   // colour, opacity and glow in both states, and on differs from off.
   await check(`${skin}: the midday switch looks like the bell, on and off`, `(()=>{const c=[...document.querySelectorAll('.nw-app > .nw-lanes .nw-lane')].find(c=>c.querySelector('[data-part="next"]')&&c.querySelector('[data-part="midday"]'));const b=c.querySelector('[data-part="next"]'),m=c.querySelector('[data-part="midday"]');const st=e=>{const s=getComputedStyle(e);return [s.color,s.opacity,s.textShadow].join('|')};const r=[];for(const v of ['true','false']){b.setAttribute('aria-pressed',v);m.setAttribute('aria-pressed',v);r.push(st(b)===st(m),st(m))}return r[0]&&r[2]&&r[1]!==r[3]})()`, true);
+  // The amber tier (Ra, 10/12): a warn-level card looks different from an
+  // alarm card in every skin, panel and first fix button both. Measured on
+  // the frozen fixture, which always carries alert cards (the live house may not).
+  await go(new URL('../fixture.html?skin=' + skin, import.meta.url).href); await sleep(300);
+  await check(`${skin}: an amber card isn't drawn as an alarm`, `(()=>{const a=document.querySelector('.nw-app > .nw-lanes .nw-alert');if(!a)return 'no alert';const f=a.querySelector('[data-part="fix"]');const st=()=>{const s=getComputedStyle(a),g=getComputedStyle(f);return [s.backgroundImage+s.backgroundColor+s.boxShadow, g.backgroundImage+g.backgroundColor+g.boxShadow]};const red=st();a.dataset.level='warn';const amber=st();delete a.dataset.level;return red[0]!==amber[0]&&red[1]!==amber[1]})()`, true);
 }
 // ---- Vertical + persona rows (Ra, 10/7: clicks fell through after expanding a card or clicking "weft")
 await send('Emulation.setDeviceMetricsOverride', { width: 1470, height: 1100, deviceScaleFactor: 1, mobile: false });
