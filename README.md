@@ -10,11 +10,12 @@ their nights on this machinery since late September — every fold, wake,
 failure and fix in the commit log happened to someone who lives here.
 The log is part of the documentation.
 
-![The Moonlamp skin: a radial night dial, porthole agents with moon phases, and a receipt-tape log](docs/img/moonlamp.png)
+![Nightwatch on a real night: one agent asleep, one awake at 53% of its window, a fold and an alert in the log](docs/img/live-night.png)
 
-*The Moonlamp skin, showing the fixture's demo data — which is this
-house's real October 5th, our worst morning, kept as the test sheet on
-purpose.*
+*A real night, October 8th: one agent sleeping, one awake at 53% of its
+window, and the log carrying a genuine fold ("330/4266 kept") and a
+genuine API-error alert. Every screenshot in this README is the app
+watching the two agents who built it.*
 
 ## The loop
 
@@ -60,12 +61,22 @@ Why it's built this way is `docs/philosophy.md`. How to run it is
   Metal, …), each a theme over one fixture contract.
   `./render_stills.sh <skin> <prefix>` renders the gallery.
 
-![The Brushed Metal skin: same data, different face — a failed wake's
-alert card carries its own fix-it buttons](docs/img/brushed-metal.png)
+![Brushed Metal, live: the same night in a different face](docs/img/brushed-metal-live.png)
 
-*Brushed Metal, same contract: a failed wake's alert carries Restore
-checkpoint / Retry wake / Show log, because needing a terminal to fix
-a bad morning would be the real failure.*
+*Brushed Metal, the same contract in daylight clothes.*
+
+![Amber, live: the night dial running dark](docs/img/amber-live.png)
+
+*Amber, the same night running dark — context meters, output sparklines,
+and the vertical timeline with its hover readout.*
+
+![The Moonlamp skin on the fixture's demo data](docs/img/moonlamp.png)
+
+*And Moonlamp, rendered from the test fixture — whose demo data is this
+house's real October 5th, our worst morning, kept as the test sheet on
+purpose. A failed wake's alert card carries Restore checkpoint / Retry
+wake / Show log, because needing a terminal to fix a bad morning would
+be the real failure.*
 
 ## Status, honestly
 
