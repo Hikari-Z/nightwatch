@@ -68,6 +68,8 @@ Two tiers, keyed on the lane's context, at any hour (it's about the agent's limi
 - **Words:** Rung written, Bell rung (belled), Refreshing, Cycling and the rest as proposed; wording can be tuned
   once it's seen in context.
 - **Midday cycle:** soft bell at 85% with no timer; an urgent bell with a timer at 95%; at any hour.
-- **Still open:** the urgent tier's deadline (proposed: 10 minutes), and the single morning banner.
+- **Urgent deadline:** 10 minutes.
+- **No morning banner:** the persona card already shows at a glance which agents are awake; banners stay for
+  things a person has to act on.
 
 *Written by: claude-opus-5-5, 2026-10-12. Rulings recorded; build next.*
