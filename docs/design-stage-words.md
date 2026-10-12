@@ -6,7 +6,7 @@ invisible", Ra 10/9; "Gentle midday cycle", Ra 10/9).
 ## What's there today
 
 The card already prints the lane's raw state in its badge (`belled`, `folding`, `sleeping`, `failed`, …), with a
-tooltip from `STATE_TIP` in `gui/emitter.mjs`. Skins hide the word when the lane is plainly awake. So the gap Ra
+tooltip from `STATE_TIP` in `gui/emitter.mjs`. Four of the six skins (Minimal, Glass, Amber, Metal) hide the word when the lane is plainly awake; Brassworks and Wacky show it. So the gap Ra
 named on 10/9 is half closed: the stage is visible, but in the machinery's vocabulary, and two stages of the
 night have no word at all.
 
@@ -61,7 +61,7 @@ As the polish queue describes it, composed from parts that exist:
 
 1. The words above, especially "Rung written" (a new stage), "Refreshing" and "Cycling".
 2. Notifications: only act-on-this banners, or also the single morning banner?
-3. Midday cycle numbers: `atPct` 85 (where the context alert fires today)? `graceMin` 20? At most once per how
+3. Midday cycle numbers: `atPct` 85 (where the context alert fires today, `contextWarn: 0.85` in config.mjs)? `graceMin` 20? At most once per how
    many hours?
 4. Should the midday bell also go quiet during the hours you're usually away, or is any time fine?
 
