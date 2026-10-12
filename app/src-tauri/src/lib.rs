@@ -90,7 +90,7 @@ fn toggle(app: &AppHandle) {
 // v0.8). Built one at a time, safest first (Ra, 10/6): hide-window, then
 // wake. Anything not listed in HOST_CAN stays read-only in the page.
 const HOST_CAN: &[&str] = &["hide-window", "wake", "sleep", "retry-wake", "open-terminal", "hide-terminal", "terminal-state", "wake-all", "sleep-all", "restore-checkpoint", "restart-daemon",
-    "save-lane", "save-settings", "toggle-nightly", "arm-lane", "remove-lane", "emergency-fold", "fold-all", "run-doctor"];
+    "save-lane", "save-settings", "toggle-nightly", "arm-lane", "toggle-midday", "remove-lane", "emergency-fold", "fold-all", "run-doctor"];
 
 // The product's own source tree (the repo this app was built from): its gui/
 // serves the page and its machinery/ is what Set up points new hubs at.
@@ -542,6 +542,24 @@ fn arm_lane(h: &Hub, lane: Option<&str>, d: &serde_json::Value) -> Result<String
     Ok(if on { format!("{lane} armed: belled at its sleep time and woken at its wake time.") } else { format!("{lane} disarmed: no bell, fold or wake until it's armed again.") })
 }
 
+// One lane's midday cycle switch, beside the bell (Ra, 10/12). On writes the
+// ruled defaults (a soft bell at 85% of the window, an urgent one at 95% that
+// forces after 10 minutes); off removes the setting, so the lane folds only at
+// its nightly bell. The context watch reloads its config when the file
+// changes, so neither needs a restart.
+fn toggle_midday(h: &Hub, lane: Option<&str>, d: &serde_json::Value) -> Result<String, String> {
+    let lane = h.check_lane(lane)?;
+    let on = d.get("on").and_then(|x| x.as_bool()).ok_or("toggle-midday needs on: true|false")?;
+    let key = format!("lanes.{lane}.middayCycle");
+    if on {
+        cfg_set(h, &key, &serde_json::json!({"softPct": 0.85, "urgentPct": 0.95, "urgentMin": 10}))?;
+        Ok(format!("{lane}'s midday cycle is on: asked to fold at 85% of its window, and within ten minutes at 95%."))
+    } else {
+        cfg_unset(h, &key)?;
+        Ok(format!("{lane}'s midday cycle is off: it folds only at its nightly bell."))
+    }
+}
+
 // Stop managing a lane: disarm, then drop it from the config. Its
 // transcripts, ladder and receipts stay on disk (the button's own promise).
 fn remove_lane(h: &Hub, lane: Option<&str>) -> Result<String, String> {
@@ -713,6 +731,7 @@ fn act(app: AppHandle, action: String, lane: Option<String>, hub: Option<String>
         "save-settings" => save_settings(&h()?, &d),
         "toggle-nightly" => toggle_nightly(&d),
         "arm-lane" => arm_lane(&h()?, lane, &d),
+        "toggle-midday" => toggle_midday(&h()?, lane, &d),
         "remove-lane" => remove_lane(&h()?, lane),
         "emergency-fold" => emergency_fold(&h()?, lane),
         "fold-all" => for_all(emergency_fold, "not awake").map(|m| format!("Force-folding: {m}")),
@@ -889,6 +908,15 @@ mod rehearsal_tests {
         println!("arm-lane on: {}", arm_lane(&after, Some(&lane), &serde_json::json!({ "on": true })).expect("arm-lane on"));
         assert!(armed_has(&after), "arm-lane on left the lane disarmed");
         assert!(arm_lane(&after, Some(&lane), &serde_json::json!({})).unwrap_err().contains("needs on"));
+        // The midday switch (10/12): on writes the ruled defaults, off removes the key.
+        println!("toggle-midday on: {}", toggle_midday(&after, Some(&lane), &serde_json::json!({ "on": true })).expect("toggle-midday on"));
+        let on = Hub::open(&root).unwrap();
+        assert_eq!(on.cfg["lanes"][&lane]["middayCycle"]["softPct"], 0.85);
+        assert_eq!(on.cfg["lanes"][&lane]["middayCycle"]["urgentMin"], 10);
+        println!("toggle-midday off: {}", toggle_midday(&on, Some(&lane), &serde_json::json!({ "on": false })).expect("toggle-midday off"));
+        let off = Hub::open(&root).unwrap();
+        assert!(off.cfg["lanes"][&lane].get("middayCycle").is_none(), "toggle-midday off left the setting");
+        assert!(toggle_midday(&off, Some(&lane), &serde_json::json!({})).unwrap_err().contains("needs on"));
 
         // Check again: the hub's own nightshift dry run
         let pre = run_doctor(&after).expect("run-doctor");
