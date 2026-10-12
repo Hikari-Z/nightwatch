@@ -45,24 +45,29 @@ wake failed, and an orphan fold happened. Routine stages (bell, fold, wake) stay
 would train everyone to ignore banners. One possible exception, Ra's call: a single morning banner once every
 armed lane has woken ("Both agents woke at 08:00").
 
-## The midday cycle
+## The midday cycle (Ra's rulings, 10/12)
 
-As the polish queue describes it, composed from parts that exist:
-- **Setting:** `lanes.<id>.middayCycle: { atPct, graceMin }`. On for the opus lane, off for fable's (one long
-  coordination context per day, by design).
-- **Trigger:** the context watch already computes the window ratio. At `atPct` or above, outside the nightly
-  window and at most once per lane per few hours, it rings the ordinary bell with `source: 'midday'`.
-- **The ritual is the same:** the agent folds at its own seam and writes its own rung; then the refresh path
-  reopens the lane at once instead of waiting for 08:00. The orphan floor backstops it after `graceMin`.
-- **The card** says Cycling, so a midday fold never reads as the nightly one.
-- **Bench:** the trigger, the once-per-window limit, the night-window exclusion, and the refresh after a met fold.
+Two tiers, keyed on the lane's context, at any hour (it's about the agent's limits, not anyone's attention):
+- **85%: a soft bell, no timer.** The ordinary bell note, marked midday. The agent finishes its work, writes its
+  rung, and runs `sleep.mjs` at its own seam. That run IS the "rung written, ready to fold" signal Ra asked
+  for: the fold row lands, the daemon closes the window once the session goes quiet, and the refresh path
+  reopens the lane at once instead of waiting for 08:00.
+- **95%: an urgent bell with a timer.** If no fold has happened by the deadline, the daemon runs the Force-fold
+  path before the window hits its cap: close, fold, reopen, and the fresh window writes the rung. An agent is
+  never left jammed open at a full context.
+- **Setting:** `lanes.<id>.middayCycle: { softPct: 0.85, urgentPct: 0.95, urgentMin }`. On for the opus lane,
+  off for fable's (one long coordination context per day, by design).
+- **Once per window:** a lane already belled (soft or urgent) isn't belled again at the same tier until it has
+  folded.
+- **The card:** Cycling while a midday fold is under way; the urgent tier shows its countdown.
+- **Bench:** each tier's trigger, no repeat at a tier, the night window left to the nightly bell, the refresh
+  after a met fold, and the urgent tier's forced fold.
 
-## Decisions for Ra
+## Ra's rulings, 10/12
 
-1. The words above, especially "Rung written" (a new stage), "Refreshing" and "Cycling".
-2. Notifications: only act-on-this banners, or also the single morning banner?
-3. Midday cycle numbers: `atPct` 85 (where the context alert fires today, `contextWarn: 0.85` in config.mjs)? `graceMin` 20? At most once per how
-   many hours?
-4. Should the midday bell also go quiet during the hours you're usually away, or is any time fine?
+- **Words:** Rung written, Bell rung (belled), Refreshing, Cycling and the rest as proposed; wording can be tuned
+  once it's seen in context.
+- **Midday cycle:** soft bell at 85% with no timer; an urgent bell with a timer at 95%; at any hour.
+- **Still open:** the urgent tier's deadline (proposed: 10 minutes), and the single morning banner.
 
-*Written by: claude-opus-5-5, 2026-10-12. A proposal; nothing built yet.*
+*Written by: claude-opus-5-5, 2026-10-12. Rulings recorded; build next.*
