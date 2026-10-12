@@ -1,0 +1,238 @@
+/* Nightwatch skin: Brassworks (contract v0.7), v4 (Ra's concept, 10/12). A warm instrument
+   built on Brushed Metal's bones: a satin-bronze body (brushed, warm, never silver, so it stays
+   its own thing beside Metal), COPPER for the controls you press, SILVER for the cool fittings
+   (the head's round buttons and toggles), and one lit accent, AMETHYST, used the way Amber uses
+   its glow: sparingly, on dark inset displays (the clock, the deck's readout, the throughput
+   graph inside the timeline) and on whatever is on or selected. State colours stay semantic, so
+   folding moves off violet to teal here: amethyst never means a state. The log is an engraved
+   ledger plate, more serious than the rest. Built on minimal's layout; every gel is Metal's
+   recipe (set --g). */
+
+:root {
+  --nw-font: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --nw-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --nw-seam: #6b4a2a;
+  --nw-surface: #c9a77c;
+  --nw-sunk: #f3e6d0;
+  --nw-ink: #2b1a0c;
+  --nw-ink-2: #5c4128;
+  --nw-hover: rgb(255 240 215 / .3);
+  --nw-awake: #3b7fc4; --nw-belled: #d08a2a; --nw-folding: #2f9e8f; --nw-sleeping: #8a8172;
+  --nw-orphaned: #c4487e; --nw-failed: #c8392b; --nw-ok: #4f9a4f; --nw-manual: #3b7fc4; --nw-warn: #d08a2a;
+  --nw-tip-bg: #f6ead2; --nw-tip-ink: #2b1a0c;
+  /* the accent: amethyst, subdued; lit only on dark displays and on what is on */
+  --bw-amethyst: #8f74c9; --bw-amethyst-deep: #6a50a6; --bw-lavender: #cbb8f0;
+  --bw-glow: 0 0 6px rgb(176 146 232 / .55);
+  /* the dark display (Amber's restraint, in amethyst) */
+  --bw-display: linear-gradient(#1f1829, #2b2238);
+  --bw-display-edge: inset 0 1px 4px rgb(0 0 0 / .7), 0 1px 0 rgb(255 236 200 / .45), 0 0 0 1px #3c2a18;
+  /* satin bronze: Metal's stretched-noise brush over a warm sheen */
+  --mt-brush: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.004 0.9' numOctaves='2' seed='11'/%3E%3CfeColorMatrix values='0 0 0 0 .18  0 0 0 0 .09  0 0 0 0 0  0 0 0 .2 0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23b)'/%3E%3C/svg%3E");
+  --mt-sheen: linear-gradient(180deg, #dcc199 0%, #c4a072 42%, #a9845a 100%);
+  --mt-metal: var(--mt-brush), var(--mt-sheen);
+  --mt-emboss: 0 1px 0 rgb(255 238 208 / .7);
+  --mt-bevel: inset 0 1px 0 rgb(255 240 214 / .75), inset 0 -1px 0 rgb(60 30 0 / .25);
+  --bw-copper: #b4673c; --bw-silver: #c3c6cc;
+  --g: var(--bw-copper);
+  --nw-lane-w: 236px;
+  --nw-rail-w: 48px;
+}
+
+/* the jelly recipe resolves PER ELEMENT: declared on :root, var(--g) would
+   resolve once (to blue) and every element would inherit that finished value */
+*, ::before, ::after {
+  --mt-gel: linear-gradient(180deg, rgb(255 255 255 / .78) 0%, rgb(255 255 255 / .28) 48%, transparent 50%),
+            linear-gradient(180deg, color-mix(in srgb, var(--g) 78%, #000) 0%, var(--g) 52%, color-mix(in srgb, var(--g) 55%, #fff) 100%);
+  --mt-gel-shadow: inset 0 0 0 1px color-mix(in srgb, var(--g) 60%, #000), inset 0 -3px 5px color-mix(in srgb, var(--g) 45%, #fff), 0 1px 2px rgb(0 0 0 / .35);
+}
+
+/* @@BASE@@ (build_skins.py inserts minimal's layout here) */
+/* ================= Brassworks ================= */
+body { color: var(--nw-ink); font-size: 12px; }
+.nw-app { gap: 1px; filter: drop-shadow(0 12px 26px rgb(0 0 0 / .4)) drop-shadow(0 0 0 #5a3f26); }
+.nw-head, .nw-controls, .nw-timeline, .nw-log, .nw-lane > header, .nw-lane [data-part="body"] > *, .nw-alarm, .nw-confirm, .nw-glyphs,
+.nw-add > [data-part="add"], .nw-add [data-part="add-form"],
+.nw-settings, .nw-setup, .nw-add [data-part="preview"] { background: var(--mt-metal); outline: 1px solid var(--nw-seam); box-shadow: var(--mt-bevel); }
+.nw-head { height: 36px; border-radius: 7px 7px 0 0; }
+.nw-head [data-part="title"] { flex: 1; text-align: center; font: 600 13px var(--nw-font); color: #2e1d0e; text-shadow: var(--mt-emboss); order: 0; }
+.nw-head [data-part="schedule"] { margin-left: 0; font-family: var(--nw-mono); font-size: 11px; color: var(--nw-ink-2); text-shadow: var(--mt-emboss); }
+/* the clock: the iTunes LCD */
+.nw-head [data-part="clock"] { padding: 2px 10px; border-radius: 9px; font: 600 12px var(--nw-mono); color: var(--bw-lavender);
+  background: var(--bw-display); box-shadow: var(--bw-display-edge); text-shadow: var(--bw-glow); }
+.nw-head > button { --g: var(--bw-copper); width: 22px; height: 22px; border-radius: 50%; color: #2b1a0c; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); }
+.nw-head > button .nw-icon { width: 12px; height: 12px; }
+.nw-head > button:hover, .nw-head > button[aria-expanded="true"] { --g: var(--bw-amethyst); color: #fff; background: var(--mt-gel); }
+.nw-glyph { --g: var(--bw-amethyst); --g2: 14px; width: 14px; height: 14px; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); }
+.nw-glyph[data-phase="down"] { --g: var(--bw-copper); }
+.nw-head [data-part="view-menu"] { border-radius: 4px; background: rgb(246 234 210 / .98); border: 1px solid #7a5a3a; box-shadow: 0 8px 20px rgb(0 0 0 / .35); font-family: var(--nw-font); }
+.nw-head [data-part="view-menu"] label:hover, .nw-head [data-part="view-menu"] button:hover { background: linear-gradient(#a58ad6, #6a50a6); color: #fff; }
+
+/* lanes */
+.nw-lane > header { box-shadow: var(--mt-bevel), inset 0 3px 0 -1px var(--state) !important; background: var(--mt-metal) !important; }
+.nw-lane > header:hover { background: linear-gradient(rgb(255 255 255 / .18), rgb(255 255 255 / .18)), var(--mt-metal) !important; }
+:is(.nw-lane [data-part="avatar"], .nw-persona [data-part="persona-avatar"]) { --g: var(--state); width: 26px; height: 26px; border-radius: 50%; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); text-shadow: 0 -1px 0 rgb(0 0 0 / .35); }
+.nw-lane [data-part="name"] { font: 700 13.5px var(--nw-font); color: #2b1a0c; text-shadow: var(--mt-emboss); }
+.nw-lane [data-part="model"] { color: var(--nw-ink-2); font-size: 11px; text-shadow: var(--mt-emboss); }
+.nw-lane [data-part="state"] { --g: var(--state); padding: 2px 8px; border-radius: 9px; color: #fff; font: 700 9.5px var(--nw-font); letter-spacing: .04em;
+  background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); text-shadow: 0 -1px 0 rgb(0 0 0 / .3); }
+.nw-lane[data-state="awake"] [data-part="state"] { padding: 0; width: 14px; height: 14px; }
+.nw-lane [data-part="state"] i { display: none; }
+.nw-lane [data-part="toggle"] { --g: var(--bw-copper); width: 18px; height: 18px; border-radius: 50%; color: #2b1a0c; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); }
+.nw-lane [data-part="toggle"] .nw-icon { width: 12px; height: 12px; }
+.nw-lane [data-part="facts"] { color: var(--nw-ink-2); text-shadow: var(--mt-emboss); font-size: 11px; }
+.nw-lane [data-part="next"], .nw-lane [data-part="midday"], .nw-lane [data-part="glance"] time { color: #2b1a0c; }
+
+/* meters: aqua progress bars with the barber-pole stripe */
+.nw-lane :is([data-part="context"] [data-part="bar"], [data-part="throughput"] svg:not(.nw-icon)) { height: 13px; border-radius: 7px; background: linear-gradient(#ead7b8, #f6ead2);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / .45), 0 1px 0 rgb(255 255 255 / .8); }
+.nw-lane [data-part="context"] [data-part="bar"]::before { --g: var(--meter); inset: 1px auto 1px 1px; border-radius: 6px; width: calc(min(var(--fill), 1) * (100% - 2px));
+  background: repeating-linear-gradient(-45deg, rgb(255 255 255 / .22) 0 6px, transparent 6px 12px), var(--mt-gel); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--meter) 60%, #000); }
+.nw-lane [data-part="throughput"] svg:not(.nw-icon) { padding: 2px 3px; }
+.nw-lane [data-part="throughput"] rect { fill: var(--meter); }
+.nw-lane :is([data-part="context"], [data-part="throughput"]) [data-part="value"] { font: 600 10.5px var(--nw-mono); color: var(--nw-ink); text-shadow: var(--mt-emboss); }
+.nw-lane :is([data-part="context"], [data-part="throughput"]) > .nw-icon { color: #5a3f26; }
+.nw-lane [data-part="mini"] { height: 7px; border-radius: 4px; background: linear-gradient(#ead7b8, #f6ead2); box-shadow: inset 0 1px 2px rgb(0 0 0 / .4); }
+.nw-lane [data-part="mini"]::before { --g: var(--state); border-radius: 4px; background: var(--mt-gel); }
+
+/* jelly buttons */
+.nw-lane [data-part="actions"] { gap: 4px; padding: 6px 8px; }
+:is(.nw-lane [data-part="actions"] button, .nw-persona [data-part="persona-buttons"] button) { --g: var(--bw-copper); width: 26px; height: 26px; border-radius: 50%; color: #2b1a0c; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); }
+:is(.nw-lane [data-part="actions"] button .nw-icon, .nw-persona [data-part="persona-buttons"] button .nw-icon) { width: 14px; height: 14px; }
+:is(.nw-lane [data-part="actions"] button:hover, .nw-persona [data-part="persona-buttons"] button:hover) { --g: var(--bw-amethyst); color: #fff; background: var(--mt-gel); }
+.nw-lane [data-part="actions"] button[aria-disabled="true"] { opacity: .4; }
+.nw-lane [data-part="actions"] button[data-danger="true"]:not([aria-disabled="true"]) { --g: #d62a1e; color: #fff; }
+.nw-lane [data-part="actions"] button[aria-expanded="true"] { --g: var(--bw-amethyst); color: #fff; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); }
+[data-part="fix"], .nw-alert [data-part="ack"], :is([data-part="buttons"], [data-part="session-row"]) button { --g: var(--bw-copper); border: 0; border-radius: 11px; padding: 3px 12px; color: #2b1a0c; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); font: 12px var(--nw-font); }
+[data-part="fix"]:first-child { --g: #d62a1e; color: #fff; text-shadow: 0 -1px 0 rgb(0 0 0 / .3); background: var(--mt-gel); border: 0; font-weight: 600; }
+.nw-alert[data-level="warn"] [data-part="fix"]:first-child { --g: #c27a0a; }
+[data-part="buttons"] button[data-primary="true"] { --g: var(--bw-amethyst-deep); color: #fff; background: var(--mt-gel); border: 0; text-shadow: 0 -1px 0 rgb(0 0 0 / .3); }
+[data-part="buttons"] button[data-danger="true"] { --g: #e3a39e; color: #7a120a; }
+/* A confirm's danger button is the act itself: a red gel with white text, like the alert's first fix (10/6). */
+.nw-confirm [data-part="buttons"] button[data-danger="true"] { --g: #d62a1e; color: #fff; text-shadow: 0 -1px 0 rgb(0 0 0 / .3); font-weight: 600; }
+.nw-lane [data-part="settings"], .nw-add [data-part="add-form"] { background: linear-gradient(#ead8bb, #dcc4a0) !important; }
+.nw-lane [data-part="settings"] :is(select, input:not([type="checkbox"])), .nw-add :is(select, input:not([type="checkbox"])) { border-radius: 3px; border-color: #7a5a3a; background: #fff; box-shadow: inset 0 1px 2px rgb(0 0 0 / .25); }
+
+/* the alert */
+.nw-alert { background: linear-gradient(#ffe9e6, #f7cfca) !important; box-shadow: inset 0 1px 0 #fff, inset 3px 0 0 var(--nw-failed); }
+.nw-alert [data-part="title"] { color: #7a120a; text-shadow: var(--mt-emboss); }
+.nw-alert [data-part="cause"] { color: #5a2a24; }
+.nw-alert[data-level="warn"] { background: linear-gradient(#fff3d6, #f5dfae) !important; box-shadow: inset 0 1px 0 #fff, inset 3px 0 0 var(--nw-warn); }
+.nw-alert[data-level="warn"] [data-part="title"] { color: #6a4200; }
+.nw-alert[data-level="warn"] [data-part="cause"] { color: #5a4422; }
+
+/* the add rail */
+.nw-add > [data-part="add"] { color: var(--nw-ink-2); text-shadow: var(--mt-emboss); }
+.nw-add > [data-part="add"] .nw-icon { --g: #2f9e44; width: 22px; height: 22px; padding: 4px; border-radius: 50%; color: #fff; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); }
+
+/* the deck: an iTunes LCD over jelly transport */
+.nw-controls [data-part="display"] { border-radius: 10px; color: var(--bw-lavender); background: var(--bw-display); box-shadow: var(--bw-display-edge); }
+.nw-controls [data-part="summary"] b, .nw-controls [data-part="counts"] b, .nw-controls [data-part="next"] time { color: #e4d8fb; font-family: var(--nw-mono); }
+.nw-controls [data-part="next"], .nw-controls [data-part="counts"] { color: #a493c8; }
+.nw-controls [data-part="transport"] button { --g: var(--bw-copper); border: 0; border-radius: 17px; color: #2b1a0c; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); }
+.nw-controls [data-part="transport"] button[data-part="primary"] { --g: var(--bw-amethyst-deep); color: #fff !important; background: var(--mt-gel) !important; box-shadow: var(--mt-gel-shadow) !important; border: 0 !important; text-shadow: 0 -1px 0 rgb(0 0 0 / .35); }
+.nw-controls[data-setup="true"] [data-part="transport"] button[data-part="primary"] { --g: #2f9e44; }
+.nw-controls [data-part="transport"] button[data-danger="true"] { --g: #d62a1e; color: #fff; }
+.nw-controls [data-part="transport"] button[aria-disabled="true"] { opacity: .45; }
+.nw-controls :is([data-part="toggles"], [data-part="transport"]) button[aria-pressed="true"] { --g: var(--bw-amethyst); color: #fff; background: var(--mt-gel); text-shadow: 0 -1px 0 rgb(0 0 0 / .3); }
+
+/* timeline: a grooved track, gel beads */
+.nw-timeline [data-part="heading"], .nw-log [data-part="heading"] { font: 700 11.5px var(--nw-font); color: #2e1d0e; text-shadow: var(--mt-emboss); letter-spacing: .02em; }
+.nw-timeline [data-part="heading"] span { text-shadow: var(--mt-emboss); }
+.nw-timeline [data-part="range"] { padding: 0; gap: 0; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 2px rgb(0 0 0 / .35); }
+.nw-timeline [data-part="range"] button { --g: #c79a6e; border-radius: 0; color: #2b1a0c; background: var(--mt-gel); box-shadow: inset -1px 0 0 rgb(0 0 0 / .25); }
+.nw-timeline [data-part="range"] button[aria-checked="true"] { --g: var(--bw-amethyst); color: #fff; background: var(--mt-gel); box-shadow: inset -1px 0 0 rgb(0 0 0 / .25); }
+.nw-timeline [data-part="axis"] { color: var(--nw-ink-2); text-shadow: var(--mt-emboss); }
+.nw-strip::before { text-shadow: var(--mt-emboss); }
+.nw-strip::after { height: 5px; top: 10px; border-radius: 3px; background: linear-gradient(#9e7b52, #e2c9a2); box-shadow: inset 0 1px 2px rgb(0 0 0 / .45); }
+.nw-node { --g: var(--c); color: #fff; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); }
+.nw-node[data-alarm="true"] { background: var(--mt-gel); }
+.nw-node .nw-icon { filter: drop-shadow(0 -1px 0 rgb(0 0 0 / .3)); }
+.nw-node [data-part="count"] { background: #f6ead2; color: #7a120a; box-shadow: 0 0 0 1px #b08a4a; }
+.nw-node [data-part="lanes"] i { background: #6a5038; }
+.nw-strip[data-mode="compressed"] .nw-node[style*="--stack: 1"], .nw-strip[data-mode="compressed"] .nw-node[style*="--stack: 2"] { box-shadow: var(--mt-gel-shadow); }
+.nw-timeline [data-part="activity"] { --act: #6a50a6; border-radius: 6px; background: linear-gradient(#fff, #eef3fb); box-shadow: inset 0 1px 3px rgb(0 0 0 / .35); }
+.nw-timeline [data-part="activity"] [data-part="grid"] line { stroke: rgb(203 184 240 / .14); stroke-dasharray: none; }
+.nw-timeline [data-part="activity"] [data-part="fill-top"] { stop-opacity: .45; }
+.nw-timeline :is([data-part="activity"], [data-part="sleep-bands"]) [data-part="sleep"] { background: repeating-linear-gradient(-45deg, rgb(120 130 150 / .12) 0 3px, transparent 3px 8px); color: #7a8494; text-shadow: var(--mt-emboss); }
+.nw-timeline [data-part="activity"] :is([data-part="peak"], [data-part="cursor-label"]) { color: var(--bw-lavender); background: linear-gradient(#f2f6e6, #d3dcc0); box-shadow: 0 0 0 1px #4b3a63; border-radius: 7px; }
+
+/* log: an iTunes list */
+.nw-log [data-part="events"] { border-radius: 3px; background: #fff; box-shadow: inset 0 0 0 1px #7a5a3a, inset 0 1px 3px rgb(0 0 0 / .25); padding: 0 1px; }
+.nw-log .nw-day { padding: 2px 6px; color: #2e1d0e; background: linear-gradient(#ecdcc0, #d2b68f); border-bottom: 1px solid #9c7a55; text-shadow: var(--mt-emboss); font-size: 10.5px; }
+.nw-event { padding: 3px 6px; border-top: 0; }
+.nw-event:nth-child(even of :not([hidden])) { background: rgb(120 80 40 / .06); }
+.nw-event [data-part="lane"] { color: #2b1a0c; }
+.nw-log [data-part="filters"] label { --g: #c79a6e; border-radius: 9px; color: #2b1a0c; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); }
+.nw-log [data-part="filters"] label:has(input:checked) { --g: var(--bw-amethyst); color: #fff; background: var(--mt-gel); }
+.nw-log [data-part="filters"] label:not(:has(input:checked)) { opacity: .7; }
+:is(.nw-timeline, .nw-log) [data-part="empty"] { color: var(--nw-ink-2); text-shadow: var(--mt-emboss); }
+
+/* Hover keeps this theme's surface (the base layout's hover paints a faint
+   translucent tint, which on a solid theme read as the button vanishing;
+   Ra, 10/6). Brighten instead. */
+.nw-app .nw-add > [data-part="add"]:hover { background: var(--mt-metal) !important; filter: brightness(1.12); }
+
+/* Vertical layout (10/6): the recessed gutter, turned to run down the strip. */
+.nw-app[data-layout="column"] .nw-strip::after { width: 5px; left: calc(50% - 2.5px); background: linear-gradient(90deg, #9e7b52, #e2c9a2); box-shadow: inset 1px 0 2px rgb(0 0 0 / .45); }
+
+/* The vertical timeline's hour lines, as the graph draws them here: pale, solid (10/6). */
+:root { --tl-grid: rgb(203 184 240 / .14); --tl-grid-mask: none; }
+
+/* The graph lives in its own box here, so its sleep stripes stay inside it in the vertical layout (Ra, 10/6:
+   stripes running out of the box looked odd); the hour lines still carry across. */
+.nw-app[data-layout="column"] .nw-timeline > [data-part="sleep-bands"] [data-part="sleep"] { display: none; }
+/* ...and the box is one of the period's inset displays, like the clock and the deck's readout: a pale LCD with
+   a dark inset edge, drawn in LCD ink instead of Aqua blue. */
+.nw-timeline [data-part="activity"] { --act: var(--bw-lavender); border-radius: 10px; color: var(--bw-lavender);
+  background: var(--bw-display); box-shadow: var(--bw-display-edge); }
+.nw-timeline [data-part="activity"] [data-part="grid"] line { stroke: rgb(203 184 240 / .14); }
+.nw-timeline [data-part="activity"] [data-part="sleep"] { background-image: repeating-linear-gradient(-45deg, rgb(203 184 240 / .08) 0 3px, transparent 3px 8px); color: #9c8cc0; text-shadow: none; }
+
+/* Persona names (10/7): brushed aluminium with the same bevel as the lane headers, and embossed lettering. */
+.nw-persona { --nw-persona-bg: var(--mt-metal); --nw-persona-outline: none; --nw-persona-shadow: var(--mt-bevel), inset 0 3px 0 -1px var(--state); }
+.nw-app .nw-persona [data-part="persona-name"] { font: 800 12.5px/1 var(--nw-font); letter-spacing: .14em; color: #2b1a0c; text-shadow: var(--mt-emboss); }
+.nw-persona { --nw-spine-top: 10.6px; } /* gel centred on the cards' gels (measured, 10/7) */
+
+/* The persona's fold toggle is a gel ball like a card's (Ra, 10/7); only the chevron inside turns. */
+.nw-persona [data-part="persona-name"] > [data-part="persona-toggle"] { --g: var(--bw-copper); width: 18px; height: 18px; border-radius: 50%; color: #2b1a0c; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); }
+
+/* The persona's two buttons are gels like a card's toolbar (10/7); a little apart, as the card's are. */
+.nw-persona [data-part="persona-buttons"] { gap: 4px; }
+
+/* Round 5 (Ra, 10/7): the spine is two gel-wide columns; the lights are small gels in their state's colour, like the
+   cards' state gel; the tray is a groove pressed into the plate. */
+:root { --nw-gutter-w: 69px; }
+.nw-persona [data-part="persona-agents"] { gap: 5px; }
+.nw-persona [data-part="persona-agents"] li { --g: var(--state); width: 12px; height: 12px; background: var(--mt-gel); box-shadow: var(--mt-gel-shadow); }
+.nw-persona [data-part="persona-body"] { --nw-persona-tray: linear-gradient(rgb(0 0 0 / .07), rgb(0 0 0 / .02)); box-shadow: inset 0 2px 3px -1px rgb(0 0 0 / .22), inset 0 -1px 0 rgb(255 255 255 / .35); }
+
+/* The app is transparent, so the gaps between the head and the panels under it (two of them: the empty alarms row
+   sits between) showed the desktop as a slit (Ra, 10/7 round 6). With no alarms, the head reaches over both, so the
+   bevels meet. */
+.nw-app:has(> .nw-alarms:empty) > .nw-head { margin-bottom: -2px; }
+
+/* ================= Brassworks v4: what Metal doesn't have ================= */
+/* The log is an engraved ledger plate (Ra, 10/12: "a slightly more serious vibe"): ruled lines on a pale
+   bronze plate, small-caps day rules, no zebra, no stamps; the filters are engraved tabs, and an active one
+   is an amethyst inlay. */
+.nw-log [data-part="events"] { border-radius: 2px; padding: 0 2px; background: linear-gradient(#ead8b8, #ddc39b);
+  box-shadow: inset 0 1px 3px rgb(60 30 0 / .35), inset 0 0 0 1px #7a5a3a; }
+.nw-log .nw-day { padding: 5px 6px 2px; background: none; border-bottom: 1px solid rgb(90 60 30 / .5); color: #4a3018;
+  font: 600 9.5px var(--nw-font); letter-spacing: .16em; text-transform: uppercase; text-shadow: var(--mt-emboss); }
+.nw-event { padding: 3px 6px; border-top: 1px solid rgb(90 60 30 / .16); }
+.nw-event:nth-child(even of :not([hidden])) { background: none; }
+.nw-event [data-part="time"] { font-family: var(--nw-mono); font-size: 10.5px; color: #5c4128; }
+.nw-event [data-part="lane"] { font-variant: small-caps; letter-spacing: .04em; color: #2b1a0c; }
+.nw-log [data-part="filters"] label { border-radius: 2px; color: #4a3018; background: transparent; text-shadow: var(--mt-emboss);
+  box-shadow: inset 0 0 0 1px rgb(90 60 30 / .45), inset 0 1px 2px rgb(60 30 0 / .18); font-variant: small-caps; letter-spacing: .05em; }
+.nw-log [data-part="filters"] label:has(input:checked) { color: #f3ecff; text-shadow: 0 -1px 0 rgb(40 20 70 / .5);
+  background: linear-gradient(#9a80d0, #6a50a6); box-shadow: inset 0 0 0 1px #4b3478, inset 0 1px 0 rgb(255 255 255 / .25); }
+.nw-log [data-part="filters"] label:not(:has(input:checked)) { opacity: .75; }
+.nw-log [data-part="heading"], .nw-timeline [data-part="heading"] { font: 600 11px var(--nw-font); letter-spacing: .14em; text-transform: uppercase; }
+
+/* Silver fittings: the head's round buttons, the card and persona toggles, the timeline's range switch. */
+.nw-head > button, .nw-lane [data-part="toggle"], .nw-persona [data-part="persona-name"] > [data-part="persona-toggle"] { --g: var(--bw-silver); color: #2b2f36; }
+.nw-timeline [data-part="range"] button { --g: var(--bw-silver); color: #2b2f36; }
+/* the persona title in the body's serif, engraved */
+.nw-app .nw-persona [data-part="persona-name"] { font: 700 12.5px/1 var(--nw-font); letter-spacing: .16em; }
+.nw-head [data-part="title"] { font: 600 13px var(--nw-font); letter-spacing: .2em; text-transform: uppercase; }
