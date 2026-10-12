@@ -107,6 +107,12 @@ input[type="checkbox"] { accent-color: #8a8272; }
 .nw-alert [data-part="title"] { color: #ffb3a8; font: 500 13px var(--nw-cond); text-transform: uppercase; letter-spacing: .12em; }
 .nw-alert [data-part="cause"] { color: var(--nw-ink-2); }
 .nw-alert [data-part="time"] { color: #ff8a7a; }
+/* The amber tier in the Amber skin has to read as a state, not the theme: it keeps the alarm's whole
+   structure (tinted panel, left rule, glowing lamp, uppercase title) in a hotter orange than the ink. */
+.nw-alert[data-level="warn"] { background: linear-gradient(90deg, rgb(255 138 42 / .12), transparent 70%), var(--ob-matte) !important; box-shadow: var(--ob-edge), inset 2px 0 0 var(--nw-warn); }
+.nw-alert[data-level="warn"] > .nw-icon { color: var(--nw-warn); filter: drop-shadow(0 0 4px var(--nw-warn)); }
+.nw-alert[data-level="warn"] [data-part="title"] { color: #ffb070; }
+.nw-alert[data-level="warn"] [data-part="time"] { color: #ff9a50; }
 
 /* add rail */
 .nw-add > [data-part="add"] { color: var(--nw-ink-2); background: var(--ob-gloss) !important; font-family: var(--nw-cond); text-transform: uppercase; letter-spacing: .2em; }

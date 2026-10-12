@@ -197,6 +197,9 @@ button { cursor: pointer; }
   display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: start;
   background: repeating-linear-gradient(90deg, var(--mw-wood) 0 22px, #9a5f2a 22px 24px); border: 3px solid #5c3613; box-shadow: 0 5px 0 #4a2a10; }
 .nw-alert > .nw-icon { width: 26px; height: 26px; color: var(--mw-awake); grid-row: span 2; }
+/* The amber tier (Ra, 10/12): a lighter sign hung straight, with an amber lamp; the tilted heavy sign stays the alarm. */
+.nw-alert[data-level="warn"] { rotate: 0deg; border-width: 2px; box-shadow: 0 3px 0 #4a2a10; }
+.nw-alert[data-level="warn"] > .nw-icon { color: #ffb000; }
 .nw-alert [data-part="title"] { font-size: 14px; font-weight: 700; }
 .nw-alert [data-part="cause"] { font: 11px var(--mw-type); color: #ffdca8; overflow-wrap: anywhere; }
 .nw-alert [data-part="time"] { grid-column: 2; font-size: 11px; color: #ffdca8; }

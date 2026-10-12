@@ -200,6 +200,9 @@ button { cursor: pointer; }
 /* alert slot */
 .nw-alert { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: start; align-content: start; padding: 10px 12px; background: color-mix(in srgb, var(--nw-failed) 9%, var(--nw-surface)) !important; box-shadow: inset 3px 0 0 var(--nw-failed); }
 .nw-alert > .nw-icon { color: var(--nw-failed); grid-row: span 2; margin-top: 1px; }
+/* The amber tier (Ra, 10/12): important, not urgent. The same card in the warn colour. */
+.nw-alert[data-level="warn"] { background: color-mix(in srgb, var(--nw-warn) 10%, var(--nw-surface)) !important; box-shadow: inset 3px 0 0 var(--nw-warn); }
+.nw-alert[data-level="warn"] > .nw-icon { color: var(--nw-warn); }
 .nw-alert [data-part="title"] { font-weight: 600; }
 .nw-alert [data-part="time"] { color: var(--nw-ink-2); grid-column: 3; grid-row: 1; }
 .nw-alert [data-part="cause"] { grid-column: 2 / 4; color: var(--nw-ink-2); font-size: 12px; overflow-wrap: anywhere; }
@@ -787,6 +790,7 @@ html[data-gallery="1"] .nw-gallery { grid-area: gallery; display: grid; grid-tem
 
 /* alert: red-tinted glass */
 .nw-alert { background: rgb(255 59 48 / .12) !important; box-shadow: inset 3px 0 0 var(--nw-failed); border-top-color: transparent !important; }
+.nw-alert[data-level="warn"] { background: rgb(255 159 10 / .13) !important; box-shadow: inset 3px 0 0 var(--nw-warn); }
 [data-part="fix"], .nw-alert [data-part="ack"] { border-radius: 8px; background: rgb(255 255 255 / .55); border-color: var(--nw-seam); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 [data-part="fix"]:first-child { background: var(--nw-failed); box-shadow: 0 2px 8px rgb(255 59 48 / .35); }
 :is([data-part="buttons"], [data-part="session-row"]) button { border-radius: 8px; background: rgb(255 255 255 / .5); }

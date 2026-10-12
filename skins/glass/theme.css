@@ -73,6 +73,7 @@
 
 /* alert: red-tinted glass */
 .nw-alert { background: rgb(255 59 48 / .12) !important; box-shadow: inset 3px 0 0 var(--nw-failed); border-top-color: transparent !important; }
+.nw-alert[data-level="warn"] { background: rgb(255 159 10 / .13) !important; box-shadow: inset 3px 0 0 var(--nw-warn); }
 [data-part="fix"], .nw-alert [data-part="ack"] { border-radius: 8px; background: rgb(255 255 255 / .55); border-color: var(--nw-seam); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 [data-part="fix"]:first-child { background: var(--nw-failed); box-shadow: 0 2px 8px rgb(255 59 48 / .35); }
 :is([data-part="buttons"], [data-part="session-row"]) button { border-radius: 8px; background: rgb(255 255 255 / .5); }

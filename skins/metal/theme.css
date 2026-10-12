@@ -108,6 +108,9 @@ body { color: var(--nw-ink); font-size: 12px; }
 .nw-alert { background: linear-gradient(#ffe9e6, #f7cfca) !important; box-shadow: inset 0 1px 0 #fff, inset 3px 0 0 var(--nw-failed); }
 .nw-alert [data-part="title"] { color: #7a120a; text-shadow: var(--mt-emboss); }
 .nw-alert [data-part="cause"] { color: #5a2a24; }
+.nw-alert[data-level="warn"] { background: linear-gradient(#fff3d6, #f5dfae) !important; box-shadow: inset 0 1px 0 #fff, inset 3px 0 0 var(--nw-warn); }
+.nw-alert[data-level="warn"] [data-part="title"] { color: #6a4200; }
+.nw-alert[data-level="warn"] [data-part="cause"] { color: #5a4422; }
 
 /* the add rail */
 .nw-add > [data-part="add"] { color: var(--nw-ink-2); text-shadow: var(--mt-emboss); }
