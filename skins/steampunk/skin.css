@@ -1033,3 +1033,54 @@ body { color: var(--nw-ink); font-size: 12px; }
 /* the timeline's track: a groove cut in the copper; its marks are enamelled studs */
 .nw-strip::after { background: linear-gradient(#5a2c16, #8a4a2a); box-shadow: inset 0 1px 2px rgb(0 0 0 / .6), 0 1px 0 rgb(255 210 180 / .35); }
 .nw-node { box-shadow: var(--mt-gel-shadow), 0 0 0 2px rgb(60 25 5 / .25); }
+
+/* ================= Brassworks v4, round 3 (Ra, 10/12): an alloy, not a cartoon. One restricted palette the way
+   Amber has one: alloyed copper-bronze, brass and pewter, and amethyst as the only light. State colours fold into
+   it (awake IS the amethyst, as awake is the amber in Amber); only failed and warn keep red and warm amber.
+   Varied brushing; rivets in the body's own metal along the seams where the plates join, under a faint amethyst
+   conduit: the device's energy runs along its joints. Thinner bezels, less gloss. ========= */
+:root {
+  --nw-awake: var(--bw-amethyst); --nw-folding: #c9bcdc; --nw-sleeping: #5c4c44; --nw-ok: #8f7d70; --nw-manual: #c7b8a6;
+  --nw-belled: #cf8a3c; --nw-warn: #cf8a3c; --nw-failed: #c2463a; --nw-orphaned: #a8697a;
+  --nw-seam: #3a2219; --nw-surface: #84604d; --nw-ink: #1d110b; --nw-ink-2: #46302a;
+  --mt-sheen: linear-gradient(180deg, #ad8670 0%, #93694f 22%, #81594a 50%, #704c3e 78%, #845d4c 100%);
+  --mt-emboss: 0 1px 0 rgb(255 226 206 / .28);
+  --mt-bevel: inset 0 1px 0 rgb(255 228 210 / .35), inset 0 -1px 0 rgb(30 12 4 / .4);
+  --bw-brass: #b39c68; --bw-brass-hi: #d6c599; --bw-brass-lo: #6c5832; --bw-silver: #bfb8ae;
+  --bw-brass-plate: linear-gradient(180deg, #cdb98a 0%, #b39c68 34%, #9c8452 68%, #87703f 100%);
+  --bw-gunmetal: linear-gradient(180deg, #4b4341 0%, #3a3230 50%, #2c2523 100%);
+  /* the brushes: hairlines across the plates, rings on what turns */
+  --bw-hairline: repeating-linear-gradient(0deg, rgb(255 236 220 / .045) 0 1px, transparent 1px 3px);
+  --bw-spun: repeating-radial-gradient(circle at 50% 50%, rgb(255 246 232 / .07) 0 .7px, transparent .7px 2.2px);
+  --mt-metal: var(--bw-hairline), var(--mt-brush), var(--mt-sheen);
+  /* a rivet in the body's own metal: low relief, catching a little light */
+  --bw-rivet: radial-gradient(circle, rgb(255 228 206 / .32) 0 .9px, #7e5a49 1.5px, rgb(28 12 4 / .55) 2.3px, transparent 2.8px);
+  --bw-conduit: linear-gradient(90deg, transparent, rgb(160 130 220 / .55) 12%, rgb(160 130 220 / .55) 88%, transparent);
+  --g: var(--bw-brass);
+}
+*, ::before, ::after {
+  --mt-gel: var(--bw-spun), radial-gradient(120% 70% at 50% 0%, rgb(255 255 255 / .16), transparent 60%),
+            linear-gradient(180deg, color-mix(in srgb, var(--g) 82%, #fff) 0%, var(--g) 50%, color-mix(in srgb, var(--g) 70%, #000) 100%);
+  --mt-gel-shadow: inset 0 1px 0 rgb(255 255 255 / .25), inset 0 -1px 0 rgb(0 0 0 / .3), 0 0 0 1px color-mix(in srgb, var(--g) 40%, #000), 0 1px 1px rgb(0 0 0 / .4);
+}
+/* the plates: no corner studs now; a seam row of rivets along each plate's top joint, a thin amethyst conduit under it */
+.nw-controls, .nw-timeline, .nw-log { background: var(--bw-conduit) 0 9px / 100% 1px no-repeat, var(--bw-rivet) 10px 1px / 40px 8px repeat-x, var(--mt-metal) !important; }
+.nw-head { background: var(--bw-rivet) 14px 50% / 48px 8px repeat-x, var(--bw-hairline), var(--mt-brush), var(--bw-brass-plate) !important;
+  box-shadow: inset 0 1px 0 rgb(255 245 220 / .5), inset 0 -2px 0 var(--bw-brass-lo); }
+.nw-head [data-part="title"] { background: var(--bw-brass-plate); padding: 2px 14px; border-radius: 3px; box-shadow: inset 0 0 0 1px var(--bw-brass-lo), 0 1px 0 rgb(255 240 210 / .4); }
+/* thinner, darker bezels and sleeves */
+.nw-head [data-part="clock"], .nw-controls [data-part="display"], .nw-timeline [data-part="activity"] {
+  box-shadow: inset 0 1px 5px rgb(0 0 0 / .75), 0 0 0 1px var(--bw-brass-lo), 0 0 0 2px rgb(255 228 200 / .12), 0 1px 2px rgb(0 0 0 / .35) !important; }
+.nw-lane :is([data-part="context"] [data-part="bar"], [data-part="throughput"] svg:not(.nw-icon)) {
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / .7), 0 0 0 1px var(--bw-brass-lo), 0 0 0 2px rgb(255 228 200 / .1); }
+.nw-lane [data-part="mini"] { box-shadow: inset 0 1px 2px rgb(0 0 0 / .7), 0 0 0 1px var(--bw-brass-lo); }
+.nw-glyph { box-shadow: 0 0 0 1.5px var(--bw-brass), 0 0 0 2.5px var(--bw-brass-lo), 0 0 7px rgb(176 146 232 / .55) !important; }
+/* the alert plate: dark graphite bronze, warmer than gunmetal blue */
+.nw-alert [data-part="cause"], .nw-alert[data-level="warn"] [data-part="cause"] { color: #ddd2c8; }
+.nw-alert [data-part="time"] { color: #b3a79c; }
+/* round 3b: the nameplate is a nameplate, not a bar; the head carries no rivet row (it crossed the schedule); the
+   last greens (add, Set up) take the one light */
+.nw-head [data-part="title"] { flex: 0 1 auto; margin: 0 auto; }
+.nw-head { background: var(--bw-hairline), var(--mt-brush), var(--bw-brass-plate) !important; }
+.nw-add > [data-part="add"] .nw-icon { --g: var(--bw-amethyst); }
+.nw-controls[data-setup="true"] [data-part="transport"] button[data-part="primary"] { --g: var(--bw-amethyst) !important; }
