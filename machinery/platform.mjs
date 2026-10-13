@@ -86,15 +86,25 @@ export function writeSummonScript({ title, shellCommand, scriptDir }, io = {}) {
   return scriptFile;
 }
 
+/** The write-if-wsl decision in one place: builds the summon argv, writing
+ *  the script file first when the platform wants one. Callers that spawn
+ *  the argv themselves (nightwatch.mjs's first wake) ride this instead of
+ *  carrying a platform branch of their own (the second read's ask: that
+ *  branch is Terra's actual first wake, and a silent fallback to the
+ *  quoted-command path would degrade invisibly). */
+export function summonArgvFor({ title, shellCommand, activate, scriptDir }, kind = platformKind(), io = {}) {
+  const scriptFile = (kind === 'wsl' && scriptDir)
+    ? writeSummonScript({ title, shellCommand, scriptDir }, io)
+    : undefined;
+  return summonWindowArgv({ title, shellCommand, activate, scriptFile }, kind);
+}
+
 /** Open the window now. Throws when the platform's terminal refuses — the
  *  callers (wake retry, launch-leg test) own that loudness. */
 export function summonWindow({ title, shellCommand, activate, scriptDir }, io = {}) {
   const exec = io.execFileSync ?? realExecFileSync;
   const kind = io.kind ?? platformKind();
-  const scriptFile = (kind === 'wsl' && scriptDir)
-    ? writeSummonScript({ title, shellCommand, scriptDir }, io)
-    : undefined;
-  for (const { bin, args } of summonWindowArgv({ title, shellCommand, activate, scriptFile }, kind)) exec(bin, args);
+  for (const { bin, args } of summonArgvFor({ title, shellCommand, activate, scriptDir }, kind, io)) exec(bin, args);
 }
 
 /**

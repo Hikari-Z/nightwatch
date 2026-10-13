@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
-  platformKind, summonWindowArgv, summonWindow, writeSummonScript, daemonJob, registryDir,
+  platformKind, summonWindowArgv, summonWindow, writeSummonScript, summonArgvFor, daemonJob, registryDir,
   bannerArgv, notifyBanner, closeTtyArgv,
 } from './platform.mjs';
 
@@ -63,6 +63,21 @@ check('writeSummonScript makes the summons dir itself (a fresh hub has none) and
   assert.deepEqual(dirs, [['/hub/wakecycle/summons', true]]);
   assert.equal(p, '/hub/wakecycle/summons/wake-summon-lark.sh');
   assert.deepEqual(writes, [p]);
+});
+check('summonArgvFor on wsl writes the script and the argv carries its path (the first-wake path)', () => {
+  const writes = [];
+  const argv = summonArgvFor({ title: 'lark', shellCommand: 'echo hi', activate: false, scriptDir: '/hub/wc/summons' }, 'wsl', {
+    mkdirSync: () => {}, writeFileSync: (p) => writes.push(p),
+  });
+  assert.deepEqual(writes, ['/hub/wc/summons/wake-summon-lark.sh']);
+  assert.equal(argv[0].args.at(-1), 'sh "/hub/wc/summons/wake-summon-lark.sh"');
+});
+check('summonArgvFor on darwin writes nothing and returns the live osascript argv', () => {
+  const argv = summonArgvFor({ title: 'lark', shellCommand: 'echo hi', activate: false, scriptDir: '/hub/wc/summons' }, 'darwin', {
+    mkdirSync: () => { throw new Error('no mkdir on darwin'); },
+    writeFileSync: () => { throw new Error('no write on darwin'); },
+  });
+  assert.equal(argv[0].bin, 'osascript');
 });
 check('summonWindow off wsl never writes a script, scriptDir or not', () => {
   const writes = [];

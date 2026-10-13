@@ -29,7 +29,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { daemonJob, registryDir, summonWindowArgv, writeSummonScript, platformKind } from './platform.mjs';
+import { daemonJob, registryDir, summonArgvFor } from './platform.mjs';
 
 const WC = dirname(fileURLToPath(import.meta.url));
 const HOME = homedir();
@@ -322,12 +322,10 @@ function firstSessionStep(spec, hub, ctx, noActivate, cpPath, laneWc) {
       // each platform's escaping of the raw command.
       const cfgPathForWake = spec.op === 'init' ? join(hub, 'nightwatch.config.json') : (process.env.WEFT_CONFIG ?? '');
       const sh = `WEFT_CONFIG="${cfgPathForWake}" sh "${join(WC, 'wake.sh')}" ${spec.lane.id}`;
-      // On WSL the first wake rides a script file like the daemon's wakes do
-      // (per-lane name, platform.mjs owns the shape); darwin passes none.
-      const scriptFile = platformKind() === 'wsl'
-        ? writeSummonScript({ title: spec.lane.id, shellCommand: sh, scriptDir: join(hub, 'wakecycle', 'summons') })
-        : undefined;
-      for (const { bin, args } of summonWindowArgv({ title: spec.lane.id, shellCommand: sh, activate: false, scriptFile })) {
+      // platform.mjs owns the write-if-wsl decision. The summons dir rides
+      // wcDir, not join(hub, 'wakecycle'): a custom paths.wakecycle must
+      // keep the first wake's script beside the daemon's (second read, 10/13).
+      for (const { bin, args } of summonArgvFor({ title: spec.lane.id, shellCommand: sh, activate: false, scriptDir: join(wcDir, 'summons') })) {
         spawn(bin, args, { detached: true, stdio: 'ignore' }).unref();
       }
     },
