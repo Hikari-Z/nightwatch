@@ -366,3 +366,44 @@ body { color: var(--nw-ink); font-size: 12px; }
 .nw-head { background: var(--bw-hairline), var(--mt-brush), var(--bw-brass-plate) !important; }
 .nw-add > [data-part="add"] .nw-icon { --g: var(--bw-amethyst); }
 .nw-controls[data-setup="true"] [data-part="transport"] button[data-part="primary"] { --g: var(--bw-amethyst) !important; }
+
+/* ================= Brassworks v4, round 4 (Ra, 10/12): aethertech, arcane, powerful. Truer copper; more
+   purple; whatever is ARMED glows; every key is a faceted crystal cut like the house icon, in its own stone, set
+   in brass, so it has weight; the log's filters are little lit windows in brass frames. ========= */
+:root {
+  --mt-sheen: linear-gradient(180deg, #c99274 0%, #b07858 22%, #9e674b 50%, #8c5842 78%, #a16a4c 100%);
+  --nw-ink: #1f110a; --nw-ink-2: #4a2e22;
+  --bw-conduit: linear-gradient(90deg, transparent, rgb(176 146 236 / .85) 10%, rgb(176 146 236 / .85) 90%, transparent);
+  --bw-topaz: #7d5a3e; --bw-ruby: #b8323a;
+}
+/* the crystal: the house icon's facets in the key's own stone (--g), a catch-light, set in a brass ring */
+*, ::before, ::after {
+  --mt-gel: radial-gradient(55% 40% at 34% 24%, rgb(255 255 255 / .5), transparent 62%),
+            conic-gradient(from 25deg at 50% 50%, color-mix(in srgb, var(--g) 52%, #fff), color-mix(in srgb, var(--g) 62%, #000),
+              color-mix(in srgb, var(--g) 78%, #fff), color-mix(in srgb, var(--g) 50%, #000), color-mix(in srgb, var(--g) 62%, #fff),
+              var(--g), color-mix(in srgb, var(--g) 52%, #fff));
+  --mt-gel-shadow: 0 0 0 1.5px var(--bw-brass), 0 0 0 2.5px var(--bw-brass-lo), inset 0 0 5px rgb(0 0 0 / .35), 0 2px 3px rgb(0 0 0 / .5);
+}
+:is(.nw-lane [data-part="actions"] button, .nw-persona [data-part="persona-buttons"] button, .nw-controls [data-part="transport"] button) { --g: var(--bw-topaz); color: #f4ebe0; }
+:is(.nw-lane [data-part="actions"] button, .nw-persona [data-part="persona-buttons"] button, .nw-controls [data-part="transport"] button):hover { --g: var(--bw-amethyst); color: #fff; filter: drop-shadow(0 0 4px rgb(176 146 236 / .55)); }
+:is(.nw-lane [data-part="actions"], .nw-controls [data-part="transport"]) button[data-danger="true"]:not([aria-disabled="true"]) { --g: var(--bw-ruby); color: #fff; }
+.nw-controls [data-part="transport"] button[data-part="primary"] { --g: var(--bw-amethyst) !important; color: #fff !important; filter: drop-shadow(0 0 5px rgb(176 146 236 / .5)); }
+.nw-lane [data-part="actions"] button .nw-icon, .nw-controls [data-part="transport"] button .nw-icon { filter: drop-shadow(0 1px 0 rgb(0 0 0 / .45)); }
+/* armed things glow: the bell, the midday cycle, the nightly toggle, a pressed deck key */
+.nw-lane :is([data-part="next"], [data-part="midday"])[aria-pressed="true"] { color: var(--bw-lavender); text-shadow: 0 0 6px rgb(176 146 236 / .8); }
+.nw-lane :is([data-part="next"], [data-part="midday"])[aria-pressed="true"] .nw-icon { color: var(--bw-lavender); filter: drop-shadow(0 0 3px rgb(176 146 236 / .9)); }
+.nw-controls :is([data-part="toggles"], [data-part="transport"]) button[aria-pressed="true"] { --g: var(--bw-amethyst); color: #fff; filter: drop-shadow(0 0 5px rgb(176 146 236 / .6)); }
+/* the displays breathe a little light into the copper around them */
+.nw-head [data-part="clock"], .nw-controls [data-part="display"], .nw-timeline [data-part="activity"] {
+  box-shadow: inset 0 1px 5px rgb(0 0 0 / .75), 0 0 0 1px var(--bw-brass-lo), 0 0 0 2px rgb(255 228 200 / .12), 0 0 12px rgb(160 130 230 / .28) !important; }
+/* the log's filters: little windows in brass frames, lit amethyst when on, dark brass when off */
+.nw-log [data-part="filters"] label { border-radius: 3px; color: #3a2a10; background: var(--bw-brass-plate); text-shadow: none; opacity: 1;
+  box-shadow: inset 0 0 0 1px var(--bw-brass-lo), inset 0 1px 0 rgb(255 240 210 / .45), 0 1px 1.5px rgb(0 0 0 / .4); }
+.nw-log [data-part="filters"] label:has(input:checked) { color: var(--bw-lavender); background: linear-gradient(#251c33, #392b4c);
+  box-shadow: inset 0 0 0 1px var(--bw-brass), inset 0 0 6px rgb(160 130 230 / .35), 0 0 6px rgb(160 130 230 / .3), 0 1px 1.5px rgb(0 0 0 / .4); }
+.nw-log [data-part="filters"] label:has(input:checked) .nw-icon { filter: drop-shadow(0 0 3px rgb(176 146 236 / .9)); }
+.nw-log [data-part="filters"] label:not(:has(input:checked)) { opacity: .8; }
+/* round 4b: a wide key is a step-cut bar, not a round brilliant (the conic facets pinwheeled through their labels) */
+:is([data-part="fix"], .nw-alert [data-part="ack"], [data-part="buttons"] button, [data-part="session-row"] button, .nw-controls [data-part="transport"] button[data-part="primary"], .nw-timeline [data-part="range"] button) {
+  background: radial-gradient(70% 55% at 30% 20%, rgb(255 255 255 / .35), transparent 65%),
+    linear-gradient(180deg, color-mix(in srgb, var(--g) 55%, #fff) 0%, color-mix(in srgb, var(--g) 85%, #fff) 38%, color-mix(in srgb, var(--g) 70%, #000) 40%, var(--g) 72%, color-mix(in srgb, var(--g) 75%, #fff) 100%) !important; }
