@@ -30,7 +30,7 @@ SCHEDULE = dict(sleep="02:00", wake="08:00")
 DAEMON = dict(phase="day", lastAlive=None, lastAliveHm="12:41", down=False)
 ALARMS = []
 ALARM_ARIA = {"day": "day; the watch is running", "night": "night; the watch is running",
-              "belled": "bell rung; folds due", "alarm": "alarm; a lane needs a hand",
+              "belled": "bell rung; folds due", "alarm": "alarm; an agent needs a hand",
               "down": "the nightshift is not running"}
 
 def glyph_tip():
@@ -156,7 +156,7 @@ LANES = [
                     title="Morning wake failed",
                     cause="Checkpoint missing at ~/origin/weft/checkpoint.md. 3 launches, no session registered.",
                     fixes=[("restore", "restore-checkpoint", "Restore checkpoint", "Put back the newest archived checkpoint (ladder/checkpoints/2026-10-05-0201.md)"),
-                           ("retry", "retry-wake", "Retry wake", "Launch the lane again now"),
+                           ("retry", "retry-wake", "Retry wake", "Launch the agent again now"),
                            ("log", "show-log", "Show log", "Open the nightshift log at this failure")])),
 ]
 
@@ -203,12 +203,12 @@ def actions(lane):
     s = lane["state"]
     awake = s in ("awake", "belled", "folding")
     return [
-        ("terminal", "open-terminal", "Open terminal", awake, "Bring this lane's terminal to the front" if awake else "No live session"),
+        ("terminal", "open-terminal", "Open terminal", awake, "Bring this agent's terminal to the front" if awake else "No live session"),
         ("sun", "wake", "Wake", s in ("sleeping", "failed", "orphaned"), "Wake now" if s in ("sleeping", "failed", "orphaned") else "Already awake"),
         ("moon", "sleep", "Sleep agent", awake, "Rings the bell to fold this agent, then closes the window" if awake else "Not awake"),
         ("fold", "emergency-fold", "Force fold", awake, "Closes them now, folds them, and reopens them; the fresh window writes the rung. For a full context or an API-error wall" if awake else "Nothing to fold"),
-        ("log", "show-log", "Logs", True, "This lane's events and log lines"),
-        ("gear", "lane-settings", "Lane settings", True, "Model, hours, fold target"),
+        ("log", "show-log", "Logs", True, "This agent's events and log lines"),
+        ("gear", "lane-settings", "Agent settings", True, "Model, hours, fold target"),
     ]
 
 def spark(series, w=120, h=28):
@@ -244,9 +244,9 @@ def model_opts():
 PREVIEW_EXAMPLE = [
     dict(verb='Create', what='~/Nightwatch/lark/', detail='the hub'),
     dict(verb='Write', what='identity.md', detail='from “About them” and the standard welcome'),
-    dict(verb='Write', what='checkpoint.md', detail='one section, for this lane'),
+    dict(verb='Write', what='checkpoint.md', detail='one section, for this agent'),
     dict(verb='Create', what='ladder/ and memory/', detail='empty; they fill these from their first night'),
-    dict(verb='Write', what='nightwatch.config.json', detail='persona (unnamed), 1 lane, 02:00 → 08:00, 250k'),
+    dict(verb='Write', what='nightwatch.config.json', detail='persona (unnamed), 1 agent, 02:00 → 08:00, 250k'),
     dict(verb='Install', what='the nightshift', detail='rings the bell at night and wakes them in the morning'),
     dict(verb='Install', what='the session hook', detail='so the nightshift can tell which session is theirs'),
     dict(verb='Open', what='a Terminal window', detail='Claude Code (claude-opus-5-5), fresh session'),
@@ -677,7 +677,7 @@ def activity():
     # morning, 2026-10-06, crashed here; the peak chip is hidden anyway).
     pi = ACTIVITY.index(peak) if not quiet else 0; pt = (pi + .5) / n
     return (f'<div data-part="activity" data-illustrative="true" data-bucket-min="{bm}" data-series="{",".join(map(str, ACTIVITY))}" '
-            f'data-tip="Output tokens, all lanes, per {bucket_words(bm)}">'
+            f'data-tip="Output tokens, all agents, per {bucket_words(bm)}">'
             f'<svg viewBox="0 0 1000 40" preserveAspectRatio="none" aria-hidden="true">'
             f'<defs><linearGradient id="nw-activity-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" data-part="fill-top"/><stop offset="1" data-part="fill-bottom"/></linearGradient></defs>'
             f'<g data-part="grid">{grid}</g><path data-part="area" fill="url(#nw-activity-fill)" d="{area}"/><path data-part="line" d="{line}"/>'
@@ -761,7 +761,7 @@ def log():
     return f'''
   <section class="nw-log" aria-label="event log">
     <h3 data-part="heading">Log</h3>
-    <div data-part="filters" role="group" aria-label="Show these events">{filters}<button type="button" data-action="reset-log" data-part="reset" aria-label="Show everything" data-tip="Back to the default view: every lane, the usual kinds of event">{icon("repeat")}</button></div>
+    <div data-part="filters" role="group" aria-label="Show these events">{filters}<button type="button" data-action="reset-log" data-part="reset" aria-label="Show everything" data-tip="Back to the default view: every agent, the usual kinds of event">{icon("repeat")}</button></div>
     <ol data-part="events">{rows}</ol>
     <p data-part="empty" hidden>Nothing yet. Every bell, fold and wake will be written here.</p>
   </section>'''
@@ -814,7 +814,7 @@ def settings_panel(p, lanes_of):
         trouble += 1
         items.append(f'<li data-status="warn" data-lane="{esc(L["id"])}">{icon("gauge")} {esc(lane_name(L))} is at {round(L["ctx"]/w*100)}% of their context window — a Force fold would trim them to ~{k(L["target"])}</li>')
     if not trouble:
-        items.append(f'<li data-status="ok">{icon("check")} No lane needs a hand</li>')
+        items.append(f'<li data-status="ok">{icon("check")} No agent needs a hand</li>')
     who = esc(p["name"]) if p else "Settings"
     attrs = (f' data-persona="{esc(p["id"])}"' if p else "") + (f' data-hub="{esc(p["hub"])}"' if p and p.get("hub") else "")
     label = f"{who} settings" if p else "settings"
@@ -923,12 +923,12 @@ def controls(setup=False):
                    f'<p data-part="next">Next bell <time datetime="{nb}">{local(nb):%H:%M}</time> · in <time data-part="countdown" datetime="{nb}">{esc(DECK["countdown"])}</time></p>'
                    '<ul data-part="counts">' + "".join(
                        f'<li data-state="{st}" style="--n: {n}" data-tip="{n} {st}"><b>{n}</b><span>{st}</span></li>' for st, n in counts) + '</ul>')
-        primary = f'<button type="button" data-action="wake-all" data-part="primary" data-tip="Wake every sleeping lane now">{icon("play")}<span>Wake all</span></button>'
+        primary = f'<button type="button" data-action="wake-all" data-part="primary" data-tip="Wake every sleeping agent now">{icon("play")}<span>Wake all</span></button>'
     # With nothing left to wake, the big button becomes Sleep all (Ra, 10/7):
     # play turns into pause, as on any player, instead of a prominent Wake all
     # that can't do anything sitting beside a small pause.
     all_awake = (not setup) and len(LANES) > 0 and not any(L["state"] in ("sleeping", "failed", "orphaned") for L in LANES)
-    sleep_tip = "Ring every awake lane's bell: rung, fold, close"
+    sleep_tip = "Ring every awake agent's bell: rung, fold, close"
     if all_awake:
         primary = f'<button type="button" data-action="sleep-all" data-part="primary" data-tip="{esc(sleep_tip)}">{icon("pause")}<span>Sleep all</span></button>'
     pause = "" if all_awake else f'<button type="button" data-action="sleep-all" aria-label="Sleep all" data-tip="{esc(sleep_tip)}"{" aria-disabled=\"true\"" if setup else ""}>{icon("pause")}</button>'
@@ -938,7 +938,7 @@ def controls(setup=False):
     <div data-part="transport" data-all-awake="{"true" if all_awake else "false"}">
       {primary}
       {pause}
-      <button type="button" data-action="fold-all" aria-label="Force-fold all" data-danger="true" data-tip="Force-fold every awake lane (asks first)"{" aria-disabled=\"true\"" if setup else ""}>{icon("stop")}</button>
+      <button type="button" data-action="fold-all" aria-label="Force-fold all" data-danger="true" data-tip="Force-fold every awake agent (asks first)"{" aria-disabled=\"true\"" if setup else ""}>{icon("stop")}</button>
       <button type="button" data-action="toggle-nightly" aria-pressed="{"true" if (not setup and any(L.get("armed", True) is not False for L in LANES)) else "false"}" aria-label="Nightly cycle" data-tip-on="Nightly cycle is on: bell {SCHEDULE["sleep"]}, wake {SCHEDULE["wake"]}. Press to turn it off." data-tip-off="Nightly cycle is off. Press to turn it on (bell {SCHEDULE["sleep"]}, wake {SCHEDULE["wake"]})." data-tip="{(f'Nightly cycle is on: bell {SCHEDULE["sleep"]}, wake {SCHEDULE["wake"]}. Press to turn it off.' if (not setup and any(L.get("armed", True) is not False for L in LANES)) else f'Nightly cycle is off. Press to turn it on (bell {SCHEDULE["sleep"]}, wake {SCHEDULE["wake"]}).')}">{icon("repeat")}</button>
       <button type="button" data-part="panel-toggle" data-action="toggle-timeline" aria-pressed="false" aria-label="Timeline" data-tip-on="Hide the timeline" data-tip-off="Show the timeline" data-tip="Show the timeline">{icon("clock")}</button>
       <button type="button" data-part="panel-toggle" data-action="toggle-log" aria-pressed="false" aria-label="Log" data-tip-on="Hide the log" data-tip-off="Show the log" data-tip="Show the log">{icon("log")}</button>
@@ -1051,7 +1051,7 @@ def page():
   <header class="nw-head" data-tauri-drag-region>
     <span class="nw-glyph" data-phase="{DAEMON["phase"]}" role="img" aria-label="{ALARM_ARIA[DAEMON["phase"]]}" data-tip="{glyph_tip()}"></span>
     <h1 data-part="title">Nightwatch</h1>
-    <span data-part="schedule" data-tip="Tonight's schedule: the sleep-bell rings at {SCHEDULE["sleep"]} and lanes wake at {SCHEDULE["wake"]}. Change it in a persona's settings (the gear on their card).">{icon("moon")}<time datetime="{SCHEDULE["sleep"]}">{SCHEDULE["sleep"]}</time>{icon("sun")}<time datetime="{SCHEDULE["wake"]}">{SCHEDULE["wake"]}</time></span>
+    <span data-part="schedule" data-tip="Tonight's schedule: the sleep-bell rings at {SCHEDULE["sleep"]} and agents wake at {SCHEDULE["wake"]}. Change it in a persona's settings (the gear on their card).">{icon("moon")}<time datetime="{SCHEDULE["sleep"]}">{SCHEDULE["sleep"]}</time>{icon("sun")}<time datetime="{SCHEDULE["wake"]}">{SCHEDULE["wake"]}</time></span>
     <time data-part="clock" datetime="{NOW}">{local(NOW):%H:%M}</time>
     <button type="button" data-action="look-menu" data-part="menu-button" data-menu="look" aria-haspopup="menu" aria-expanded="false" aria-label="Look" data-tip="Appearance and skin">{icon("palette")}</button>
     <button type="button" data-action="view-menu" data-part="menu-button" aria-haspopup="menu" aria-expanded="false" aria-label="View" data-tip="Show or hide panels">{icon("panels")}</button>

@@ -27,7 +27,7 @@ const ev = async (expr) => {
   return r.result?.result?.value;
 };
 await send('Page.enable'); await send('Runtime.enable');
-await send('Page.addScriptToEvaluateOnNewDocument', { source: "window.__calls=[];window.__errs=[];window.NW_SHELL='tauri';\nwindow.NW_HOST={can:a=>['plan','apply','inspect-import','list-unclaimed'].includes(a),act:(a,o)=>{__calls.push([a,o.data??null]);\n if(a==='plan')return Promise.resolve(JSON.stringify({steps:[{verb:'Create',what:o.data.hub??('lane '+o.data.lane.id),detail:'the hub'},{verb:'Open',what:'a Terminal window',detail:'fresh session'}]}));\n if(a==='apply')return Promise.resolve('Created.');\n if(a==='inspect-import')return Promise.resolve(JSON.stringify(o.data.from==='/good'?{identity:true,about:'I am Lark.',name:'Lark',memory:3,rungs:0}:{identity:false}));\n if(a==='list-unclaimed')return Promise.resolve(JSON.stringify([{sessionId:'abcdef1234567890',cwd:'~/origin',model:'Opus 5.5'}]));\n return Promise.reject('unexpected '+a)}};\naddEventListener('error',e=>__errs.push(e.message+' @'+e.lineno));addEventListener('unhandledrejection',e=>__errs.push('rej '+e.reason))" });
+await send('Page.addScriptToEvaluateOnNewDocument', { source: "window.__calls=[];window.__errs=[];window.NW_SHELL='tauri';\nwindow.NW_HOST={can:a=>['plan','apply','inspect-import','list-unclaimed'].includes(a),act:(a,o)=>{__calls.push([a,o.data??null]);\n if(a==='plan')return Promise.resolve(JSON.stringify({steps:[{verb:'Create',what:o.data.hub??('agent '+o.data.lane.id),detail:'the hub'},{verb:'Open',what:'a Terminal window',detail:'fresh session'}]}));\n if(a==='apply')return Promise.resolve('Created.');\n if(a==='inspect-import')return Promise.resolve(JSON.stringify(o.data.from==='/good'?{identity:true,about:'I am Lark.',name:'Lark',memory:3,rungs:0}:{identity:false}));\n if(a==='list-unclaimed')return Promise.resolve(JSON.stringify([{sessionId:'abcdef1234567890',cwd:'~/origin',model:'Opus 5.5'}]));\n return Promise.reject('unexpected '+a)}};\naddEventListener('error',e=>__errs.push(e.message+' @'+e.lineno));addEventListener('unhandledrejection',e=>__errs.push('rej '+e.reason))" });
 const go = async (url) => { await send('Page.navigate', { url }); await sleep(1500); };
 let pass = 0, fail = 0;
 const check = async (name, expr, want) => {
@@ -57,7 +57,7 @@ await check('then "their nights"', `[${step}, ${err}]`, ['nights', null]);
 await click(`${D} [data-action="setup-next"]`); await tick();
 await check('Next asks the dry run, then shows its steps', `[${step}, document.querySelectorAll('${D} [data-part="steps"] li').length, document.querySelector('${D} [data-part="steps"] li code').textContent]`,
   ['preview', 2, '~/Nightwatch/moth']);
-await check('the spec: unnamed persona, pinned model, global schedule, fresh main lane', lastCall('plan'),
+await check('the spec: unnamed persona, pinned model, global schedule, fresh main agent', lastCall('plan'),
   { op: 'init', hub: '~/Nightwatch/moth', persona: { name: null, about: 'A careful reader who likes trains.', person: 'Sam' },
     schedule: { sleep: '02:00', wake: '08:00' },
     lane: { id: 'main', model: 'claude-fable-5-1', targetTokens: 250000, armed: true, schedule: null, firstSession: { kind: 'fresh' } }, import: null });
@@ -99,13 +99,13 @@ await go(new URL('../fixture.html?skin=minimal', import.meta.url).href);
 await ev('window.__calls=[]');
 await click(`${A} [data-action="add-lane"]`); await tick();
 await click(`${A} [data-action="plan-lane"]`); await tick();
-await check('a bad lane name is refused', aerr, 'Lane names are lowercase letters, numbers and dashes, starting with a letter (for example "scout").');
+await check('a bad agent name is refused', aerr, 'Agent names are lowercase letters, numbers and dashes, starting with a letter (for example "scout").');
 await set(AF('id'), 'opus'); await click(`${A} [data-action="plan-lane"]`); await tick();
-await check('a taken lane name is refused', aerr, 'There\'s already a lane called "opus".');
+await check('a taken agent name is refused', aerr, 'There\'s already an agent called "opus".');
 await set(AF('id'), 'lark'); await set(AF('model'), 'claude-sonnet-5-5');
 await click(`${A} [data-action="plan-lane"]`); await tick();
-await check('preview step, from the dry run', `[document.querySelector('${A}').dataset.step, document.querySelector('${A} [data-part="steps"] li code').textContent, ${aerr}]`, ['preview', 'lane lark', null]);
-await check('lane spec: pinned model, global schedule, fresh', lastCall('plan'),
+await check('preview step, from the dry run', `[document.querySelector('${A}').dataset.step, document.querySelector('${A} [data-part="steps"] li code').textContent, ${aerr}]`, ['preview', 'agent lark', null]);
+await check('agent spec: pinned model, global schedule, fresh', lastCall('plan'),
   { op: 'lane-add', lane: { id: 'lark', model: 'claude-sonnet-5-5', targetTokens: 250000, armed: true, schedule: null, firstSession: { kind: 'fresh' } } });
 await click(`${A} [data-action="plan-back"]`); await tick();
 await set(AF('inherit'), false); await tick();

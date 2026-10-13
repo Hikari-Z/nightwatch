@@ -454,9 +454,9 @@ export function assemble(cfg, io, range = '8h') {
         kind: 'wake-failed',
         at: [last.at, hm(last.at)],
         title: 'Morning wake failed',
-        cause: last.cause ? `${last.cause}.` : `${last.attempts ?? 3} launches, no session registered in the lane registry.`,
+        cause: last.cause ? `${last.cause}.` : `${last.attempts ?? 3} launches, no session registered in the agent registry.`,
         fixes: [
-          ['retry', 'retry-wake', 'Retry wake', 'Launch the lane again now'],
+          ['retry', 'retry-wake', 'Retry wake', 'Launch the agent again now'],
           ['log', 'show-log', 'Show log', 'Open the nightshift log at this failure'],
         ],
       };

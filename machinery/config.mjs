@@ -251,8 +251,8 @@ export function laneConfig(cfg, lane) {
   const lc = cfg.lanes[lane];
   if (!lc) {
     const known = Object.keys(cfg.lanes).join(', ');
-    throw new Error(`lane "${lane}" is not in the config (known: ${known}). ` +
-      `Add it to ${cfg.__configFile ?? 'weft.config.json'} or pass a known lane.`);
+    throw new Error(`agent "${lane}" is not in the config (known: ${known}). ` +
+      `Add it to ${cfg.__configFile ?? 'weft.config.json'} or pass a known agent.`);
   }
   return { targetTokens: 250_000, switchboard: false, ...lc };
 }
@@ -326,9 +326,9 @@ function typeCheck(spec, value, path) {
 function assertConsistent(raw) {
   const lanes = raw.lanes ?? DEFAULTS.lanes;
   const names = Object.keys(lanes);
-  if (names.length === 0) throw new Error('refusing: the config would declare no lanes');
+  if (names.length === 0) throw new Error('refusing: the config would declare no agents');
   const dl = raw.defaultLane ?? DEFAULTS.defaultLane;
-  if (!names.includes(dl)) throw new Error(`refusing: defaultLane "${dl}" would not be a configured lane (${names.join(', ')})`);
+  if (!names.includes(dl)) throw new Error(`refusing: defaultLane "${dl}" would not be a configured agent (${names.join(', ')})`);
 }
 
 export function configEdit(op, keyPath, value) {
@@ -398,15 +398,15 @@ if (invokedDirectly) {
     // Lane-consistency asserts (E review, finding 6): each of these turns a
     // 2am throw inside the ritual into a config-time one-liner.
     const laneNames = Object.keys(cfg.lanes);
-    if (laneNames.length === 0) { console.log('BAD     lanes: config declares no lanes'); bad++; }
+    if (laneNames.length === 0) { console.log('BAD     lanes: config declares no agents'); bad++; }
     if (!laneNames.includes(cfg.defaultLane)) {
-      console.log(`BAD     defaultLane "${cfg.defaultLane}" is not a configured lane (${laneNames.join(', ') || 'none'})`);
+      console.log(`BAD     defaultLane "${cfg.defaultLane}" is not a configured agent (${laneNames.join(', ') || 'none'})`);
       bad++;
     }
     try {
       const armed = readFileSync(cfg.paths.armedFile, 'utf8').split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
       for (const a of armed) {
-        if (!laneNames.includes(a)) { console.log(`BAD     armed lane "${a}" is not in the config — its 02:00 fold would throw`); bad++; }
+        if (!laneNames.includes(a)) { console.log(`BAD     armed agent "${a}" is not in the config — its 02:00 fold would throw`); bad++; }
       }
     } catch { /* nothing armed — fine */ }
     console.log(`config file: ${cfg.__configFile ?? '(none — single-lane defaults)'}`);

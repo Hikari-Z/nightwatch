@@ -48,7 +48,7 @@ export const FIXTURE = {
         title: 'Morning wake failed',
         cause: 'Checkpoint missing at ~/origin/weft/checkpoint.md. 3 launches, no session registered.',
         fixes: [['restore', 'restore-checkpoint', 'Restore checkpoint', 'Put back the newest archived checkpoint (ladder/checkpoints/2026-10-05-0201.md)'],
-          ['retry', 'retry-wake', 'Retry wake', 'Launch the lane again now'],
+          ['retry', 'retry-wake', 'Retry wake', 'Launch the agent again now'],
           ['log', 'show-log', 'Show log', 'Open the nightshift log at this failure']] } },
   ],
   // NightStrip: repeated nodes are GROUPED: three failed launches are one

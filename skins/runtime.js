@@ -74,17 +74,17 @@
       body: `Opens a Terminal window that resumes ${lane} from their last sleep, the same way the 08:00 wake does. If ${lane} is already awake, nothing happens.` }),
     'retry-wake': (lane) => ({ title: `Try waking ${lane} again?`, verb: 'Retry wake', icon: 'retry',
       body: `Opens a Terminal window that resumes ${lane} from their last sleep. If the checkpoint is still missing, restore it first or this attempt fails the same way.` }),
-    'wake-all': () => ({ title: 'Wake every sleeping lane?', verb: 'Wake all', icon: 'play',
+    'wake-all': () => ({ title: 'Wake every sleeping agent?', verb: 'Wake all', icon: 'play',
       body: 'Each sleeping agent gets their own Terminal window, resuming from their last sleep. Agents already awake are left alone.' }),
-    'sleep-all': () => ({ title: 'Ring every awake lane\'s bell?', verb: 'Ring all bells', icon: 'pause',
+    'sleep-all': () => ({ title: 'Ring every awake agent\'s bell?', verb: 'Ring all bells', icon: 'pause',
       body: 'Every awake agent gets the 02:00 note: write the day\'s rung, then fold. Each finishes the step they\'re on first.' }),
     'restore-checkpoint': () => ({ title: 'Restore the checkpoint?', verb: 'Restore', icon: 'restore',
       body: 'Copies the newest timestamped archive back to the checkpoint path. Only runs if the checkpoint is missing; it never replaces one that exists.' }),
     'restart-daemon': () => ({ title: 'Restart the nightshift?', verb: 'Restart', icon: 'retry',
-      body: 'Relaunches the background job that rings bells and wakes lanes. Lanes keep running; only the watcher restarts.' }),
+      body: 'Relaunches the background job that rings bells and wakes agents. Agents keep running; only the watcher restarts.' }),
     'emergency-fold': (lane) => ({ title: `Force-fold ${lane}?`, verb: 'Force fold', icon: 'fold', danger: true,
       body: `Closes ${lane}'s window now, folds them, and opens a fresh one straight away. The fresh window writes the rung for the day. For a full context or an API-error wall; for a normal bedtime, use Sleep agent.` }),
-    'fold-all': () => ({ title: 'Force-fold every awake lane?', verb: 'Force-fold all', icon: 'fold', danger: true,
+    'fold-all': () => ({ title: 'Force-fold every awake agent?', verb: 'Force-fold all', icon: 'fold', danger: true,
       body: 'Each awake agent is closed now, folded, and reopened fresh; each fresh window writes their own rung. Agents that are asleep are left alone.' }),
     'remove-lane': (lane) => ({ title: `Remove ${lane} from Nightwatch?`, verb: 'Remove', icon: 'x',
       body: `The nightshift stops belling and waking ${lane}, and they leave this window. Their transcripts, ladder and receipts stay on disk.` }),
@@ -169,7 +169,7 @@
     b.dataset.action = open ? 'hide-terminal' : 'open-terminal';
     b.setAttribute('aria-label', open ? 'Hide terminal' : 'Open terminal');
     b.setAttribute('aria-pressed', String(open));
-    b.dataset.tip = open ? "Minimize this lane's terminal window" : "Bring this lane's terminal to the front";
+    b.dataset.tip = open ? "Minimize this agent's terminal window" : "Bring this agent's terminal to the front";
     b.querySelector('use')?.setAttribute('href', open ? '#i-terminal-hide' : '#i-terminal');
   }
   // What the host needs to find a lane: its own name and its persona's hub.
@@ -723,9 +723,9 @@
 
   function laneSpec(slot) {
     const id = val(slot, 'id');
-    if (!/^[a-z][a-z0-9-]{0,23}$/.test(id)) throw new Error('Lane names are lowercase letters, numbers and dashes, starting with a letter (for example "scout").');
+    if (!/^[a-z][a-z0-9-]{0,23}$/.test(id)) throw new Error('Agent names are lowercase letters, numbers and dashes, starting with a letter (for example "scout").');
     const taken = $$('.nw-app > .nw-lanes .nw-lane[data-lane]').map((l) => l.dataset.lane);
-    if (taken.includes(id)) throw new Error(`There's already a lane called "${id}".`);
+    if (taken.includes(id)) throw new Error(`There's already an agent called "${id}".`);
     const k = targetOk(slot);
     if (k === null) throw new Error('The fold target must be a whole number of k between 10 and 2000.');
     const inherit = field(slot, 'inherit')?.checked ?? true;

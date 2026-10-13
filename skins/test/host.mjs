@@ -47,7 +47,7 @@ await check('nothing acted before yes', 'window.__calls', []);
 await click('.nw-app > .nw-confirm [data-part="no"]');
 await check('cancel closes, no act', `[!!document.querySelector('.nw-app > .nw-confirm'), window.__calls.length]`, [false, 0]);
 await click(W); await click('.nw-app > .nw-confirm [data-part="yes"]'); await sleep(200);
-await check('yes acts with the lane', 'window.__calls', [['wake', 'scout']]);
+await check('yes acts with the agent', 'window.__calls', [['wake', 'scout']]);
 await check('result shown', `document.querySelector('.nw-app > .nw-toast').textContent`, 'Waking scout');
 await ev('window.__fail=true'); await click(W); await click('.nw-app > .nw-confirm [data-part="yes"]'); await sleep(200);
 await check('refusal shown as failure', `[document.querySelector('.nw-app > .nw-toast').dataset.status, document.querySelector('.nw-app > .nw-toast').textContent]`, ['failed', 'scout is already awake']);
@@ -62,7 +62,7 @@ await check('unwired action never acts or asks', `[window.__calls.length, !!docu
 await click(SL);
 await check('sleep asks first', `document.querySelector('.nw-app > .nw-confirm [data-part="title"]').textContent.trim()`, "Put opus to sleep?");
 await click('.nw-app > .nw-confirm [data-part="yes"]'); await sleep(200);
-await check('sleep acts with the lane', 'window.__calls', [['sleep', 'opus']]);
+await check('sleep acts with the agent', 'window.__calls', [['sleep', 'opus']]);
 // The midday cycle's switch (Ra, 10/12): off in the fixture; a click asks,
 // then acts with on: true for that lane.
 const MD = '.nw-app > .nw-lanes .nw-lane[data-lane="opus"] [data-action="toggle-midday"]';
@@ -72,7 +72,7 @@ await click(MD);
 await check('midday switch asks first', `document.querySelector('.nw-app > .nw-confirm [data-part="title"]').textContent.trim()`, "Turn on opus's midday cycle?");
 await check('nothing acted before yes (midday)', 'window.__calls', []);
 await click('.nw-app > .nw-confirm [data-part="yes"]'); await sleep(200);
-await check('midday switch acts with the lane and on: true', '[window.__calls, window.__data.at(-1)]', [[['toggle-midday', 'opus']], { on: true }]);
+await check('midday switch acts with the agent and on: true', '[window.__calls, window.__data.at(-1)]', [[['toggle-midday', 'opus']], { on: true }]);
 const L = '.nw-app > .nw-lanes .nw-lane[data-lane="scout"]';
 await ev('window.__calls=[]');
 await click(`${L} [data-action="lane-settings"]`);
@@ -99,8 +99,8 @@ await ev('window.__fail=false');
 const cases = [
   ['.nw-app > .nw-lanes .nw-lane[data-lane="scribe"] .nw-alert [data-action="retry-wake"]', 'retry-wake', 'scribe', 'Try waking scribe again?'],
   ['.nw-app > .nw-lanes .nw-lane[data-lane="scribe"] .nw-alert [data-action="restore-checkpoint"]', 'restore-checkpoint', 'scribe', 'Restore the checkpoint?'],
-  ['.nw-app > .nw-controls [data-action="wake-all"]', 'wake-all', null, 'Wake every sleeping lane?'],
-  ['.nw-app > .nw-controls [data-action="sleep-all"]', 'sleep-all', null, "Ring every awake lane's bell?"],
+  ['.nw-app > .nw-controls [data-action="wake-all"]', 'wake-all', null, 'Wake every sleeping agent?'],
+  ['.nw-app > .nw-controls [data-action="sleep-all"]', 'sleep-all', null, "Ring every awake agent's bell?"],
 ];
 for (const [sel, action, lane, title] of cases) {
   await ev('window.__calls=[]');
@@ -125,18 +125,18 @@ await check('one settings panel per persona', `[...document.querySelectorAll('.n
 await click('.nw-app > .nw-lanes .nw-persona[data-persona="weft"] [data-action="persona-settings"]');
 await check("Weft's gear opens Weft's panel, and only it", OPEN, ['weft']);
 await click('.nw-app > .nw-settings[data-persona="weft"] [data-action="save-settings"]'); await sleep(150);
-await check("Weft's panel saves its schedule and only Weft's lanes", `(()=>{const d=window.__data.at(-1);return [d.sleep,d.wake,d.lanes.map(l=>[l.id,l.targetK,l.armed])]})()`,
+await check("Weft's panel saves its schedule and only Weft's agents", `(()=>{const d=window.__data.at(-1);return [d.sleep,d.wake,d.lanes.map(l=>[l.id,l.targetK,l.armed])]})()`,
   ['02:00', '08:00', [['fable', 250, true], ['opus', 250, true], ['scribe', 200, true]]]);
 await click('.nw-app > .nw-lanes .nw-persona[data-persona="lark"] [data-action="persona-settings"]');
 await check("Lark's gear swaps to Lark's panel", OPEN, ['lark']);
 await click('.nw-app > .nw-settings[data-persona="lark"] [data-action="save-settings"]'); await sleep(150);
-await check("Lark's panel saves only Lark's lane", `window.__data.at(-1).lanes.map(l=>[l.id,l.targetK,l.armed])`, [['scout', 120, false]]);
+await check("Lark's panel saves only Lark's agent", `window.__data.at(-1).lanes.map(l=>[l.id,l.targetK,l.armed])`, [['scout', 120, false]]);
 await ev(`document.querySelector('.nw-app > .nw-settings[data-persona="lark"] [data-action="close-settings"]').click()`);
 await check('close shuts it', OPEN, []);
 // (the doctor checks below use the first panel, Weft's)
 await click('.nw-app > .nw-lanes .nw-persona[data-persona="weft"] [data-action="persona-settings"]');
 await ev(`document.querySelector('.nw-app > .nw-settings[data-persona="weft"] [data-action="close-settings"]').click()`);
-await check('nightly reads ON from armed lanes', `document.querySelector('.nw-controls [data-action="toggle-nightly"]').getAttribute('aria-pressed')`, 'true');
+await check('nightly reads ON from armed agents', `document.querySelector('.nw-controls [data-action="toggle-nightly"]').getAttribute('aria-pressed')`, 'true');
 await click('.nw-controls [data-action="toggle-nightly"]');
 await check('turning nightly off asks first', `document.querySelector('.nw-app > .nw-confirm [data-part="title"]')?.textContent.trim()`, 'Turn the nightly cycle off?');
 await click('.nw-app > .nw-confirm [data-part="yes"]'); await sleep(150);
@@ -146,10 +146,10 @@ await ev('window.__calls=[]');
 await click('.nw-app > .nw-lanes .nw-lane[data-lane="opus"] [data-action="emergency-fold"]');
 await check('fold now asks, in danger red', `[document.querySelector('.nw-app > .nw-confirm [data-part="title"]')?.textContent.trim(), document.querySelector('.nw-app > .nw-confirm [data-part="yes"]')?.dataset.danger]`, ['Force-fold opus?', 'true']);
 await click('.nw-app > .nw-confirm [data-part="yes"]'); await sleep(150);
-await check('then acts on that lane', 'window.__calls', [['emergency-fold', 'opus']]);
+await check('then acts on that agent', 'window.__calls', [['emergency-fold', 'opus']]);
 await ev('window.__calls=[]');
 await click('.nw-app > .nw-controls [data-action="fold-all"]');
-await check('fold all asks first', `document.querySelector('.nw-app > .nw-confirm [data-part="title"]')?.textContent.trim()`, 'Force-fold every awake lane?');
+await check('fold all asks first', `document.querySelector('.nw-app > .nw-confirm [data-part="title"]')?.textContent.trim()`, 'Force-fold every awake agent?');
 await click('.nw-app > .nw-confirm [data-part="yes"]'); await sleep(150);
 await ev(`document.querySelector('.nw-head [data-part="view-menu"][data-menu="app"] [data-action="app-settings"]').click()`);
 await click('.nw-app > .nw-settings [data-action="run-doctor"]'); await sleep(150);

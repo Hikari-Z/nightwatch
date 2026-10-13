@@ -181,12 +181,12 @@ function actions(lane) {
   const awake = s === 'awake' || s === 'belled' || s === 'folding';
   const wakeable = s === 'sleeping' || s === 'failed' || s === 'orphaned';
   return [
-    ['terminal', 'open-terminal', 'Open terminal', awake, awake ? "Bring this lane's terminal to the front" : 'No live session'],
+    ['terminal', 'open-terminal', 'Open terminal', awake, awake ? "Bring this agent's terminal to the front" : 'No live session'],
     ['sun', 'wake', 'Wake', wakeable, wakeable ? 'Wake now' : 'Already awake'],
     ['moon', 'sleep', 'Sleep agent', awake, awake ? 'Rings the bell to fold this agent, then closes the window' : 'Not awake'],
     ['fold', 'emergency-fold', 'Force fold', awake, awake ? 'Closes them now, folds them, and reopens them; the fresh window writes the rung. For a full context or an API-error wall' : 'Nothing to fold'],
-    ['log', 'show-log', 'Logs', true, "This lane's events and log lines"],
-    ['gear', 'lane-settings', 'Lane settings', true, 'Model, hours, fold target'],
+    ['log', 'show-log', 'Logs', true, "This agent's events and log lines"],
+    ['gear', 'lane-settings', 'Agent settings', true, 'Model, hours, fold target'],
   ];
 }
 
@@ -226,9 +226,9 @@ const model_opts = () => NEW_MODELS.map(([id, t]) => `<option value="${id}">${t}
 const PREVIEW_EXAMPLE = [
   { verb: 'Create', what: '~/Nightwatch/lark/', detail: 'the hub' },
   { verb: 'Write', what: 'identity.md', detail: 'from “About them” and the standard welcome' },
-  { verb: 'Write', what: 'checkpoint.md', detail: 'one section, for this lane' },
+  { verb: 'Write', what: 'checkpoint.md', detail: 'one section, for this agent' },
   { verb: 'Create', what: 'ladder/ and memory/', detail: 'empty; they fill these from their first night' },
-  { verb: 'Write', what: 'nightwatch.config.json', detail: 'persona (unnamed), 1 lane, 02:00 → 08:00, 250k' },
+  { verb: 'Write', what: 'nightwatch.config.json', detail: 'persona (unnamed), 1 agent, 02:00 → 08:00, 250k' },
   { verb: 'Install', what: 'the nightshift', detail: 'rings the bell at night and wakes them in the morning' },
   { verb: 'Install', what: 'the session hook', detail: 'so the nightshift can tell which session is theirs' },
   { verb: 'Open', what: 'a Terminal window', detail: 'Claude Code (claude-opus-5-5), fresh session' },
@@ -665,7 +665,7 @@ function activity(ctx) {
   const pi = quiet ? 0 : A.indexOf(peak);
   const pt = (pi + .5) / n;
   return `<div data-part="activity" data-illustrative="true" data-bucket-min="${bm}" data-series="${A.map(num).join(',')}" ` +
-    `data-tip="Output tokens, all lanes, per ${bucket_words(bm)}">` +
+    `data-tip="Output tokens, all agents, per ${bucket_words(bm)}">` +
     `<svg viewBox="0 0 1000 40" preserveAspectRatio="none" aria-hidden="true">` +
     `<defs><linearGradient id="nw-activity-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" data-part="fill-top"/><stop offset="1" data-part="fill-bottom"/></linearGradient></defs>` +
     `<g data-part="grid">${grid}</g><path data-part="area" fill="url(#nw-activity-fill)" d="${area}"/><path data-part="line" d="${line}"/>` +
@@ -732,7 +732,7 @@ function log(ctx) {
   return `
   <section class="nw-log" aria-label="event log">
     <h3 data-part="heading">Log</h3>
-    <div data-part="filters" role="group" aria-label="Show these events">${filters}<button type="button" data-action="reset-log" data-part="reset" aria-label="Show everything" data-tip="Back to the default view: every lane, the usual kinds of event">${icon('repeat')}</button></div>
+    <div data-part="filters" role="group" aria-label="Show these events">${filters}<button type="button" data-action="reset-log" data-part="reset" aria-label="Show everything" data-tip="Back to the default view: every agent, the usual kinds of event">${icon('repeat')}</button></div>
     <ol data-part="events">${rows}</ol>
     <p data-part="empty" hidden>Nothing yet. Every bell, fold and wake will be written here.</p>
   </section>`;
@@ -787,7 +787,7 @@ function settings_panel(ctx, p, lanesOf) {
     laneTrouble++;
     items.push(`<li data-status="warn" data-lane="${esc(L.id)}">${icon('gauge')} ${esc(laneName(L))} is at ${pyRound(L.ctx / w * 100)}% of their context window — a Force fold would trim them to ~${k(L.target)}</li>`);
   }
-  if (!laneTrouble) items.push(`<li data-status="ok">${icon('check')} No lane needs a hand</li>`);
+  if (!laneTrouble) items.push(`<li data-status="ok">${icon('check')} No agent needs a hand</li>`);
   const who = p ? esc(p.name) : 'Settings';
   return `
   <section class="nw-settings"${p ? ` data-persona="${esc(p.id)}"` : ''}${p?.hub ? ` data-hub="${esc(p.hub)}"` : ''} aria-label="${p ? `${who} settings` : 'settings'}" data-open="false" role="dialog">
@@ -896,12 +896,12 @@ function controls(ctx, setup = false) {
   // play turns into pause, as on any player, instead of a prominent Wake all
   // that can't do anything sitting beside a small pause.
   const allAwake = !setup && ctx.LANES.length > 0 && !ctx.LANES.some((L) => ['sleeping', 'failed', 'orphaned'].includes(L.state));
-  const sleepTip = "Ring every awake lane's bell: rung, fold, close";
+  const sleepTip = "Ring every awake agent's bell: rung, fold, close";
   const primary = setup
     ? `<button type="button" data-action="setup" data-part="primary" data-tip="Install a persona: name, model, where their memory lives">${icon('wand')}<span>Set up</span></button>`
     : allAwake
       ? `<button type="button" data-action="sleep-all" data-part="primary" data-tip="${esc(sleepTip)}">${icon('pause')}<span>Sleep all</span></button>`
-      : `<button type="button" data-action="wake-all" data-part="primary" data-tip="Wake every sleeping lane now">${icon('play')}<span>Wake all</span></button>`;
+      : `<button type="button" data-action="wake-all" data-part="primary" data-tip="Wake every sleeping agent now">${icon('play')}<span>Wake all</span></button>`;
   const pause = allAwake ? '' : `<button type="button" data-action="sleep-all" aria-label="Sleep all" data-tip="${esc(sleepTip)}"${setup ? ' aria-disabled="true"' : ''}>${icon('pause')}</button>`;
   return `
   <section class="nw-controls" aria-label="controls" data-setup="${setup ? 'true' : 'false'}">
@@ -909,7 +909,7 @@ function controls(ctx, setup = false) {
     <div data-part="transport" data-all-awake="${allAwake ? 'true' : 'false'}">
       ${primary}
       ${pause}
-      <button type="button" data-action="fold-all" aria-label="Force-fold all" data-danger="true" data-tip="Force-fold every awake lane (asks first)"${setup ? ' aria-disabled="true"' : ''}>${icon('stop')}</button>
+      <button type="button" data-action="fold-all" aria-label="Force-fold all" data-danger="true" data-tip="Force-fold every awake agent (asks first)"${setup ? ' aria-disabled="true"' : ''}>${icon('stop')}</button>
       <button type="button" data-action="toggle-nightly" aria-pressed="${!setup && ctx.LANES.some((L) => L.armed !== false) ? 'true' : 'false'}" aria-label="Nightly cycle" data-tip-on="Nightly cycle is on: bell ${ctx.SCHEDULE.sleep}, wake ${ctx.SCHEDULE.wake}. Press to turn it off." data-tip-off="Nightly cycle is off. Press to turn it on (bell ${ctx.SCHEDULE.sleep}, wake ${ctx.SCHEDULE.wake})." data-tip="${!setup && ctx.LANES.some((L) => L.armed !== false) ? `Nightly cycle is on: bell ${ctx.SCHEDULE.sleep}, wake ${ctx.SCHEDULE.wake}. Press to turn it off.` : `Nightly cycle is off. Press to turn it on (bell ${ctx.SCHEDULE.sleep}, wake ${ctx.SCHEDULE.wake}).`}">${icon('repeat')}</button>
       <button type="button" data-part="panel-toggle" data-action="toggle-timeline" aria-pressed="false" aria-label="Timeline" data-tip-on="Hide the timeline" data-tip-off="Show the timeline" data-tip="Show the timeline">${icon('clock')}</button>
       <button type="button" data-part="panel-toggle" data-action="toggle-log" aria-pressed="false" aria-label="Log" data-tip-on="Hide the log" data-tip-off="Show the log" data-tip="Show the log">${icon('log')}</button>
@@ -933,7 +933,7 @@ function confirm() {
 // per-episode, so acking one outage never hides the next.
 const ALARM_ARIA = {
   day: 'day; the watch is running', night: 'night; the watch is running',
-  belled: 'bell rung; folds due', alarm: 'alarm; a lane needs a hand',
+  belled: 'bell rung; folds due', alarm: 'alarm; an agent needs a hand',
   down: 'the nightshift is not running',
 };
 
@@ -1096,7 +1096,7 @@ ${sprite()}
   <header class="nw-head" data-tauri-drag-region>
     <span class="nw-glyph" data-phase="${ctx.DAEMON.phase}" role="img" aria-label="${ALARM_ARIA[ctx.DAEMON.phase]}" data-tip="${glyph_tip(ctx)}"></span>
     <h1 data-part="title">Nightwatch</h1>
-    <span data-part="schedule" data-tip="Tonight's schedule: the sleep-bell rings at ${ctx.SCHEDULE.sleep} and lanes wake at ${ctx.SCHEDULE.wake}. Change it in a persona's settings (the gear on their card).">${icon('moon')}<time datetime="${ctx.SCHEDULE.sleep}">${ctx.SCHEDULE.sleep}</time>${icon('sun')}<time datetime="${ctx.SCHEDULE.wake}">${ctx.SCHEDULE.wake}</time></span>
+    <span data-part="schedule" data-tip="Tonight's schedule: the sleep-bell rings at ${ctx.SCHEDULE.sleep} and agents wake at ${ctx.SCHEDULE.wake}. Change it in a persona's settings (the gear on their card).">${icon('moon')}<time datetime="${ctx.SCHEDULE.sleep}">${ctx.SCHEDULE.sleep}</time>${icon('sun')}<time datetime="${ctx.SCHEDULE.wake}">${ctx.SCHEDULE.wake}</time></span>
     <time data-part="clock" datetime="${ctx.NOW}">${hmLocal(ctx.NOW, ctx.TZ)}</time>
     <button type="button" data-action="look-menu" data-part="menu-button" data-menu="look" aria-haspopup="menu" aria-expanded="false" aria-label="Look" data-tip="Appearance and skin">${icon('palette')}</button>
     <button type="button" data-action="view-menu" data-part="menu-button" aria-haspopup="menu" aria-expanded="false" aria-label="View" data-tip="Show or hide panels">${icon('panels')}</button>

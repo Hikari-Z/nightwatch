@@ -65,8 +65,8 @@ function loadSpec(path) {
   try { spec = JSON.parse(raw); } catch { die('The spec file is not valid JSON.'); }
   if (spec.op !== 'init' && spec.op !== 'lane-add') die(`The spec's op must be "init" or "lane-add", not "${spec.op}".`);
   const lane = spec.lane ?? {};
-  if (!lane.id || !/^[a-z][a-z0-9-]*$/.test(lane.id)) die('The lane needs an id: lowercase letters, digits and dashes, starting with a letter.');
-  if (!lane.model || typeof lane.model !== 'string') die('The lane needs a model id (e.g. claude-opus-5-5).');
+  if (!lane.id || !/^[a-z][a-z0-9-]*$/.test(lane.id)) die('The agent needs an id: lowercase letters, digits and dashes, starting with a letter.');
+  if (!lane.model || typeof lane.model !== 'string') die('The agent needs a model id (e.g. claude-opus-5-5).');
   if (lane.targetTokens !== undefined && (typeof lane.targetTokens !== 'number' || lane.targetTokens < 1000)) die('targetTokens must be a number of tokens (e.g. 250000).');
   const fs = lane.firstSession ?? { kind: 'fresh' };
   if (fs.kind !== 'fresh' && fs.kind !== 'adopt') die('firstSession.kind must be "fresh" or "adopt".');
@@ -153,7 +153,7 @@ function initSteps(spec) {
     },
   });
   steps.push({
-    verb: 'Write', what: 'nightwatch.config.json', detail: `persona ${ctx.name ?? '(unnamed)'}, 1 lane (${lane.model}), ${sleep} → ${wake}, ${Math.round(target / 1000)}k`,
+    verb: 'Write', what: 'nightwatch.config.json', detail: `persona ${ctx.name ?? '(unnamed)'}, 1 agent (${lane.model}), ${sleep} → ${wake}, ${Math.round(target / 1000)}k`,
     run() {
       let machineryVersion = 'unstamped';
       try { machineryVersion = readFileSync(join(WC, 'VERSION'), 'utf8').split('\n')[0].trim(); } catch { /* unstamped build */ }
@@ -240,7 +240,7 @@ function laneAddSteps(spec) {
   const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
   const hub = cfg.weftRoot ?? dirname(cfgPath);
   const lane = spec.lane;
-  if (cfg.lanes?.[lane.id]) die(`The lane "${lane.id}" already exists.`);
+  if (cfg.lanes?.[lane.id]) die(`The agent "${lane.id}" already exists.`);
   const siblings = Object.keys(cfg.lanes ?? {});
   const sleep = cfg.schedule?.sleep ?? '02:00';
   const ctx = { name: cfg.persona?.name ?? null, person: cfg.persona?.person ?? 'your person', model: lane.model, sleep, hub, laneId: lane.id, siblings };
@@ -254,7 +254,7 @@ function laneAddSteps(spec) {
   // and the config entry — the thing that makes the lane EXIST — last.
   // A failure anywhere leaves no claimed lane behind.
   const claimStep = {
-    verb: 'Add', what: `lane "${lane.id}" to ${ctx.name ?? 'the persona'}`, detail: `${lane.model}, ${spec.lane.schedule ? 'their own schedule' : 'the global schedule'}, ${Math.round(target / 1000)}k${lane.armed === false ? ', not armed' : ''}`,
+    verb: 'Add', what: `agent "${lane.id}" to ${ctx.name ?? 'the persona'}`, detail: `${lane.model}, ${spec.lane.schedule ? 'their own schedule' : 'the global schedule'}, ${Math.round(target / 1000)}k${lane.armed === false ? ', not armed' : ''}`,
     run() {
       cfg.lanes[lane.id] = { targetTokens: target, model: lane.model, ...(spec.lane.schedule ? { schedule: spec.lane.schedule } : {}) };
       writeFileSync(cfgPath + '.tmp', JSON.stringify(cfg, null, 2) + '\n');
@@ -298,7 +298,7 @@ function firstSessionStep(spec, hub, ctx, noActivate, cpPath, laneWc) {
   const cp = cpPath ?? join(hub, 'checkpoint.md');
   if (fs.kind === 'adopt') {
     const prep = {
-      verb: 'Adopt', what: `running session ${String(fs.sessionId).slice(0, 8)}…`, detail: `registers it as the "${spec.lane.id}" lane; nothing is closed or restarted now — but from tonight the nightshift bells them at sleep time and closes the window once they've folded`,
+      verb: 'Adopt', what: `running session ${String(fs.sessionId).slice(0, 8)}…`, detail: `registers it as the "${spec.lane.id}" agent; nothing is closed or restarted now — but from tonight the nightshift bells them at sleep time and closes the window once they've folded`,
       run() {
         // The pid makes the liveness checks see the adopted session the way
         // they see a woken one; sourced from Claude Code's own session file.
@@ -466,9 +466,9 @@ try {
           die(`The "${step.verb} ${step.what}" step failed: ${e.message}`);
         }
       }
-      const who = ctx.name ?? (spec.op === 'init' ? 'the new persona' : `the ${spec.lane.id} lane`);
+      const who = ctx.name ?? (spec.op === 'init' ? 'the new persona' : `the ${spec.lane.id} agent`);
       const opened = process.env.WEFT_NW_NO_ACTIVATE ? 'prepared their first session (activation off)' : 'opened their first session';
-      out(spec.op === 'init' ? `Created ${who}'s hub at ${hub} and ${opened}.` : `Added the ${spec.lane.id} lane and ${process.env.WEFT_NW_NO_ACTIVATE ? 'prepared' : 'opened'} its first session.`);
+      out(spec.op === 'init' ? `Created ${who}'s hub at ${hub} and ${opened}.` : `Added the ${spec.lane.id} agent and ${process.env.WEFT_NW_NO_ACTIVATE ? 'prepared' : 'opened'} its first session.`);
     }
   } else if (cmd === 'inspect-import') {
     if (!arg) die('inspect-import needs a folder.');

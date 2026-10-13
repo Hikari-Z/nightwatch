@@ -164,10 +164,10 @@ impl Hub {
     // this hub's config knows, spelled plainly. (A typo must never become a
     // default: the --help fold of 10/5.)
     fn check_lane(&self, lane: Option<&str>) -> Result<String, String> {
-        let lane = lane.ok_or("no lane given")?;
+        let lane = lane.ok_or("no agent given")?;
         let plain = !lane.is_empty() && lane.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
         let known = self.cfg.get("lanes").and_then(|l| l.get(lane)).is_some();
-        if plain && known { Ok(lane.to_string()) } else { Err(format!("\"{lane}\" isn't one of {}'s lanes", self.name())) }
+        if plain && known { Ok(lane.to_string()) } else { Err(format!("\"{lane}\" isn't one of {}'s agents", self.name())) }
     }
     // The nightshift's launchd job: Set up's per-hub one, else our legacy one.
     fn daemon_label(&self) -> String {
@@ -882,7 +882,7 @@ mod rehearsal_tests {
         let root = PathBuf::from(std::env::var("NW_REHEARSAL_HUB").expect("NW_REHEARSAL_HUB"));
         let h = hub_among(Some(&root.to_string_lossy()), vec![root.clone()]).expect("the scratch hub opens");
         println!("hub {} · {} · machinery {} · state {} · job {}", h.name(), h.config_file.display(), h.machinery.display(), h.state.display(), h.daemon_label());
-        let lane = h.lanes().first().cloned().expect("a lane");
+        let lane = h.lanes().first().cloned().expect("an agent");
 
         // the persona's settings panel, saved through config.mjs set + nightshift --arm/--disarm
         let msg = save_settings(&h, &serde_json::json!({ "sleep": "03:10", "wake": "09:20", "lanes": [{ "id": lane, "targetK": 180, "armed": false }] })).expect("save-settings");
@@ -904,9 +904,9 @@ mod rehearsal_tests {
         let armed_has = |h: &Hub| std::fs::read_to_string(h.state.join("nightshift.armed")).unwrap_or_default()
             .split(|c: char| c == ',' || c.is_whitespace()).any(|l| l == lane);
         println!("arm-lane off: {}", arm_lane(&after, Some(&lane), &serde_json::json!({ "on": false })).expect("arm-lane off"));
-        assert!(!armed_has(&after), "arm-lane off left the lane armed");
+        assert!(!armed_has(&after), "arm-lane off left the agent armed");
         println!("arm-lane on: {}", arm_lane(&after, Some(&lane), &serde_json::json!({ "on": true })).expect("arm-lane on"));
-        assert!(armed_has(&after), "arm-lane on left the lane disarmed");
+        assert!(armed_has(&after), "arm-lane on left the agent disarmed");
         assert!(arm_lane(&after, Some(&lane), &serde_json::json!({})).unwrap_err().contains("needs on"));
         // The midday switch (10/12): on writes the ruled defaults, off removes the key.
         println!("toggle-midday on: {}", toggle_midday(&after, Some(&lane), &serde_json::json!({ "on": true })).expect("toggle-midday on"));
