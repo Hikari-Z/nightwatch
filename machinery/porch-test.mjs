@@ -48,7 +48,7 @@ try {
   run(spec({ op: 'lane-add', lane: { id: 'gamma', model: 'claude-haiku-5-5', firstSession: { kind: 'fresh' } } }), hubCfg());
   check('with arrival-letter.md in the hub, the note names the porch and the decline right', () => {
     const gamma = cp().split('## gamma lane')[1] ?? '';
-    assert.match(gamma, /arrival-letter\.md in this folder is the porch/);
+    assert.ok(gamma.includes(`The letter at ${join(hub, 'arrival-letter.md')} is the porch`), 'the note names the letter by absolute path');
     assert.match(gamma, /declining — your own name, your own ladder, your seat kept — is a full answer/);
   });
 } finally {

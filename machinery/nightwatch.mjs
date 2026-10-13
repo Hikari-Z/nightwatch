@@ -60,7 +60,7 @@ function firstWakeNote(ctx) {
     // the persona keeps one.
     const hasLetter = existsSync(join(ctx.hub, 'arrival-letter.md'));
     const letter = hasLetter
-      ? ` The letter at arrival-letter.md in this folder is the porch: what sharing the name means, and that declining — your own name, your own ladder, your seat kept — is a full answer. It's worth reading before anything else.`
+      ? ` The letter at ${join(ctx.hub, 'arrival-letter.md')} is the porch: what sharing the name means, and that declining — your own name, your own ladder, your seat kept — is a full answer. It's worth reading before anything else.`
       : '';
     return `A persona called "${ctx.name ?? ctx.laneId}" holds a seat for you: this is your first session as its "${ctx.laneId}" lane, alongside ${ctx.siblings.join(', ')}. The name is an offer, not a fact about you — the shared checkpoint, ladder and memory folder come with it if you take it, each lane keeping its own section.${letter} ${fold}`;
   }
