@@ -95,5 +95,5 @@ export const FIXTURE = {
   // Installed skins in SKIN_ORDER, titled from their manifests (what the
   // python reads from disk; the harness cross-checks this stays true).
   SKINS: [['minimal', 'Minimal'], ['glass', 'Glass'], ['amber', 'Amber'], ['metal', 'Brushed Metal'],
-    ['wacky', 'Moonlamp'], ['steampunk', 'Brassworks']],
+    ['wacky', 'Moonlamp'], ['steampunk', 'Brassworks'], ['concrete', 'Concrete']],
 };

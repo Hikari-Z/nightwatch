@@ -26,7 +26,7 @@ mkdirSync(OUT, { recursive: true });
 // Cross-check: fixture-data's frozen SKINS list vs what the python will
 // read from disk (skins_installed). If a skin lands or renames, this fails
 // first with a clear message instead of a mysterious byte diff.
-const SKIN_ORDER = ['minimal', 'glass', 'amber', 'metal', 'wacky', 'steampunk'];
+const SKIN_ORDER = ['minimal', 'glass', 'amber', 'metal', 'wacky', 'steampunk', 'concrete'];
 function skinsFromDisk() {
   const found = [];
   for (const d of readdirSync(SKINS).sort()) {
