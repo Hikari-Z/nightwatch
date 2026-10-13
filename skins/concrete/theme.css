@@ -273,3 +273,14 @@ body { color: var(--nw-ink); font-family: var(--nw-font); }
 .nw-lane [data-part="name"] { line-height: 1; margin-top: -3px; }
 .nw-lane > header { padding-top: 14px; }
 .nw-app[data-layout="column"] .nw-timeline [data-part="activity"] [data-part="sleep"] { font-size: 18px; letter-spacing: .04em; }
+
+/* Fixes after the first live use (Ra, 10/12).
+   The log's heading is hidden here (the index tab carries its name), so the log has two rows, not the base
+   layout's three (heading, filters, events). Left at three, the events fell into the filters' auto row inside a
+   panel pinned to its container's height, and WebKit, the app's engine, collapsed them to nothing: a blank log
+   in both layouts, while Chrome overflowed the row and looked fine. */
+.nw-app:not([data-layout="stack"]) .nw-log { grid-template-rows: auto minmax(0, 1fr); }
+/* Stripes stay out of the context bars: a meter's fill is a reading, not a highlight. High is solid yellow and
+   over is solid red; the hazard stripes still mark the cards and the alert. */
+.nw-lane [data-part="context"][data-level="high"] [data-part="bar"]::before { background: var(--cc-yellow); }
+.nw-lane [data-part="context"][data-level="over"] [data-part="bar"]::before { background: var(--cc-red); }
