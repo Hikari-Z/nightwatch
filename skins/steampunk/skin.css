@@ -966,3 +966,70 @@ body { color: var(--nw-ink); font-size: 12px; }
 /* the collapsed card's mini meter is the same lit readout; the alarm card keeps its red, warmed to sit on bronze */
 .nw-lane [data-part="mini"]:not([data-level="high"]):not([data-level="over"])::before { --g: var(--bw-amethyst); }
 .nw-alert { background: linear-gradient(#f7ddd0, #ebbfa9) !important; }
+
+/* ================= Brassworks v4, round 2 (Ra, 10/12): copper body, brass/bronze/silver accents, Amber's
+   restraint, rivets, machined keys instead of jelly, a gunmetal plate for alerts, and some rule of cool. ========= */
+:root {
+  --nw-seam: #4a2412; --nw-surface: #b8693e; --nw-ink: #2a120a; --nw-ink-2: #5a2e1a;
+  --mt-sheen: linear-gradient(180deg, #d98f63 0%, #bd6c40 20%, #a65833 46%, #8e4729 74%, #a95d36 100%);
+  --mt-emboss: 0 1px 0 rgb(255 210 180 / .5);
+  --mt-bevel: inset 0 1px 0 rgb(255 214 188 / .6), inset 0 -1px 0 rgb(50 15 0 / .35);
+  --bw-brass: #c9a24a; --bw-brass-hi: #f0d68e; --bw-brass-lo: #8d6a24; --bw-silver: #c4c8cf; --bw-bronze: #9a6b3a;
+  --bw-brass-plate: linear-gradient(180deg, #f1d891 0%, #d4b05c 30%, #bd9441 62%, #a87f30 100%);
+  --bw-gunmetal: linear-gradient(180deg, #5c6370 0%, #464c57 50%, #363b44 100%);
+  /* four rivets, one per corner, for the major plates */
+  --bw-rivet: radial-gradient(circle, #f6e2ad 0 1.2px, #b88d3c 1.9px, #5a3a12 2.6px, transparent 3.1px);
+  --bw-rivets: var(--bw-rivet) left 6px top 6px / 8px 8px no-repeat, var(--bw-rivet) right 6px top 6px / 8px 8px no-repeat,
+               var(--bw-rivet) left 6px bottom 6px / 8px 8px no-repeat, var(--bw-rivet) right 6px bottom 6px / 8px 8px no-repeat;
+  --g: var(--bw-brass);
+}
+/* machined keys, not jelly: a brushed metal cap with a soft top light and a hard bevel; set --g for the metal */
+*, ::before, ::after {
+  --mt-gel: radial-gradient(120% 70% at 50% 0%, rgb(255 255 255 / .35), transparent 60%),
+            linear-gradient(180deg, color-mix(in srgb, var(--g) 70%, #fff) 0%, var(--g) 48%, color-mix(in srgb, var(--g) 72%, #000) 100%);
+  --mt-gel-shadow: inset 0 1px 0 rgb(255 255 255 / .45), inset 0 -1px 0 rgb(0 0 0 / .3), 0 0 0 1px color-mix(in srgb, var(--g) 45%, #000), 0 1px 1.5px rgb(0 0 0 / .45);
+}
+/* the four major plates: copper with corner rivets; the head bar is brass, the house's nameplate */
+.nw-controls, .nw-timeline, .nw-log { background: var(--bw-rivets), var(--mt-metal) !important; }
+.nw-head { background: var(--bw-rivets), var(--mt-brush), var(--bw-brass-plate) !important; box-shadow: inset 0 1px 0 rgb(255 245 210 / .8), inset 0 -2px 0 var(--bw-brass-lo); }
+.nw-head [data-part="title"] { color: #3a2508; text-shadow: 0 1px 0 rgb(255 240 200 / .7); }
+.nw-head [data-part="schedule"] { color: #4a3210; text-shadow: 0 1px 0 rgb(255 240 200 / .6); }
+/* engraved icons on metal keys; enamel only where the colour means something */
+.nw-head > button, .nw-lane [data-part="toggle"], .nw-persona [data-part="persona-name"] > [data-part="persona-toggle"] { --g: var(--bw-silver); color: #2a2e35; }
+:is(.nw-lane [data-part="actions"] button, .nw-persona [data-part="persona-buttons"] button) { --g: var(--bw-brass); color: #3a2508; }
+:is(.nw-lane [data-part="actions"] button, .nw-persona [data-part="persona-buttons"] button):hover { --g: var(--bw-brass-hi); color: #3a2508; }
+.nw-lane [data-part="actions"] button[aria-expanded="true"] { --g: var(--bw-amethyst); color: #fff; }
+.nw-controls [data-part="transport"] button { --g: var(--bw-brass); color: #3a2508; }
+.nw-controls [data-part="transport"] button[data-part="primary"] { --g: var(--bw-amethyst) !important; color: #fff !important; }
+[data-part="fix"], .nw-alert [data-part="ack"], :is([data-part="buttons"], [data-part="session-row"]) button { --g: var(--bw-silver); color: #22262c; }
+/* the dark displays sit in brass bezels */
+.nw-head [data-part="clock"], .nw-controls [data-part="display"], .nw-timeline [data-part="activity"] {
+  box-shadow: inset 0 1px 5px rgb(0 0 0 / .75), 0 0 0 2px var(--bw-brass), 0 0 0 3px var(--bw-brass-lo), 0 2px 3px rgb(0 0 0 / .35) !important; }
+/* the house glyph: a faceted amethyst in a brass setting */
+.nw-glyph { background: conic-gradient(from 30deg, #c9b4f2, #6a50a6, #b49ae6, #4f3a86, #d4c2f7, #7a5fb8, #c9b4f2) !important;
+  box-shadow: 0 0 0 2px var(--bw-brass), 0 0 0 3px var(--bw-brass-lo), 0 0 8px rgb(176 146 232 / .6) !important; border-radius: 50%; }
+.nw-glyph[data-phase="down"] { filter: grayscale(.9) brightness(.8); }
+/* meters: glass tubes in brass sleeves, the liquid in the meter's colour */
+.nw-lane :is([data-part="context"] [data-part="bar"], [data-part="throughput"] svg:not(.nw-icon)) { background: linear-gradient(#2a1d2e, #3a2b40);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / .7), inset 0 -1px 0 rgb(255 255 255 / .08), 0 0 0 1.5px var(--bw-brass), 0 0 0 2.5px var(--bw-brass-lo); }
+.nw-lane [data-part="context"] [data-part="bar"]::before { background: linear-gradient(180deg, color-mix(in srgb, var(--meter) 35%, #fff) 0%, var(--meter) 45%, color-mix(in srgb, var(--meter) 60%, #000) 100%);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--meter) 60%, transparent); }
+.nw-lane [data-part="mini"] { background: linear-gradient(#2a1d2e, #3a2b40); box-shadow: inset 0 1px 2px rgb(0 0 0 / .7), 0 0 0 1px var(--bw-brass); }
+/* alerts on a gunmetal plate, with the state as a lamp down the edge */
+.nw-alert { background: var(--mt-brush), var(--bw-gunmetal) !important; box-shadow: inset 4px 0 0 var(--nw-failed), inset 0 1px 0 rgb(255 255 255 / .18), 0 0 0 1px #20242a; }
+.nw-alert [data-part="title"] { color: #ff9a8a; text-shadow: 0 0 6px rgb(255 90 70 / .35); font-variant: small-caps; letter-spacing: .04em; }
+.nw-alert [data-part="cause"] { color: #d6dae1; }
+.nw-alert [data-part="time"] { color: #aab0ba; }
+.nw-alert > .nw-icon { color: #ff7a66; filter: drop-shadow(0 0 4px rgb(255 90 70 / .6)); }
+.nw-alert[data-level="warn"] { background: var(--mt-brush), var(--bw-gunmetal) !important; box-shadow: inset 4px 0 0 var(--nw-warn), inset 0 1px 0 rgb(255 255 255 / .18), 0 0 0 1px #20242a; }
+.nw-alert[data-level="warn"] [data-part="title"] { color: #ffc27a; text-shadow: 0 0 6px rgb(255 170 60 / .35); }
+.nw-alert[data-level="warn"] > .nw-icon { color: #ffb050; filter: drop-shadow(0 0 4px rgb(255 170 60 / .6)); }
+.nw-alert[data-level="warn"] [data-part="cause"] { color: #d6dae1; }
+/* the ledger: a brass plate, engraved */
+.nw-log [data-part="events"] { background: var(--mt-brush), var(--bw-brass-plate); box-shadow: inset 0 1px 3px rgb(60 35 0 / .45), inset 0 0 0 1px var(--bw-brass-lo); }
+.nw-log .nw-day { color: #3a2508; border-bottom-color: rgb(80 50 10 / .55); text-shadow: 0 1px 0 rgb(255 240 200 / .6); }
+.nw-event { border-top-color: rgb(80 50 10 / .22); }
+.nw-event [data-part="time"] { color: #5a3e14; }
+/* the timeline's track: a groove cut in the copper; its marks are enamelled studs */
+.nw-strip::after { background: linear-gradient(#5a2c16, #8a4a2a); box-shadow: inset 0 1px 2px rgb(0 0 0 / .6), 0 1px 0 rgb(255 210 180 / .35); }
+.nw-node { box-shadow: var(--mt-gel-shadow), 0 0 0 2px rgb(60 25 5 / .25); }
