@@ -104,7 +104,7 @@ await check('aria-expanded in sync', `document.querySelector('${lane} [data-part
 await click('[data-action="view-menu"]');
 await check('menu opens', `document.querySelector('[data-part="view-menu"]').dataset.open`, 'true');
 await check('glass radio checked', `document.querySelector('[name="skin"][value="glass"]').checked`, true);
-await check('six skins listed', `document.querySelectorAll('[name="skin"]').length`, 6);
+await check('seven skins listed', `document.querySelectorAll('[name="skin"]').length`, 7);
 await click('[name="skin"][value="metal"]');
 await sleep(300);
 await check('skin swaps to metal', `document.getElementById('skin').getAttribute('href')`, 'metal/skin.css');
