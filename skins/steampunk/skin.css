@@ -1206,3 +1206,4 @@ body { color: var(--nw-ink); font-size: 12px; }
     radial-gradient(120% 70% at 30% 0%, rgb(255 255 255 / .07), transparent 55%),
     repeating-linear-gradient(180deg, rgb(0 0 0 / .24) 0 1px, transparent 1px 3px),
     radial-gradient(ellipse at 50% 50%, transparent 66%, rgb(6 2 12 / .45) 100%); }
+.nw-strip[data-mode="compressed"]::before { color: #9c8cc0; text-shadow: 0 0 5px rgb(176 146 236 / .35); }
