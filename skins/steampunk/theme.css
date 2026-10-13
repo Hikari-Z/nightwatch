@@ -442,3 +442,49 @@ body { color: var(--nw-ink); font-size: 12px; }
 .nw-node [data-part="count"] { background: #2a2038; color: #ff9a8a; box-shadow: 0 0 0 1px rgb(255 120 100 / .5); }
 .nw-timeline :is([data-part="activity"], [data-part="sleep-bands"]) [data-part="sleep"] { color: #9c8cc0; }
 .nw-timeline [data-part="activity"]::before { color: #b9a9dc; text-shadow: 0 0 5px rgb(176 146 236 / .35); }
+
+/* ================= Brassworks v4, round 6 (Ra, 10/12): all-brass plates (the darker satin brass of round 3, so
+   the head bar stays the benchmark), and the timeline as ONE vintage screen: no rivets on glass; the tube sunk
+   into a polished brass bezel with rounded corners; scanlines, a vignette, a faint glare, the graph in the same
+   glass instead of its own box, and the range switch drawn on the screen as a phosphor menu. ========= */
+:root {
+  --mt-sheen: linear-gradient(180deg, #c6ae78 0%, #b09866 24%, #9e8757 50%, #8b7549 78%, #a28b5a 100%);
+  --nw-surface: #9e8757; --nw-seam: #4a3a18; --nw-ink: #1f160a; --nw-ink-2: #4a3a1e;
+  --mt-emboss: 0 1px 0 rgb(255 244 214 / .35);
+  --mt-bevel: inset 0 1px 0 rgb(255 246 220 / .45), inset 0 -1px 0 rgb(40 28 6 / .4);
+  --bw-rivet: radial-gradient(circle, rgb(255 244 210 / .42) 0 .9px, #8b7549 1.5px, rgb(40 28 6 / .55) 2.3px, transparent 2.8px);
+  --bw-ring: var(--bw-brass); --bw-ring-lo: var(--bw-brass-lo);
+  --bw-bezel: #b8a06a;
+}
+/* the ledger: a recessed plate of older, darker brass set into the panel */
+.nw-log [data-part="events"] { background: var(--bw-hairline), linear-gradient(#a38c5c, #8f7a4e); box-shadow: inset 0 2px 4px rgb(30 20 4 / .5), inset 0 0 0 1px #5e4c26, 0 1px 0 rgb(255 244 214 / .3); }
+
+/* the screen */
+.nw-timeline { position: relative; overflow: hidden; background: var(--bw-display) !important; box-shadow: var(--mt-bevel) !important; }
+.nw-timeline::after { content: ""; position: absolute; inset: 7px; z-index: 6; pointer-events: none; border-radius: 16px;
+  background:
+    radial-gradient(120% 70% at 30% 0%, rgb(255 255 255 / .07), transparent 55%),
+    repeating-linear-gradient(180deg, rgb(0 0 0 / .26) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 50% 50%, transparent 58%, rgb(6 2 12 / .55) 100%);
+  box-shadow: inset 0 0 22px rgb(0 0 0 / .65), inset 0 0 40px rgb(140 110 220 / .08),
+    0 0 0 1px #1a1206, 0 0 0 2.5px var(--bw-brass-lo), 0 0 0 4px var(--bw-brass-hi), 0 0 0 60px var(--bw-bezel); }
+.nw-timeline [data-part="activity"] { background: transparent !important; box-shadow: none !important; border-radius: 0; }
+.nw-timeline [data-part="range"] { box-shadow: none; border-radius: 2px; gap: 2px; background: transparent; }
+.nw-timeline [data-part="range"] button { background: transparent !important; box-shadow: inset 0 0 0 1px rgb(176 146 236 / .35) !important; color: #b9a9dc; border-radius: 2px;
+  text-shadow: 0 0 5px rgb(176 146 236 / .5); }
+.nw-timeline [data-part="range"] button[aria-checked="true"] { background: rgb(190 166 240 / .85) !important; color: #1d1528; text-shadow: none;
+  box-shadow: 0 0 8px rgb(176 146 236 / .6) !important; }
+.nw-node { background: rgb(26 18 38 / .7) !important; }
+.nw-app[data-layout="column"] .nw-timeline::after { inset: 6px; border-radius: 14px; }
+/* round 6b: the screen's controls outrank the wide-key bar (its :is() list carries a heavy selector), so the range
+   switch is drawn ON the glass; the peak and cursor chips are phosphor readouts, not pale LCD pills */
+.nw-app .nw-timeline [data-part="range"] button:not(#nw-x) { background: transparent !important; box-shadow: inset 0 0 0 1px rgb(176 146 236 / .35) !important;
+  color: #b9a9dc; text-shadow: 0 0 5px rgb(176 146 236 / .5); border-radius: 2px; }
+.nw-app .nw-timeline [data-part="range"] button[aria-checked="true"]:not(#nw-x) { background: rgb(190 166 240 / .85) !important; color: #1d1528; text-shadow: none;
+  box-shadow: 0 0 8px rgb(176 146 236 / .6) !important; }
+.nw-timeline [data-part="activity"] :is([data-part="peak"], [data-part="cursor-label"]) { background: rgb(26 18 38 / .9); color: var(--bw-lavender);
+  box-shadow: 0 0 0 1px rgb(176 146 236 / .5), 0 0 6px rgb(160 130 230 / .35); text-shadow: 0 0 4px rgb(176 146 236 / .6); border-radius: 2px; }
+.nw-timeline::after { background:
+    radial-gradient(120% 70% at 30% 0%, rgb(255 255 255 / .07), transparent 55%),
+    repeating-linear-gradient(180deg, rgb(0 0 0 / .24) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 50% 50%, transparent 66%, rgb(6 2 12 / .45) 100%); }
