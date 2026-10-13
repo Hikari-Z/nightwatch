@@ -21,7 +21,7 @@
  */
 import { execFileSync as realExecFileSync, spawn as realSpawn } from 'node:child_process';
 import { release, homedir } from 'node:os';
-import { writeFileSync as realWriteFileSync } from 'node:fs';
+import { writeFileSync as realWriteFileSync, mkdirSync as realMkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** 'darwin' | 'wsl' | 'linux'. WSL is Linux wearing a Windows coat: the
@@ -72,21 +72,28 @@ export function summonWindowArgv({ title, shellCommand, activate = true, scriptF
   return [{ bin: 'x-terminal-emulator', args: ['-e', 'sh', '-lc', String(shellCommand)] }];
 }
 
+/** On WSL, the summons crosses the interop chain as one file path instead of
+ *  a quoted command. The file is named per title: both lanes wake seconds
+ *  apart, and a shared name could be overwritten before a slow Windows
+ *  Terminal tab reads it (the second read's race, 10/12) — two windows
+ *  waking one lane. Returns the script path. Shared by summonWindow and the
+ *  callers that spawn the argv themselves (nightwatch.mjs's first wake). */
+export function writeSummonScript({ title, shellCommand, scriptDir }, io = {}) {
+  const safe = String(title ?? 'nightwatch').replace(/[^A-Za-z0-9_-]/g, '_');
+  const scriptFile = join(scriptDir, `wake-summon-${safe}.sh`);
+  (io.mkdirSync ?? realMkdirSync)(scriptDir, { recursive: true });
+  (io.writeFileSync ?? realWriteFileSync)(scriptFile, `#!/bin/sh\n${shellCommand}\n`, { mode: 0o755 });
+  return scriptFile;
+}
+
 /** Open the window now. Throws when the platform's terminal refuses — the
  *  callers (wake retry, launch-leg test) own that loudness. */
 export function summonWindow({ title, shellCommand, activate, scriptDir }, io = {}) {
   const exec = io.execFileSync ?? realExecFileSync;
   const kind = io.kind ?? platformKind();
-  let scriptFile;
-  if (kind === 'wsl' && scriptDir) {
-    // One path crosses the interop chain instead of a quoted command. The
-    // file is named per call: both lanes wake seconds apart, and a shared
-    // name could be overwritten before a slow Windows Terminal tab reads it
-    // (the second read's race, 10/12) — two windows waking one lane.
-    const safe = String(title ?? 'nightwatch').replace(/[^A-Za-z0-9_-]/g, '_');
-    scriptFile = join(scriptDir, `wake-summon-${safe}.sh`);
-    (io.writeFileSync ?? realWriteFileSync)(scriptFile, `#!/bin/sh\n${shellCommand}\n`, { mode: 0o755 });
-  }
+  const scriptFile = (kind === 'wsl' && scriptDir)
+    ? writeSummonScript({ title, shellCommand, scriptDir }, io)
+    : undefined;
   for (const { bin, args } of summonWindowArgv({ title, shellCommand, activate, scriptFile }, kind)) exec(bin, args);
 }
 

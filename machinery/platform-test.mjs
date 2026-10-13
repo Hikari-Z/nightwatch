@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
-  platformKind, summonWindowArgv, summonWindow, daemonJob, registryDir,
+  platformKind, summonWindowArgv, summonWindow, writeSummonScript, daemonJob, registryDir,
   bannerArgv, notifyBanner, closeTtyArgv,
 } from './platform.mjs';
 
@@ -41,7 +41,7 @@ check('a wsl summon with a scriptFile carries one path, quoting moot', () =>
 check('summonWindow on wsl writes the script before summoning', () => {
   const writes = [], execs = [];
   summonWindow({ title: 'm', shellCommand: 'echo hi', scriptDir: '/h' }, {
-    kind: 'wsl',
+    kind: 'wsl', mkdirSync: () => {},
     writeFileSync: (p, c, o) => writes.push([p, c, o.mode]),
     execFileSync: (bin, args) => execs.push(args.at(-1)),
   });
@@ -51,9 +51,26 @@ check('summonWindow on wsl writes the script before summoning', () => {
 check('the summon script is named per lane, so near-simultaneous wakes cannot share one', () => {
   const writes = [];
   summonWindow({ title: 'op us!', shellCommand: 'x', scriptDir: '/h' }, {
-    kind: 'wsl', writeFileSync: (p) => writes.push(p), execFileSync: () => {},
+    kind: 'wsl', mkdirSync: () => {}, writeFileSync: (p) => writes.push(p), execFileSync: () => {},
   });
   assert.deepEqual(writes, ['/h/wake-summon-op_us_.sh']);
+});
+check('writeSummonScript makes the summons dir itself (a fresh hub has none) and returns the path', () => {
+  const dirs = [], writes = [];
+  const p = writeSummonScript({ title: 'lark', shellCommand: 'x', scriptDir: '/hub/wakecycle/summons' }, {
+    mkdirSync: (d, o) => dirs.push([d, o.recursive]), writeFileSync: (f) => writes.push(f),
+  });
+  assert.deepEqual(dirs, [['/hub/wakecycle/summons', true]]);
+  assert.equal(p, '/hub/wakecycle/summons/wake-summon-lark.sh');
+  assert.deepEqual(writes, [p]);
+});
+check('summonWindow off wsl never writes a script, scriptDir or not', () => {
+  const writes = [];
+  summonWindow({ title: 'm', shellCommand: 'echo hi', scriptDir: '/h' }, {
+    kind: 'darwin', mkdirSync: () => { throw new Error('no mkdir on darwin'); },
+    writeFileSync: (p) => writes.push(p), execFileSync: () => {},
+  });
+  assert.deepEqual(writes, []);
 });
 check('wsl summon carries the RAW command, unescaped', () =>
   assert.equal(summonWindowArgv({ title: 'm', shellCommand: RAW }, 'wsl')[0].args.at(-1), RAW));

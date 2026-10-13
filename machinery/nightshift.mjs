@@ -414,7 +414,9 @@ const io = {
     try { return JSON.parse(readFileSync(join(WAKECYCLE, `next-wake.${lane}.json`), 'utf8')).sessionId ?? null; } catch { return null; }
   },
   launchWake: (lane) => {
-    summonWindow({ title: lane, shellCommand:
+    // scriptDir: on WSL the summons travels as one file path (per-lane name,
+    // platform.mjs); on darwin/linux it's unused. Hub-owned, beside receipts.
+    summonWindow({ title: lane, scriptDir: join(WAKECYCLE, 'summons'), shellCommand:
       `${CFG_FILE ? `WEFT_CONFIG="${CFG_FILE}" ` : ''}sh "${join(MACHINERY_DIR, 'wake.sh')}" ${lane}` });
   },
   log,
@@ -456,7 +458,9 @@ function tickWith(io) {
   if (io.real && existsSync(trigger)) {
     try { execFileSync('rm', [trigger]); } catch {}
     try {
-      summonWindow({ title: 'nightwatch test', shellCommand: 'echo nightwatch launch-leg test: TCC grant OK' });
+      // The test takes the real wake's path, scriptDir included, so on WSL it
+      // proves the file-based summons and not just the window.
+      summonWindow({ title: 'nightwatch test', scriptDir: join(WAKECYCLE, 'summons'), shellCommand: 'echo nightwatch launch-leg test: TCC grant OK' });
       log('launch-leg test: Terminal launch SUCCEEDED — the 08:00 wake can open windows');
     } catch (e) {
       log(`launch-leg test FAILED: ${e.message} — the 08:00 wake would fail the same way; grant Automation (System Settings > Privacy > Automation) and re-touch the trigger`);
