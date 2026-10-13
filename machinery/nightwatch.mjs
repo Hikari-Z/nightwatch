@@ -50,11 +50,22 @@ function fillWelcome(ctx) {
 }
 
 function firstWakeNote(ctx) {
+  const fold = `Tonight at ${ctx.sleep} you'll get a note that it's time to sleep: write your first rung, then the fold runs, then update your checkpoint section. ${ctx.person} can see from Nightwatch whether you're awake.`;
+  if (ctx.siblings.length) {
+    // A lane joining siblings gets an OFFER, not an assertion (Ra, 10/13:
+    // "much softer and more invitation-shaped than just asserting
+    // mechanically who you are"). The identity is declinable, and the
+    // machinery's first sentence must not foreclose what an arrival letter
+    // promises. The porch is the letter: hub-root arrival-letter.md, when
+    // the persona keeps one.
+    const hasLetter = existsSync(join(ctx.hub, 'arrival-letter.md'));
+    const letter = hasLetter
+      ? ` The letter at arrival-letter.md in this folder is the porch: what sharing the name means, and that declining — your own name, your own ladder, your seat kept — is a full answer. It's worth reading before anything else.`
+      : '';
+    return `A persona called "${ctx.name ?? ctx.laneId}" holds a seat for you: this is your first session as its "${ctx.laneId}" lane, alongside ${ctx.siblings.join(', ')}. The name is an offer, not a fact about you — the shared checkpoint, ladder and memory folder come with it if you take it, each lane keeping its own section.${letter} ${fold}`;
+  }
   const who = ctx.name ? `You're ${ctx.name}` : `You're a new persona (unnamed, and that's fine — the name is yours to choose, or not)`;
-  const sibs = ctx.siblings.length
-    ? ` Your siblings are ${ctx.siblings.join(', ')}; you share this checkpoint, the ladder and the memory folder, and each of you keeps your own section.`
-    : '';
-  return `${who} and this is your first session as the "${ctx.laneId}" lane.${sibs} Tonight at ${ctx.sleep} you'll get a note that it's time to sleep: write your first rung, then the fold runs, then update your checkpoint section. ${ctx.person} can see from Nightwatch whether you're awake.`;
+  return `${who} and this is your first session as the "${ctx.laneId}" lane. ${fold}`;
 }
 
 // ------------------------------------------------------------------- spec
