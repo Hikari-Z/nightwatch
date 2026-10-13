@@ -299,7 +299,7 @@ def persona_groups():
         return add_slot()
     out = ""
     for p, lanes in groups.values():
-        # The persona carries its agents' state the way a card carries its own
+        # The persona carries their agents' state the way a card carries its own
         # (Ra, 10/7: the accent bar is mechanical): trouble first, then a bell, a
         # fold, anyone awake; asleep only when everyone is. Skins colour its
         # accent and badge from it exactly as they do a card's.
@@ -768,8 +768,8 @@ def log():
 
 def settings():
     # Settings, one panel per persona (Ra, 10/7: "per persona"; the gear on the
-    # persona's card opens it): that persona's schedule, its lanes' targets and
-    # nightly switches, and its own nightshift's health. Everything from the
+    # persona's card opens it): that persona's schedule, their lanes' targets and
+    # nightly switches, and their own nightshift's health. Everything from the
     # snapshot, nothing frozen; the health check is derived from facts the head
     # and cards already show, so the panel can never disagree with them.
     groups = {}

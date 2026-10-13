@@ -16,7 +16,7 @@ const check = (name, pass, detail) => {
 };
 const J = JSON.stringify;
 
-// A small snapshot for one hub: one persona, its lanes, a night, a log.
+// A small snapshot for one hub: one persona, their lanes, a night, a log.
 function snap({ persona, lanes, phase = 'day', activity = [1, 2, 3], alarms = [], log }) {
   const P = { id: persona.toLowerCase(), name: persona };
   return {
@@ -36,12 +36,12 @@ check('registry: junk, a missing file, relative paths read as nothing', J([readR
 check("config file: Set up's name first, else our legacy hub's",
   J([configFileFor('/h/', (p) => p === '/h/nightwatch.config.json'), configFileFor('/h', () => false)]) === J(['/h/nightwatch.config.json', '/h/weft.config.json']), '');
 
-// ---- one hub: nothing changes but the persona learning its hub (a single-persona install, every fixture)
+// ---- one hub: nothing changes but the persona learning their hub (a single-persona install, every fixture)
 {
   const one = snap({ persona: 'Weft', lanes: ['fable', 'opus'] });
   const m = mergeSnapshots([{ root: '/hub/weft', snap: one }]);
   check('one hub: lane ids, NIGHT and LOG unchanged', J([m.LANES.map((L) => L.id), Object.keys(m.NIGHT), m.LOG]) === J([['fable', 'opus'], ['fable', 'opus'], one.LOG]), J(m.LANES.map((L) => L.id)));
-  check('one hub: the persona (and its lanes) carry the hub', m.PERSONAS[0].hub === '/hub/weft' && m.LANES.every((L) => L.persona.hub === '/hub/weft'), J(m.PERSONAS));
+  check('one hub: the persona (and their lanes) carry the hub', m.PERSONAS[0].hub === '/hub/weft' && m.LANES.every((L) => L.persona.hub === '/hub/weft'), J(m.PERSONAS));
   check('one hub: no names or labels added', m.LANES.every((L) => L.name === undefined && L.label === undefined), '');
 }
 

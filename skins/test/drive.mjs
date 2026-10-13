@@ -293,7 +293,7 @@ await ev(`(()=>{const i=document.querySelector('[name="layout"][value="row"]'); 
 await check('Horizontal: the persona name turns sideways but its label (and tip) stay upright', `(n=>[getComputedStyle(n).writingMode, getComputedStyle(n).rotate, getComputedStyle(n.querySelector('[data-part="label"]')).writingMode])(document.querySelector('.nw-app > .nw-lanes .nw-persona [data-part="persona-name"]'))`, ['horizontal-tb', 'none', 'vertical-rl']);
 await ev('localStorage.clear()');
 
-// ---- 10/7: the persona card's caret folds its own body; the eye hides its agents; both stick
+// ---- 10/7: the persona card's caret folds its own body; the eye hides the persona's agents; both stick
 await go(BASE + '?skin=minimal'); await ev('localStorage.clear()'); await go(BASE + '?skin=minimal'); await sleep(400);
 await ackLive();
 const P = `document.querySelector('.nw-app > .nw-lanes .nw-persona')`;

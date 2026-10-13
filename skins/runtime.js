@@ -274,7 +274,7 @@
     if (a && own && a.dataset.layout === 'column') a.dataset.layout = 'row';
     else if (a && !own && skinChanged && state.view?.layout === 'column') a.dataset.layout = 'column';
     showItem($('.nw-head [data-view="layout"][data-value="column"]'), !own);
-    // Where a skin puts the persona's name beside its row (10/7): a gutter
+    // Where a skin puts the persona's name beside their row (10/7): a gutter
     // inside the app's edge (the solid skins), a tab hanging off it (Glass),
     // or the skin's own arrangement (Moonlamp, Brassworks).
     if (a) a.dataset.personaLabel = own ? 'own' : (cs.getPropertyValue('--nw-persona-label').trim() || 'gutter');
@@ -320,8 +320,8 @@
   }
   // Only a red card holds its lane open; an amber one waits to be looked at (Ra, 10/12).
   const hasLiveAlarm = (lane) => !!$('.nw-alert[data-acked="false"]:not([data-level="warn"])', lane);
-  // A persona folds like a lane (10/7): its name and a one-line summary stay,
-  // its cards and Add agent tuck away. Remembered per persona; a persona with
+  // A persona folds like a lane (10/7): their name and a one-line summary stay,
+  // their cards and Add agent tuck away. Remembered per persona; a persona with
   // an un-acked alarm on any card never stays folded.
   function setPersonaOpen(g, open, persist = true) {
     g.dataset.open = String(open);
@@ -766,7 +766,7 @@
   const setStep = (dlg, step) => { dlg.dataset.step = step; showError(dlg, ''); };
 
   async function preview(el, spec, btn) {
-    // A lane-add runs in the persona it was opened from (its hub); Set up makes a new hub, named in the spec.
+    // A lane-add runs in the persona it was opened from (their hub); Set up makes a new hub, named in the spec.
     const plan = parse(await whileBusy(btn, () => host().act('plan', { data: spec, hub: el.closest('.nw-persona')?.dataset.hub ?? null })));
     const steps = Array.isArray(plan) ? plan : plan.steps;
     if (!Array.isArray(steps) || !steps.length) throw new Error('The dry run came back empty, so there is nothing to preview.');

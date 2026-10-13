@@ -363,7 +363,7 @@ export function assemble(cfg, io, range = '8h') {
     return [d.toISOString(), `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`];
   };
 
-  // The persona this config describes: its configured name, else its folder's
+  // The persona this config describes: their configured name, else their folder's
   // name (never a hardcoded "Weft"; another house's persona is someone else).
   const folder = String(cfg.weftRoot ?? '').replace(/\/+$/, '').split('/').pop() || 'persona';
   const personaName = cfg.persona?.name ?? folder.charAt(0).toUpperCase() + folder.slice(1);

@@ -672,7 +672,7 @@ mod hub_tests {
 // own CLI (Fable's machinery/nightwatch.mjs) dry-runs it (plan) and builds it
 // (apply), so the preview the person confirms is exactly what gets done. The
 // app only passes things through: the CLI validates and owns every write.
-// A lane-add runs in the persona it was opened from (its hub's config); Set
+// A lane-add runs in the persona it was opened from (their hub's config); Set
 // up makes a new hub, named in the spec, with the app's own machinery.
 const CREATION: &[&str] = &["plan", "apply", "inspect-import", "list-unclaimed"];
 const NIGHTWATCH_CLI: &str = "nightwatch.mjs";
