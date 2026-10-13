@@ -407,3 +407,38 @@ body { color: var(--nw-ink); font-size: 12px; }
 :is([data-part="fix"], .nw-alert [data-part="ack"], [data-part="buttons"] button, [data-part="session-row"] button, .nw-controls [data-part="transport"] button[data-part="primary"], .nw-timeline [data-part="range"] button) {
   background: radial-gradient(70% 55% at 30% 20%, rgb(255 255 255 / .35), transparent 65%),
     linear-gradient(180deg, color-mix(in srgb, var(--g) 55%, #fff) 0%, color-mix(in srgb, var(--g) 85%, #fff) 38%, color-mix(in srgb, var(--g) 70%, #000) 40%, var(--g) 72%, color-mix(in srgb, var(--g) 75%, #fff) 100%) !important; }
+
+/* ================= Brassworks v4, round 5 (Ra, 10/12; the head bar is the benchmark). Every key sits in a ring of
+   its own panel's metal, so it reads embossed and tactile there as it does in the brass head; silver crystals
+   replace the brown topaz; wide keys are smooth polished bars; the plates move to a rose copper that sits in
+   harmony with the brass; the timeline is one dark amethyst display, its marks glowing lavender. ========= */
+:root {
+  --mt-sheen: linear-gradient(180deg, #c99d81 0%, #b1856a 24%, #9e7259 50%, #8b614b 78%, #9f735b 100%);
+  --bw-ring: #a77b61; --bw-ring-lo: #6a4636; --bw-topaz: var(--bw-silver);
+}
+.nw-head { --bw-ring: var(--bw-brass); --bw-ring-lo: var(--bw-brass-lo); }
+.nw-alert { --bw-ring: #5a504c; --bw-ring-lo: #241e1c; }
+*, ::before, ::after {
+  --mt-gel-shadow: 0 0 0 1.5px var(--bw-ring), 0 0 0 2.5px var(--bw-ring-lo), inset 0 0 5px rgb(0 0 0 / .3), 0 2px 3px rgb(0 0 0 / .45);
+}
+:is(.nw-lane [data-part="actions"] button, .nw-persona [data-part="persona-buttons"] button, .nw-controls [data-part="transport"] button) { color: #2a2620; }
+/* wide keys: a smooth polished bar in the key's metal, one soft highlight, no facets */
+:is([data-part="fix"], .nw-alert [data-part="ack"], [data-part="buttons"] button, [data-part="session-row"] button, .nw-controls [data-part="transport"] button[data-part="primary"], .nw-timeline [data-part="range"] button) {
+  background: radial-gradient(80% 60% at 50% 0%, rgb(255 255 255 / .38), transparent 70%),
+    linear-gradient(180deg, color-mix(in srgb, var(--g) 72%, #fff) 0%, var(--g) 55%, color-mix(in srgb, var(--g) 72%, #000) 100%) !important;
+  box-shadow: var(--mt-gel-shadow) !important; }
+/* the timeline: one dark amethyst display in a brass bezel; the graph is part of it */
+.nw-timeline { background: var(--bw-rivet) 10px 1px / 40px 8px repeat-x, var(--bw-display) !important;
+  box-shadow: inset 0 1px 6px rgb(0 0 0 / .7), inset 0 0 0 1px var(--bw-brass-lo), inset 0 0 0 2px rgb(255 228 200 / .08), 0 0 14px rgb(160 130 230 / .22) !important; }
+.nw-timeline :is([data-part="heading"], [data-part="heading"] span, [data-part="axis"]), .nw-strip::before, .nw-timeline [data-part="empty"] { color: #b9a9dc; text-shadow: 0 0 5px rgb(176 146 236 / .35); }
+.nw-timeline [data-part="activity"] { box-shadow: inset 0 0 0 1px rgb(176 146 236 / .18) !important; background: rgb(20 14 30 / .55) !important; }
+.nw-strip::after { height: 2px; top: 11.5px; border-radius: 1px; background: linear-gradient(90deg, rgb(176 146 236 / .15), rgb(176 146 236 / .5), rgb(176 146 236 / .15)); box-shadow: 0 0 4px rgb(160 130 230 / .45); }
+.nw-app[data-layout="column"] .nw-strip::after { width: 2px; background: linear-gradient(180deg, rgb(176 146 236 / .15), rgb(176 146 236 / .5), rgb(176 146 236 / .15)); }
+.nw-node { background: radial-gradient(circle at 50% 40%, #3a2d50, #1d1528) !important; color: var(--bw-lavender);
+  box-shadow: 0 0 0 1px rgb(176 146 236 / .5), 0 0 7px rgb(160 130 230 / .4) !important; }
+.nw-node .nw-icon { filter: drop-shadow(0 0 2px rgb(196 170 250 / .9)); }
+.nw-node[data-status="failed"] { color: #ff9a8a; box-shadow: 0 0 0 1px rgb(255 120 100 / .6), 0 0 8px rgb(255 90 70 / .45) !important; }
+.nw-node[data-status="warn"] { color: #ffc27a; box-shadow: 0 0 0 1px rgb(255 180 90 / .6), 0 0 8px rgb(255 160 60 / .45) !important; }
+.nw-node [data-part="count"] { background: #2a2038; color: #ff9a8a; box-shadow: 0 0 0 1px rgb(255 120 100 / .5); }
+.nw-timeline :is([data-part="activity"], [data-part="sleep-bands"]) [data-part="sleep"] { color: #9c8cc0; }
+.nw-timeline [data-part="activity"]::before { color: #b9a9dc; text-shadow: 0 0 5px rgb(176 146 236 / .35); }
