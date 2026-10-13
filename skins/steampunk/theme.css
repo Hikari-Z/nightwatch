@@ -489,3 +489,26 @@ body { color: var(--nw-ink); font-size: 12px; }
     repeating-linear-gradient(180deg, rgb(0 0 0 / .24) 0 1px, transparent 1px 3px),
     radial-gradient(ellipse at 50% 50%, transparent 66%, rgb(6 2 12 / .45) 100%); }
 .nw-strip[data-mode="compressed"]::before { color: #9c8cc0; text-shadow: 0 0 5px rgb(176 146 236 / .35); }
+
+/* ================= round 7 (Ra, 10/12): the alert is a second screen of the same set as the timeline: dark glass
+   in a brass bezel, scanlines, its message in red phosphor (amber for the warn tier), its keys drawn on the glass. === */
+.nw-alert { --ph: 255 120 100; position: relative; overflow: hidden; padding: 15px 17px !important;
+  background: radial-gradient(90% 120% at 0% 50%, rgb(var(--ph) / .1), transparent 60%), var(--bw-display) !important; box-shadow: var(--mt-bevel) !important; }
+.nw-alert[data-level="warn"] { --ph: 255 176 90;
+  background: radial-gradient(90% 120% at 0% 50%, rgb(var(--ph) / .1), transparent 60%), var(--bw-display) !important; box-shadow: var(--mt-bevel) !important; }
+.nw-alert::after { content: ""; position: absolute; inset: 6px; z-index: 6; pointer-events: none; border-radius: 14px;
+  background: radial-gradient(120% 70% at 30% 0%, rgb(255 255 255 / .06), transparent 55%),
+    repeating-linear-gradient(180deg, rgb(0 0 0 / .24) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 50% 50%, transparent 66%, rgb(6 2 12 / .45) 100%);
+  box-shadow: inset 0 0 20px rgb(0 0 0 / .6), 0 0 0 1px #1a1206, 0 0 0 2.5px var(--bw-brass-lo), 0 0 0 4px var(--bw-brass-hi), 0 0 0 60px var(--bw-bezel); }
+.nw-alert :is([data-part="title"], > .nw-icon), .nw-alert[data-level="warn"] :is([data-part="title"], > .nw-icon) { color: rgb(var(--ph)); text-shadow: 0 0 6px rgb(var(--ph) / .55); }
+.nw-alert > .nw-icon, .nw-alert[data-level="warn"] > .nw-icon { filter: drop-shadow(0 0 4px rgb(var(--ph) / .7)); }
+.nw-alert [data-part="cause"], .nw-alert[data-level="warn"] [data-part="cause"] { color: #d9cdee; text-shadow: 0 0 4px rgb(176 146 236 / .25); }
+.nw-alert [data-part="time"] { color: #a493c8; }
+/* keys on the glass: outlined in the alert's phosphor; the first fix lit */
+.nw-app .nw-alert :is([data-part="fix"], [data-part="ack"]):not(#nw-x) { background: transparent !important; color: rgb(var(--ph)); border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgb(var(--ph) / .55) !important; text-shadow: 0 0 5px rgb(var(--ph) / .5); filter: none; }
+.nw-app .nw-alert [data-part="fix"]:first-child:not(#nw-x) { background: rgb(var(--ph) / .88) !important; color: #1d1112; text-shadow: none;
+  box-shadow: 0 0 9px rgb(var(--ph) / .55) !important; }
+.nw-app .nw-alert :is([data-part="fix"], [data-part="ack"]):hover:not(#nw-x) { background: rgb(var(--ph) / .18) !important; }
+.nw-app[data-layout="column"] .nw-timeline [data-part="axis"]::before { color: #b9a9dc; text-shadow: 0 0 5px rgb(176 146 236 / .45); }
