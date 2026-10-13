@@ -837,7 +837,7 @@ def settings_panel(p, lanes_of):
 
 # The skin selector is part of the view menu (contract v0.8): one radio per
 # installed skin, titled from its manifest. The runtime swaps the stylesheet.
-SKIN_ORDER = ["minimal", "glass", "amber", "metal", "wacky", "steampunk"]
+SKIN_ORDER = ["minimal", "glass", "amber", "metal", "wacky", "steampunk", "concrete"]
 
 def skins_installed():
     found = []

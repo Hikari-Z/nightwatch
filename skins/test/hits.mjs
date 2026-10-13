@@ -77,7 +77,7 @@ const t2 = await ev(`(r=>[Math.round(r.x+r.width/2),Math.round(r.y+r.height/2)])
 await drag(t2, [t2[0] + 3000, t2[1] + 3000]);
 await check('dragged off the edge, the head stays on screen', `(r=>r.x<=innerWidth-120&&r.y<=innerHeight-40)(document.querySelector('.nw-app').getBoundingClientRect())`, true);
 await ev('localStorage.clear()');
-for (const skin of ['minimal', 'glass', 'amber', 'metal', 'wacky', 'steampunk']) {
+for (const skin of ['minimal', 'glass', 'amber', 'metal', 'wacky', 'steampunk', 'concrete']) {
   await go(BASE + '?skin=' + skin); await sleep(600);
   for (const m of ['view', 'look', 'app']) {
     await ev(`document.querySelector('[data-action="${m}-menu"]').click()`); await sleep(250);

@@ -1,0 +1,939 @@
+/* Nightwatch skin: Concrete (contract v0.7). Amber's midday inverse (Ra's concept, 10/12): bright white and orange,
+   bold sans type, rotated text, hazard stripes, an intense but contained non-minimalism. Poured-concrete white with
+   a faint aggregate speckle; ink-black 2px rules; SAFETY ORANGE as the one accent, laid down as solid ink rather
+   than light (awake IS the orange, as awake is the amber in Amber). Each main panel carries a black index tab with
+   its name turned up the left edge, and crop marks at its corners. Trouble wears hazard stripes so it never borrows
+   the accent: red-and-black for failures, yellow-and-black for the warn tier. Built on minimal's layout. */
+
+:root {
+  --nw-font: "Helvetica Neue", "Arial", system-ui, sans-serif;
+  --nw-cond: "DIN Condensed", "Helvetica Neue", "Arial Narrow", sans-serif;
+  --nw-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --cc-orange: #ff5a00; --cc-orange-deep: #d94800; --cc-yellow: #ffc400; --cc-red: #e3170a;
+  --nw-seam: #121212;
+  --nw-surface: #f3f1ec;
+  --nw-sunk: #e6e3dc;
+  --nw-ink: #121212;
+  --nw-ink-2: #5d5a53;
+  --nw-hover: rgb(255 90 0 / .1);
+  --nw-awake: var(--cc-orange); --nw-belled: #c98a00; --nw-folding: #2b2b2b; --nw-sleeping: #a9a49a;
+  --nw-orphaned: #b0185c; --nw-failed: var(--cc-red); --nw-ok: #6e6a62; --nw-manual: #121212; --nw-warn: #c98a00;
+  --nw-tip-bg: #121212; --nw-tip-ink: #f3f1ec;
+  /* poured concrete: a speckle of aggregate over warm white */
+  --cc-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .25  0 0 0 0 .24  0 0 0 0 .22  0 0 0 2.4 -1.45'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  --cc-slab: var(--cc-grain), #f3f1ec;
+  --cc-rule: inset 0 0 0 1px var(--nw-ink);
+  /* crop marks, one L per corner */
+  --cc-crop: linear-gradient(var(--nw-ink) 0 0) left 4px top 4px / 9px 1.5px no-repeat, linear-gradient(var(--nw-ink) 0 0) left 4px top 4px / 1.5px 9px no-repeat,
+             linear-gradient(var(--nw-ink) 0 0) right 4px top 4px / 9px 1.5px no-repeat, linear-gradient(var(--nw-ink) 0 0) right 4px top 4px / 1.5px 9px no-repeat,
+             linear-gradient(var(--nw-ink) 0 0) left 4px bottom 4px / 9px 1.5px no-repeat, linear-gradient(var(--nw-ink) 0 0) left 4px bottom 4px / 1.5px 9px no-repeat,
+             linear-gradient(var(--nw-ink) 0 0) right 4px bottom 4px / 9px 1.5px no-repeat, linear-gradient(var(--nw-ink) 0 0) right 4px bottom 4px / 1.5px 9px no-repeat;
+  --cc-hazard-red: repeating-linear-gradient(-45deg, var(--cc-red) 0 7px, #121212 7px 14px);
+  --cc-hazard-yel: repeating-linear-gradient(-45deg, var(--cc-yellow) 0 7px, #121212 7px 14px);
+  --cc-shadow: 3px 3px 0 var(--nw-ink);
+  --nw-lane-w: 236px;
+  --nw-rail-w: 48px;
+}
+
+/* ---- minimal's layout (generated: edit minimal/skin.css, then run build_skins.py) ---- */
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--nw-ink); font: 13px/1.4 var(--nw-font); }   /* no background: the window is transparent */
+code, time { font-family: var(--nw-mono); font-size: .92em; }
+h1, h2, h3, h4, p { margin: 0; }
+h1, h2, h3, h4 { font-weight: 600; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.nw-icon { width: 16px; height: 16px; flex: none; vertical-align: -3px; overflow: visible; }
+
+/* tips */
+[data-tip] { position: relative; }
+[data-tip]:hover::after, html[data-tips="1"] .nw-lane[data-lane="fable"] [data-part="throughput"]::after {
+  content: attr(data-tip); position: absolute; z-index: 20; left: 50%; bottom: calc(100% + 6px); translate: -50% 0;
+  width: max-content; max-width: 240px; padding: 5px 8px; border-radius: 6px;
+  background: var(--nw-tip-bg); color: var(--nw-tip-ink); font: 12px/1.35 var(--nw-font); pointer-events: none;
+}
+[data-tip][data-tip-pos="below"]:hover::after { bottom: auto; top: calc(100% + 6px); }
+/* A tip slides to stay inside its card (runtime sets data-tip-align and --tip-dx, 10/9). */
+[data-tip][data-tip-align="shift"]:hover::after { left: var(--tip-dx, 0px); right: auto; translate: 0 0; }
+
+/* ---------- the rack ---------- */
+/* Every module: a surface plus a 1px outline that lands in the 1px gap. */
+.nw-head, .nw-controls, .nw-timeline, .nw-log, .nw-lane > header, .nw-lane [data-part="body"] > *, .nw-alarm, .nw-confirm, .nw-settings, .nw-glyphs,
+.nw-add > [data-part="add"], .nw-add [data-part="add-form"] {
+  background: var(--nw-surface); outline: 1px solid var(--nw-seam);
+}
+.nw-app {
+  /* Five columns, shared with the lanes below (subgrid), so the panel row
+     lines up with the lane columns: controls over lane 1, the timeline over
+     lanes 2-3, the log over lane 4 and the add rail. */
+  --row: "controls controls controls controls controls";
+  display: grid; gap: 1px; width: max-content; align-items: start;
+  grid-template-columns: var(--nw-col1, var(--nw-lane-w, 236px)) repeat(3, var(--nw-lane-w, 236px)) var(--nw-rail-w, 44px);
+  grid-template-areas: "head head head head head" "alarms alarms alarms alarms alarms" var(--row) "lanes lanes lanes lanes lanes";
+  filter: drop-shadow(0 14px 30px rgb(0 0 0 / .28)) drop-shadow(0 2px 4px rgb(0 0 0 / .12));
+}
+.nw-app[data-show-controls="true"][data-show-timeline="true"][data-show-log="true"]  { --row: "controls timeline timeline log log"; }
+.nw-app[data-show-controls="true"][data-show-timeline="true"][data-show-log="false"] { --row: "controls timeline timeline timeline timeline"; }
+.nw-app[data-show-controls="true"][data-show-timeline="false"][data-show-log="true"] { --row: "controls log log log log"; }
+.nw-app[data-show-controls="false"][data-show-timeline="true"][data-show-log="true"] { --row: "timeline timeline timeline log log"; }
+.nw-app[data-show-controls="false"][data-show-timeline="true"][data-show-log="false"] { --row: "timeline timeline timeline timeline timeline"; }
+.nw-app[data-show-controls="false"][data-show-timeline="false"][data-show-log="true"] { --row: "log log log log log"; }
+/* All three panels hidden: NO panel row. An empty string is not a valid grid row, and it voided the
+   whole grid-template-areas (the app jumped right and the lanes piled over the head; found 10/6). */
+.nw-app:not([data-layout="stack"], [data-layout="column"])[data-show-controls="false"][data-show-timeline="false"][data-show-log="false"] { grid-template-areas: "head head head head head" "alarms alarms alarms alarms alarms" "lanes lanes lanes lanes lanes"; }
+.nw-head { grid-area: head; } .nw-app > .nw-alarms { grid-area: alarms; } .nw-lanes { grid-area: lanes; }
+.nw-controls { grid-area: controls; } .nw-timeline { grid-area: timeline; } .nw-log { grid-area: log; }
+.nw-app[data-show-controls="false"] .nw-controls, .nw-app[data-show-timeline="false"] .nw-timeline, .nw-app[data-show-log="false"] .nw-log { display: none; }
+.nw-app[data-layout="stack"], html[data-surface="popover"] .nw-app { grid-template-columns: var(--nw-stack-w, 380px); grid-template-areas: "head" "alarms" "controls" "timeline" "log" "lanes"; }
+.nw-gallery { display: none; }
+.nw-alarms:empty { display: none; }
+
+/* ---------- head: the drag handle and the menu ---------- */
+.nw-head { position: relative; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 6px 0 12px; cursor: grab; user-select: none; }
+.nw-head [data-part="title"] { font-size: 13px; letter-spacing: -.01em; }
+.nw-head [data-part="schedule"] { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--nw-ink-2); }
+.nw-head [data-part="schedule"] time { margin-right: 6px; }
+.nw-head [data-part="clock"] { color: var(--nw-ink-2); margin-right: 4px; }
+.nw-head > button { display: grid; place-items: center; width: 28px; height: 26px; border: 0; border-radius: 6px; background: none; color: var(--nw-ink-2); }
+.nw-head > button:hover, .nw-head > button[aria-expanded="true"] { background: var(--nw-hover); color: var(--nw-ink); }
+.nw-app[data-layout="stack"] .nw-head [data-part="schedule"], html[data-surface="popover"] .nw-head [data-part="schedule"] { display: none; }
+.nw-app[data-layout="stack"] .nw-head [data-part="clock"], html[data-surface="popover"] .nw-head [data-part="clock"] { margin-left: auto; }
+
+.nw-head [data-part="view-menu"] { display: none; position: absolute; z-index: 30; right: 34px; top: calc(100% + 4px); margin: 0; padding: 4px; list-style: none;
+  min-width: 230px; background: var(--nw-surface); border: 1px solid var(--nw-seam); border-radius: 8px; box-shadow: 0 10px 30px rgb(0 0 0 / .18); cursor: default; }
+.nw-head [data-part="view-menu"][data-open="true"] { display: block; }
+.nw-head [data-part="view-menu"] li[role="separator"] { height: 1px; margin: 4px 6px; background: var(--nw-seam); }
+.nw-head [data-part="view-menu"] label, .nw-head [data-part="view-menu"] button {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 8px; border: 0; border-radius: 5px; background: none; text-align: left; font-size: 12.5px; }
+.nw-head [data-part="view-menu"] label:hover, .nw-head [data-part="view-menu"] button:hover { background: var(--nw-hover); }
+.nw-head [data-part="view-menu"] input { margin: 0; accent-color: var(--nw-awake); }
+.nw-head [data-part="view-menu"] [role="menuitemradio"] { padding-left: 32px; color: var(--nw-ink-2); }
+.nw-head [data-part="view-menu"] [role="menuitemradio"][data-view="layout"] { padding-left: 8px; }
+.nw-head [data-part="view-menu"] [role="menuitemradio"] input { width: 13px; height: 13px; }
+.nw-head [data-part="view-menu"] label:has(input:checked) { color: var(--nw-ink); }
+.nw-head [data-part="view-menu"] .nw-icon { color: var(--nw-ink-2); }
+/* v0.8: the skin group's heading, a label, not an item */
+.nw-head [data-part="view-menu"] :is([data-part="skin-heading"], [data-part="theme-heading"]) { display: flex; align-items: center; gap: 8px; padding: 5px 8px 2px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--nw-ink-2); }
+
+.nw-glyph { --g: 14px; width: var(--g); height: var(--g); display: inline-block; border-radius: 50%; position: relative; flex: none; background: #f2b630; }
+.nw-glyph[data-phase="night"] { background: var(--nw-ink); -webkit-mask: radial-gradient(circle at 70% 35%, transparent 42%, #000 43%); mask: radial-gradient(circle at 70% 35%, transparent 42%, #000 43%); }
+.nw-glyph[data-phase="belled"] { background: var(--nw-belled); }
+.nw-glyph[data-phase="alarm"]::before { content: ""; position: absolute; right: -2px; top: -2px; width: 7px; height: 7px; border-radius: 50%; background: var(--nw-failed); box-shadow: 0 0 0 2px var(--nw-surface); }
+.nw-glyph[data-phase="down"] { background: transparent; box-shadow: inset 0 0 0 2px var(--nw-ink-2); }
+
+/* ---------- lanes: columns (row) or rows (stack) ---------- */
+.nw-lanes { display: grid; gap: inherit; align-items: start; grid-template-columns: subgrid; }
+.nw-app:is([data-layout="stack"], [data-layout="column"]) .nw-lanes, html[data-surface="popover"] .nw-lanes { grid-template-columns: var(--nw-stack-w, 380px); }
+
+.nw-lane { --state: var(--nw-awake); display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.nw-lane[data-state="belled"]   { --state: var(--nw-belled); }
+.nw-lane[data-state="folding"]  { --state: var(--nw-folding); }
+.nw-lane[data-state="sleeping"] { --state: var(--nw-sleeping); }
+.nw-lane[data-state="orphaned"] { --state: var(--nw-orphaned); }
+.nw-lane[data-state="failed"]   { --state: var(--nw-failed); }
+.nw-lane[data-state="down"]     { --state: var(--nw-ink-2); }
+.nw-lane [data-part="body"] { display: flex; flex-direction: column; gap: 1px; }
+.nw-lane[data-open="false"] [data-part="body"] { display: none; }
+
+/* header: the toggle. Name row on top; when closed, a glance row under it. */
+.nw-lane > header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "av id state tog" "glance glance glance glance";
+  align-items: center; column-gap: 8px; padding: 9px 6px 9px 12px; cursor: pointer;
+  box-shadow: inset 0 3px 0 var(--state); background: color-mix(in srgb, var(--state) 6%, var(--nw-surface)) !important; }
+.nw-lane > header:hover { background: color-mix(in srgb, var(--state) 10%, var(--nw-surface)) !important; }
+/* Both entries are (0,2,0): an :is() takes its most specific entry's weight, and a heavier persona entry here
+   out-ranked every theme's avatar rule, cards included (caught 10/7 by measuring). */
+:is(.nw-lane [data-part="avatar"], .nw-persona [data-part="persona-avatar"]) { grid-area: av; width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; font-weight: 700; font-size: 12px; color: #fff; background: var(--state); }
+.nw-lane [data-part="ident"] { grid-area: id; display: grid; min-width: 0; line-height: 1.2; }
+.nw-lane [data-part="name"] { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nw-lane [data-part="model"] { color: var(--nw-ink-2); font-size: 12px; white-space: nowrap; }
+.nw-lane [data-part="state"] { grid-area: state; display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--state); white-space: nowrap; }
+.nw-lane [data-part="state"] i { width: 8px; height: 8px; border-radius: 50%; background: var(--state); }
+.nw-lane[data-state="awake"] [data-part="state"] i { box-shadow: 0 0 0 3px color-mix(in srgb, var(--state) 25%, transparent); }
+.nw-lane[data-state="waking"] [data-part="state"] i { background: transparent; box-shadow: inset 0 0 0 2px var(--state); }
+.nw-lane[data-state="awake"]:not([data-stage]) [data-part="state"] span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.nw-lane [data-part="toggle"] { grid-area: tog; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--nw-ink-2); }
+.nw-lane[data-open="true"] [data-part="toggle"] .nw-icon { rotate: 180deg; }
+
+.nw-lane [data-part="glance"] { grid-area: glance; display: none; align-items: center; gap: 6px; margin-top: 7px; color: var(--nw-ink-2); font-size: 12px; }
+.nw-lane[data-open="false"] [data-part="glance"] { display: flex; align-self: end; }
+.nw-app:not([data-layout="stack"], [data-layout="column"]) .nw-lane[data-open="false"] > header { min-height: var(--nw-closed-h, 100px); grid-template-rows: auto 1fr; }
+.nw-lane [data-part="mini"] { position: relative; flex: 1; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--nw-ink-2) 18%, transparent); overflow: hidden; }
+.nw-lane [data-part="mini"]::before { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(min(var(--fill), 1) * 100%); background: var(--state); }
+.nw-lane [data-part="mini"][data-level="high"]::before { background: var(--nw-warn); }
+.nw-lane [data-part="mini"][data-level="over"]::before { background: var(--nw-failed); }
+.nw-lane [data-part="glance"] .nw-icon { width: 13px; height: 13px; margin-left: 4px; }
+.nw-lane [data-part="glance"] time { color: var(--nw-ink); }
+
+/* body slots */
+/* The deck clocks, time up and time to the bell, centred as a pair (Ra, 10/7). */
+.nw-lane [data-part="facts"] { list-style: none; margin: 0; padding: 8px 12px; display: flex; flex-wrap: wrap; justify-content: center; gap: 3px 22px; color: var(--nw-ink-2); font-size: 12px; }
+.nw-lane [data-part="facts"] li { display: inline-flex; align-items: center; gap: 4px; }
+.nw-lane [data-part="next"], .nw-lane [data-part="midday"] { color: var(--nw-ink); }
+.nw-lane [data-part="meters"] { display: grid; gap: 7px; padding: 9px 12px 10px; }
+/* Both meters speak one language: icon, a 14px sunk track with a 2px inset
+   fill in the lane's colour, a mono readout in a fixed column. Context fills
+   left to right; throughput fills as columns. */
+.nw-lane :is([data-part="context"], [data-part="throughput"]) { --meter: var(--state); display: grid; grid-template-columns: 16px minmax(0, 1fr) 38px; align-items: center; gap: 7px; color: var(--nw-ink-2); }
+.nw-lane :is([data-part="context"] [data-part="bar"], [data-part="throughput"] svg:not(.nw-icon)) {
+  height: 14px; width: 100%; border-radius: 4px; background: var(--nw-sunk); box-shadow: inset 0 0 0 1px var(--nw-seam); }
+.nw-lane [data-part="context"] [data-part="bar"] { position: relative; overflow: hidden; }
+.nw-lane [data-part="context"] [data-part="bar"]::before { content: ""; position: absolute; inset: 2px auto 2px 2px; border-radius: 2px; width: calc(min(var(--fill), 1) * (100% - 4px)); background: var(--meter); }
+.nw-lane [data-part="context"][data-level="high"] { --meter: var(--nw-warn); color: var(--nw-warn); }
+/* v0.9: the bar fills against the model's window; the fold target is a tick (--target, 0..1) */
+.nw-lane [data-part="context"] [data-part="bar"]::after { content: ""; position: absolute; top: 1px; bottom: 1px; width: 2px; border-radius: 1px;
+  left: calc(2px + min(var(--target, 1), 1) * (100% - 4px) - 1px); background: var(--nw-ink); opacity: .55; }
+.nw-lane [data-part="mini"]::after { content: ""; position: absolute; top: 0; bottom: 0; width: 2px; left: calc(min(var(--target, 1), 1) * 100% - 1px); background: var(--nw-ink); opacity: .45; }
+.nw-lane [data-part="context"][data-level="over"] { --meter: var(--nw-failed); color: var(--nw-failed); }
+.nw-lane [data-part="throughput"] svg:not(.nw-icon) { padding: 2px; overflow: hidden; }
+.nw-lane [data-part="throughput"] polyline { display: none; }
+.nw-lane [data-part="throughput"] rect { fill: var(--meter); }
+.nw-lane :is([data-part="context"], [data-part="throughput"]) [data-part="value"] { font: 11px var(--nw-mono); text-align: right; white-space: nowrap; }
+
+/* alert slot */
+.nw-alert { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: start; align-content: start; padding: 10px 12px; background: color-mix(in srgb, var(--nw-failed) 9%, var(--nw-surface)) !important; box-shadow: inset 3px 0 0 var(--nw-failed); }
+.nw-alert > .nw-icon { color: var(--nw-failed); grid-row: span 2; margin-top: 1px; }
+/* The amber tier (Ra, 10/12): important, not urgent. The same card in the warn colour. */
+.nw-alert[data-level="warn"] { background: color-mix(in srgb, var(--nw-warn) 10%, var(--nw-surface)) !important; box-shadow: inset 3px 0 0 var(--nw-warn); }
+.nw-alert[data-level="warn"] > .nw-icon { color: var(--nw-warn); }
+.nw-alert [data-part="title"] { font-weight: 600; }
+.nw-alert [data-part="time"] { color: var(--nw-ink-2); grid-column: 3; grid-row: 1; }
+.nw-alert [data-part="cause"] { grid-column: 2 / 4; color: var(--nw-ink-2); font-size: 12px; overflow-wrap: anywhere; }
+.nw-alarm [data-part="fixes"] { grid-column: 1 / -1; }
+/* The fixes and "Got it" share one row, matched (Ra, 10/9: they sat offset and looked unrelated). With many fixes the
+   row wraps inside its two columns and "Got it" stays at the bottom right. */
+.nw-alert [data-part="fixes"] { grid-column: 1 / 3; }
+.nw-alert [data-part="fixes"], .nw-alarm [data-part="fixes"] { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+[data-part="fix"] { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--nw-seam); background: var(--nw-surface); font-size: 12px; white-space: nowrap; }
+[data-part="fix"]:first-child { background: var(--nw-failed-fill, var(--nw-failed)); border-color: var(--nw-failed-fill, var(--nw-failed)); color: #fff; font-weight: 600; }
+.nw-alert[data-level="warn"] [data-part="fix"]:first-child { background: color-mix(in srgb, var(--nw-warn) 78%, #000); border-color: color-mix(in srgb, var(--nw-warn) 78%, #000); } /* the amber tier's first fix is amber, not red (10/12) */
+.nw-alert [data-part="ack"] { grid-column: 3; align-self: end; justify-self: end; display: inline-flex; gap: 5px; align-items: center; margin-top: 6px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--nw-seam); background: var(--nw-surface); color: var(--nw-ink); font-size: 12px; white-space: nowrap; }
+/* "Got it" hides it on this screen (the runtime's promise; Ra, 10/7: it only dimmed, and looked stuck). The house
+   still knows: the log keeps the event, and a new episode shows again. */
+.nw-alert[data-acked="true"] { display: none; }
+
+/* actions slot */
+.nw-lane [data-part="actions"] { display: flex; gap: 2px; padding: 4px 6px; }
+.nw-lane [data-part="actions"] button { display: grid; place-items: center; width: 30px; height: 28px; border: 0; border-radius: 6px; background: none; color: var(--nw-ink-2); }
+.nw-lane [data-part="actions"] button:hover { background: var(--nw-hover); color: var(--nw-ink); }
+.nw-lane [data-part="actions"] button[aria-disabled="true"] { opacity: .3; cursor: default; }
+.nw-lane [data-part="actions"] button[data-danger="true"]:not([aria-disabled="true"]):hover { color: var(--nw-failed); }
+.nw-lane [data-part="actions"] button[data-action="lane-settings"] { margin-left: auto; }
+.nw-lane [data-part="actions"] button[aria-expanded="true"] { background: var(--nw-sunk); color: var(--nw-ink); box-shadow: inset 0 0 0 1px var(--nw-seam); }
+
+/* settings slot, unfolding under the actions */
+.nw-lane [data-part="settings"][data-open="false"] { display: none; }
+.nw-lane [data-part="settings"], .nw-add [data-part="add-form"] { display: grid; gap: 6px; padding: 10px 12px; background: var(--nw-sunk) !important; }
+.nw-lane [data-part="settings"] label, .nw-add label { display: flex; align-items: center; gap: 6px; color: var(--nw-ink-2); font-size: 12px; }
+.nw-lane [data-part="settings"] label > span, .nw-add label > span { width: 56px; flex: none; }
+.nw-lane [data-part="settings"] select, .nw-lane [data-part="settings"] input:not([type="checkbox"]), .nw-add select, .nw-add input:not([type="checkbox"]) {
+  flex: 1; min-width: 0; width: 100%; padding: 3px 6px; border: 1px solid var(--nw-seam); border-radius: 5px; background: var(--nw-surface); color: var(--nw-ink); font-size: 12px; }
+.nw-lane [data-part="settings"] input[type="number"] { flex: 0 0 64px; }
+.nw-lane [data-part="settings"] label i { font-style: normal; }
+.nw-lane [data-part="settings"] [data-part="armed"] > span, .nw-add [data-part="armed"] > span { width: auto; flex: 1; }
+[data-part="buttons"] { display: flex; justify-content: flex-end; gap: 6px; margin-top: 2px; }
+:is([data-part="buttons"], [data-part="session-row"]) button { display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; border-radius: 6px; border: 1px solid var(--nw-seam); background: var(--nw-surface); font-size: 12px; }
+[data-part="buttons"] button[data-primary="true"] { background: var(--nw-awake-fill, var(--nw-awake)); border-color: var(--nw-awake-fill, var(--nw-awake)); color: #fff; font-weight: 600; }
+[data-part="buttons"] button[data-danger="true"] { margin-right: auto; color: var(--nw-failed); }
+
+/* add slot: a rail that unfolds into a form */
+.nw-add { --state: var(--nw-ink-2); }
+.nw-add > [data-part="add"] { display: grid; place-items: center; align-content: center; gap: 6px; border: 0; color: var(--nw-ink-2); padding: 6px 10px; gap: 4px; height: var(--nw-closed-h, 100px); }
+.nw-add > [data-part="add"]:hover { background: var(--nw-hover) !important; color: var(--nw-ink); }
+.nw-add[data-open="false"] > [data-part="add"] span { writing-mode: vertical-rl; white-space: nowrap; font-size: 12px; letter-spacing: .02em; }
+.nw-add[data-open="false"] [data-part="add-form"] { display: none; }
+/* Closed, the add slot is always the narrow rail that sits after the last lane,
+   however many lanes there are (Ra, 10/6: a lane-wide button with sideways
+   text read as broken). Open, it takes a full lane's width for its form. */
+.nw-app:not([data-layout="stack"], [data-layout="column"]) .nw-lanes .nw-add[data-open="false"] { justify-self: start; width: var(--nw-rail-w, 44px); }
+.nw-add[data-open="true"] > [data-part="add"] { grid-auto-flow: column; justify-content: start; height: auto; padding: 10px 12px; font-weight: 600; color: var(--nw-ink); box-shadow: inset 0 3px 0 var(--nw-awake); }
+.nw-add[data-open="true"] [data-part="add-form"] { grid-template-columns: minmax(0, 1fr); }
+.nw-app:is([data-layout="stack"], [data-layout="column"]) .nw-add[data-open="false"] > [data-part="add"], html[data-surface="popover"] .nw-add[data-open="false"] > [data-part="add"] { grid-auto-flow: column; justify-content: center; height: auto; padding: 8px; }
+.nw-app:is([data-layout="stack"], [data-layout="column"]) .nw-add[data-open="false"] > [data-part="add"] span, html[data-surface="popover"] .nw-add[data-open="false"] > [data-part="add"] span { writing-mode: horizontal-tb; }
+
+/* ---------- app-level alarm row ---------- */
+.nw-alarm { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; padding: 10px 14px; background: color-mix(in srgb, var(--nw-failed) 9%, var(--nw-surface)) !important; box-shadow: inset 3px 0 0 var(--nw-failed); }
+.nw-alarm > .nw-icon { color: var(--nw-failed); grid-row: span 2; }
+.nw-alarm [data-part="title"] { font-weight: 600; }
+.nw-alarm [data-part="cause"] { color: var(--nw-ink-2); font-size: 12px; }
+
+/* ---------- confirm ---------- */
+.nw-confirm { padding: 14px; display: grid; gap: 10px; }
+.nw-confirm [data-part="title"] { font-weight: 600; display: flex; gap: 6px; align-items: center; }
+.nw-confirm [data-part="body"] { color: var(--nw-ink-2); }
+.nw-confirm button[data-danger="true"] { margin-right: 0; background: var(--nw-failed-fill, var(--nw-failed)); border-color: var(--nw-failed-fill, var(--nw-failed)); color: #fff; font-weight: 600; }
+
+/* ---------- the deck: controls for every lane ---------- */
+/* The core module (Ra, 10/5): head + deck + timeline + log. The timeline
+   sets the row's height; the deck stretches to it (its readout grows), and
+   the log contributes no height of its own and scrolls inside the row. */
+.nw-controls { display: grid; grid-template-rows: 1fr auto; gap: 8px; padding: 10px 12px; align-self: stretch; }
+.nw-controls [data-part="display"] { display: grid; gap: 2px; align-content: space-between; padding: 8px 10px; border-radius: 6px; background: var(--nw-sunk); box-shadow: inset 0 0 0 1px var(--nw-seam); }
+.nw-controls [data-part="summary"] { font-size: 13px; } .nw-controls [data-part="summary"] b { font: 600 15px var(--nw-mono); margin-right: 2px; }
+.nw-controls [data-part="next"] { font-size: 12px; color: var(--nw-ink-2); } .nw-controls [data-part="next"] time { color: var(--nw-ink); }
+.nw-controls [data-part="counts"] { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--nw-ink-2); }
+.nw-controls [data-part="counts"]:empty { display: none; }
+.nw-controls [data-part="counts"] li { --c: var(--nw-awake); display: inline-flex; align-items: center; gap: 4px; }
+.nw-controls [data-part="counts"] li::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.nw-controls [data-part="counts"] li[data-state="sleeping"] { --c: var(--nw-sleeping); } .nw-controls [data-part="counts"] li[data-state="failed"] { --c: var(--nw-failed); }
+.nw-controls [data-part="counts"] b { font: 600 11.5px var(--nw-mono); color: var(--nw-ink); }
+/* The big button, then 40px per small one: two or three buttons (Sleep all takes the big slot when every lane is awake). */
+/* (Ra, 10/7) The big button keeps one size instead of stretching, and the space after the small ones stays empty for buttons to come. */
+/* The transport is the music player (Ra, 10/7): play, pause, stop, the nightly repeat, then the panel toggles, every
+   button the same square, in one row that wraps when the deck runs out of room. */
+.nw-controls [data-part="transport"] { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; }
+.nw-controls [data-part="transport"] > button { flex: none; width: 34px; height: 34px; padding: 0; }
+.nw-controls [data-part="transport"] > [data-part="primary"] { width: auto; }
+.nw-controls [data-part="transport"] [data-part="primary"] { white-space: nowrap; padding-inline: 11px 13px; }
+.nw-controls [data-part="transport"] button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border-radius: 7px; border: 1px solid var(--nw-seam); background: var(--nw-surface); color: var(--nw-ink); }
+.nw-controls [data-part="transport"] button:hover { background: var(--nw-hover); }
+.nw-controls [data-part="primary"] { background: var(--nw-awake-fill, var(--nw-awake)) !important; border-color: var(--nw-awake-fill, var(--nw-awake)) !important; color: #fff !important; font-weight: 600; }
+.nw-controls[data-setup="true"] [data-part="primary"] { background: var(--nw-ok-fill, var(--nw-ok)) !important; border-color: var(--nw-ok-fill, var(--nw-ok)) !important; }
+.nw-controls [data-part="transport"] button[data-danger="true"]:hover { color: var(--nw-failed); }
+.nw-controls button[aria-disabled="true"] { opacity: .35; cursor: default; }
+.nw-controls :is([data-part="toggles"], [data-part="transport"]) button[aria-pressed="true"] { color: var(--nw-awake); background: color-mix(in srgb, var(--nw-awake) 10%, transparent); }
+/* alone on its row (timeline and log hidden): a horizontal transport bar.
+   Keyed off the app's view attributes: a container query can't restyle its own container. */
+.nw-app:not([data-layout="stack"], [data-layout="column"])[data-show-timeline="false"][data-show-log="false"] .nw-controls > * { min-width: 0; }
+.nw-app:not([data-layout="stack"], [data-layout="column"])[data-show-timeline="false"][data-show-log="false"] .nw-controls { grid-template-columns: minmax(0, 1fr) max-content; grid-template-rows: auto; align-items: center; }
+.nw-app:not([data-layout="stack"], [data-layout="column"])[data-show-timeline="false"][data-show-log="false"] .nw-controls [data-part="display"] { grid-template-columns: auto auto 1fr; align-items: baseline; column-gap: 14px; padding: 6px 10px; }
+.nw-app:not([data-layout="stack"], [data-layout="column"])[data-show-timeline="false"][data-show-log="false"] .nw-controls [data-part="counts"] { margin: 0; justify-content: end; }
+
+
+/* ---------- timeline + log: docked between the head and the lanes ---------- */
+.nw-timeline, .nw-log { padding: 10px 14px; display: grid; gap: 8px; align-content: start; align-self: stretch; }
+.nw-timeline { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.nw-timeline > :not([data-part="heading"], [data-part="range"]) { grid-column: 1 / -1; }
+.nw-timeline [data-part="range"] { display: flex; padding: 2px; gap: 2px; border-radius: 6px; background: var(--nw-sunk); box-shadow: inset 0 0 0 1px var(--nw-seam); }
+.nw-timeline [data-part="range"] button { border: 0; border-radius: 4px; padding: 1px 7px; background: none; font: 11px var(--nw-mono); color: var(--nw-ink-2); }
+.nw-timeline [data-part="range"] button[aria-checked="true"] { background: var(--nw-surface); color: var(--nw-ink); box-shadow: 0 1px 2px rgb(0 0 0 / .12), inset 0 0 0 1px var(--nw-seam); }
+.nw-timeline [data-part="heading"], .nw-log [data-part="heading"] { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--nw-ink-2); }
+.nw-timeline [data-part="heading"] span { font-weight: 400; margin-left: 6px; text-transform: none; letter-spacing: 0; }
+.nw-timeline { --edge: 22px; }   /* right inset: room for the ×3 badges and lane chips that hang off a node */
+.nw-timeline [data-part="axis"] { position: relative; height: 12px; margin: 0 var(--edge) 0 44px; color: var(--nw-ink-2); font: 10px var(--nw-mono); }
+.nw-timeline [data-part="axis"] span { position: absolute; left: calc(var(--t) * 100%); transform: translateX(-50%); }
+.nw-app[data-timeline-mode="expanded"] .nw-strip[data-mode="compressed"], .nw-app[data-timeline-mode="compressed"] .nw-strip[data-mode="expanded"] { display: none; }
+/* activity: every lane's output on the same axis as the strips, so the night reads as a shape */
+.nw-timeline [data-part="activity"] { --act: var(--nw-awake); position: relative; height: 54px; margin: 6px var(--edge) 0 44px; }
+.nw-timeline [data-part="activity"]::before { content: "output"; position: absolute; left: -44px; bottom: 0; font-size: 11px; color: var(--nw-ink-2); }
+.nw-timeline [data-part="activity"] svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.nw-timeline [data-part="activity"] [data-part="grid"] line { stroke: var(--nw-seam); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 2 3; }
+.nw-timeline [data-part="activity"] [data-part="fill-top"] { stop-color: var(--act); stop-opacity: .32; }
+.nw-timeline [data-part="activity"] [data-part="fill-bottom"] { stop-color: var(--act); stop-opacity: 0; }
+.nw-timeline [data-part="activity"] [data-part="line"] { fill: none; stroke: var(--act); stroke-width: 1.75; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+.nw-timeline [data-part="activity"] [data-part="bars"] { display: none; }
+.nw-timeline :is([data-part="activity"], [data-part="sleep-bands"]) [data-part="sleep"] { position: absolute; top: 0; bottom: 0; left: calc(var(--from) * 100%); width: calc((var(--to) - var(--from)) * 100%);
+  display: grid; place-items: center; font-size: 10.5px; letter-spacing: .04em; color: var(--nw-ink-2); pointer-events: none;
+  background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--nw-sleeping) 9%, transparent) 0 4px, transparent 4px 9px); border-radius: 4px; }
+.nw-timeline [data-part="activity"] [data-part="peak"] { position: absolute; left: calc(var(--t) * 100%); bottom: calc(var(--v) * 85% + 4px); translate: -50% 0;
+  padding: 0 4px; border-radius: 4px; font: 600 10px var(--nw-mono); color: var(--act); background: var(--nw-surface); box-shadow: 0 0 0 1px color-mix(in srgb, var(--act) 35%, transparent); }
+.nw-timeline [data-part="activity"] [data-part="peak"]::after { content: ""; position: absolute; left: 50%; top: calc(100% + 2px); width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--act); }
+/* The hover cursor (runtime draws it, 10/10): a dot on the curve under the pointer and its rate, anchored at the
+   dot. The label reads upright in Vertical, where the graph itself is turned. */
+.nw-timeline [data-part="activity"][data-cursor] [data-part="peak"] { visibility: hidden; }
+.nw-timeline [data-part="activity"] [data-part="cursor"] { stroke: var(--act); stroke-width: 7; stroke-linecap: round; pointer-events: none; }
+.nw-timeline [data-part="activity"] [data-part="cursor-label"] { position: absolute; z-index: 2; pointer-events: none; white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 8px)); padding: 0 4px; border-radius: 4px; font: 600 10px var(--nw-mono); font-variant-numeric: tabular-nums;
+  color: var(--act); background: var(--nw-surface); box-shadow: 0 0 0 1px color-mix(in srgb, var(--act) 35%, transparent); }
+.nw-timeline [data-part="activity"] [data-part="cursor-label"][data-turned="true"] { transform-origin: 0 0; transform: rotate(90deg) translate(calc(-100% - 8px), -50%); }
+:is(.nw-timeline, .nw-log) [data-part="empty"] { grid-column: 1 / -1; align-self: center; margin: 0; padding: 18px 8px; text-align: center; font-size: 12.5px; color: var(--nw-ink-2); }
+:is(.nw-timeline, .nw-log) [data-part="empty"][hidden] { display: none; }
+.nw-log[data-empty="true"] [data-part="events"] { display: none; }
+.nw-strip { list-style: none; margin: 0; padding: 0 0 0 44px; position: relative; height: 26px; }
+.nw-strip::before { content: attr(data-label); position: absolute; left: 0; top: 4px; font-weight: 600; font-size: 12px; }
+.nw-strip[data-mode="compressed"] { height: 72px; }
+.nw-strip[data-mode="compressed"]::before { content: "all"; color: var(--nw-ink-2); font-weight: 500; }
+.nw-strip::after { content: ""; position: absolute; left: 44px; right: var(--edge); top: 12px; height: 2px; background: var(--nw-seam); }
+.nw-node { --c: var(--nw-ok); position: absolute; z-index: 1; top: 3px; left: calc(44px + var(--t) * (100% - 44px - var(--edge))); translate: -50% 0;
+  display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--nw-surface); color: var(--c); box-shadow: inset 0 0 0 1.5px var(--c); }
+.nw-node .nw-icon { width: 12px; height: 12px; }
+.nw-node time { display: none; }
+.nw-node [data-part="count"] { position: absolute; top: -9px; right: -10px; font: 600 9px var(--nw-mono); color: var(--c); background: var(--nw-surface); border-radius: 6px; padding: 0 2px; }
+.nw-node [data-part="lanes"] { position: absolute; top: 22px; left: 50%; translate: -50% 0; display: flex; gap: 1px; }
+.nw-node [data-part="lanes"] i { width: 11px; height: 11px; border-radius: 3px; display: grid; place-items: center; font: 700 7.5px var(--nw-font); font-style: normal; color: var(--nw-surface); background: var(--nw-ink-2); }
+.nw-node[data-status="failed"] { --c: var(--nw-failed); } .nw-node[data-status="warn"] { --c: var(--nw-warn); } /* the amber tier's mark (10/12) */ .nw-node[data-alarm="true"] { z-index: 3; } .nw-node[data-status="deferred"] { --c: var(--nw-belled); }
+.nw-node[data-status="pending"] { --c: var(--nw-ink-2); } .nw-node[data-status="manual"] { --c: var(--nw-manual); }
+.nw-node[data-alarm="true"] { background: var(--c); color: #fff; }
+.nw-strip[data-mode="expanded"] .nw-node[data-kind="fold"] { margin-left: 22px; } .nw-strip[data-mode="expanded"] .nw-node[data-kind="close"] { margin-left: 44px; }
+.nw-strip[data-mode="expanded"] .nw-node[data-kind="wake-failed"] { margin-left: 14px; }
+/* Near neighbours stack as beads under the track: width-independent, so the
+   narrow stacked layout can't collide them the way a sideways fan does. */
+.nw-strip[data-mode="compressed"] .nw-node { top: calc(3px + var(--stack) * 23px); }
+.nw-strip[data-mode="compressed"] .nw-node[style*="--stack: 1"], .nw-strip[data-mode="compressed"] .nw-node[style*="--stack: 2"] { box-shadow: inset 0 0 0 1.5px var(--c), 0 -3px 0 -1px var(--nw-seam); }
+.nw-strip[data-mode="compressed"] .nw-node [data-part="lanes"] { top: 4px; left: 23px; translate: none; }
+.nw-node[data-all="true"] [data-part="lanes"] { display: none; }                          /* every lane: no chips needed */
+
+.nw-log { min-width: 0; container-type: inline-size; }
+.nw-app:not([data-layout="stack"], [data-layout="column"]) .nw-log { height: 0; min-height: 100%; grid-template-rows: auto auto minmax(0, 1fr); }
+/* Alone in its row (controls and timeline hidden) the log has no neighbour to
+   borrow a height from, and height 0 collapsed it under the lanes (Ra, 10/6).
+   It sizes itself then, with the stacked layout's events cap. */
+.nw-app:not([data-layout="stack"], [data-layout="column"])[data-show-controls="false"][data-show-timeline="false"] .nw-log { height: auto; min-height: 0; }
+.nw-app:not([data-layout="stack"], [data-layout="column"])[data-show-controls="false"][data-show-timeline="false"] .nw-log [data-part="events"] { max-height: 236px; }
+.nw-app:not([data-layout="stack"], [data-layout="column"]) .nw-log [data-part="events"] { max-height: none; min-height: 0; -webkit-mask: linear-gradient(#000 calc(100% - 22px), transparent); mask: linear-gradient(#000 calc(100% - 22px), transparent); }
+/* narrow log (beside the timeline): icon-only filter chips, names in their
+   tips; descriptions wrap instead of clipping; the tail hash goes */
+@container (max-width: 420px) {
+  .nw-log [data-part="filters"] label { padding: 3px 6px; }
+  .nw-log [data-part="filters"] label span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .nw-log [data-part="filters"] label:not(:has(input:checked)) { text-decoration: none; opacity: .4; }
+  .nw-log .nw-event [data-part="what"] { white-space: normal; overflow: visible; }
+  .nw-log .nw-event [data-part="tail"] { display: none; }
+}
+.nw-log [data-part="filters"] { display: flex; flex-wrap: wrap; gap: 4px; }
+.nw-log [data-part="filters"] label { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 6px; border-radius: 99px; font-size: 11.5px; color: var(--nw-ink-2);
+  box-shadow: inset 0 0 0 1px var(--nw-seam); cursor: pointer; user-select: none; }
+.nw-log [data-part="filters"] label .nw-icon { width: 13px; height: 13px; }
+.nw-log [data-part="filters"] input { position: absolute; opacity: 0; pointer-events: none; }
+.nw-log [data-part="filters"] label:has(input:checked) { color: var(--nw-ink); background: var(--nw-sunk); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nw-ink-2) 45%, transparent); }
+.nw-log [data-part="filters"] label:not(:has(input:checked)) { text-decoration: line-through; opacity: .7; }
+.nw-log [data-part="events"] { list-style: none; margin: 0; padding: 0; max-height: 236px; overflow: auto; font-size: 12px; }
+.nw-log .nw-day { position: sticky; top: 0; z-index: 1; padding: 4px 0 2px; background: var(--nw-surface); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--nw-ink-2); }
+.nw-event { --c: var(--nw-ok); display: grid; grid-template-columns: 38px 46px 14px minmax(0, 1fr); grid-template-areas: "time lane icon what" ". . . detail"; align-items: center; column-gap: 6px; padding: 3px 0; border-top: 1px solid var(--nw-seam); }
+.nw-event [data-part="time"] { grid-area: time; } .nw-event [data-part="lane"] { grid-area: lane; } .nw-event > .nw-icon { grid-area: icon; } .nw-event [data-part="what"] { grid-area: what; } .nw-event [data-part="detail"] { grid-area: detail; }
+.nw-event[hidden] { display: none; }
+.nw-event[data-status="failed"] { --c: var(--nw-failed); } .nw-event[data-status="warn"] { --c: var(--nw-warn); } .nw-event[data-status="manual"] { --c: var(--nw-manual); }
+.nw-event [data-part="time"] { font: 11px var(--nw-mono); color: var(--nw-ink-2); }
+.nw-event [data-part="lane"] { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.nw-event > .nw-icon { width: 14px; height: 14px; color: var(--c); }
+.nw-event [data-part="what"] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nw-event[data-alarm="true"] [data-part="what"] { color: var(--nw-failed); font-weight: 600; }
+.nw-event [data-part="count"] { font: 600 10px var(--nw-mono); color: var(--c); }
+.nw-event [data-part="detail"] { display: flex; gap: 8px; font: 11px var(--nw-mono); color: var(--nw-ink-2); }
+.nw-event [data-part="kept"] { padding: 0 2px; background: linear-gradient(90deg, color-mix(in srgb, var(--nw-awake) 18%, transparent) calc(var(--kept) * 100%), transparent 0) no-repeat; color: var(--nw-ink); }
+.nw-event[data-level="over"] [data-part="est"] { color: var(--nw-warn); }
+.nw-event[data-reason="emergency"] [data-part="what"]::before { content: "⚡ "; color: var(--nw-orphaned); }
+
+
+/* ---------- fixture-only test sheet ---------- */
+html[data-gallery="1"] .nw-app { grid-template-areas: "head head" "alarms alarms" "timeline log" "lanes lanes" "gallery gallery"; }
+html[data-gallery="1"] .nw-gallery { grid-area: gallery; display: grid; grid-template-columns: repeat(4, var(--nw-lane-w, 236px)); gap: 1px; align-items: start; }
+.nw-gallery > [data-part="heading"] { grid-column: 1 / -1; padding: 8px 14px; outline: 1px solid var(--nw-seam); background: repeating-linear-gradient(-45deg, var(--nw-sunk) 0 8px, var(--nw-surface) 8px 16px); font-size: 12px; color: var(--nw-ink-2); }
+.nw-gallery > .nw-alarms { grid-column: span 2; display: grid; }
+.nw-glyphs { display: flex; gap: 14px; align-items: center; padding: 12px; }
+
+/* v0.9.1: an acked app alarm dims like an acked lane alert (this screen only) */
+.nw-alarm[data-acked="true"] { display: none; }
+
+/* The Remove gate (Ra, 10/6) reads as a sentence, like the armed row, not a short field label. */
+.nw-lane [data-part="settings"] [data-part="confirm-remove"] > span { width: auto; flex: 1; }
+
+/* A disabled button in settings or the add form must LOOK disabled: the gated Remove (and, until
+   saving is wired, Save) read as armed while inert (Ra, 10/6). */
+.nw-app :is([data-part="settings"], [data-part="add-form"]) button[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
+
+/* Hub design (10/6): the persona leads the model line, quietly, and the
+   global-schedule row reads as a sentence like the armed row. */
+.nw-lane [data-part="model"] [data-part="persona"] { font-weight: 600; opacity: .85; }
+.nw-lane [data-part="settings"] [data-part="global-schedule"] > span { width: auto; flex: 1; }
+.nw-lane [data-part="settings"] input:disabled { opacity: .55; }
+
+/* With the persona leading it, the model line can be long ("Lark · Haiku 4.5"): it truncates before the
+   state badge instead of running under it (10/6). The full text is in the tip. */
+.nw-lane > header [data-part="ident"] { min-width: 0; }
+.nw-lane > header [data-part="model"] { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* App settings panel (10/6): the page places it (viewer chrome); the skin draws it. */
+.nw-settings { display: grid; gap: 12px; padding: 14px 16px;  }
+.nw-settings [data-part="heading"] { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; }
+.nw-settings [data-part="heading"] [data-part="close"] { margin-left: auto; border: 0; background: none; color: inherit; cursor: pointer; padding: 2px; opacity: .7; }
+.nw-settings [data-part="heading"] [data-part="close"]:hover { opacity: 1; }
+.nw-settings [data-part="schedule"] { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.nw-settings [data-part="schedule"] [data-part="label"] { font-weight: 600; }
+.nw-settings [data-part="schedule"] label { display: inline-flex; align-items: center; gap: 5px; }
+.nw-settings [data-part="tz"] { color: var(--nw-ink-2); font-size: 11.5px; }
+.nw-settings table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.nw-settings th { text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--nw-ink-2); padding: 0 6px 4px; }
+.nw-settings td { padding: 5px 6px; border-top: 1px solid var(--nw-seam); }
+.nw-settings td input[type="number"] { width: 64px; }
+.nw-settings [data-part="doctor"] h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 12.5px; }
+.nw-settings [data-part="doctor"] ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.nw-settings [data-part="doctor"] li { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.nw-settings [data-part="doctor"] li[data-status="ok"] .nw-icon { color: var(--nw-ok); }
+.nw-settings [data-part="doctor"] li[data-status="warn"] { color: var(--nw-warn); }
+.nw-settings [data-part="doctor"] li[data-status="failed"] { color: var(--nw-failed); font-weight: 600; }
+.nw-settings [data-part="doctor"] li [data-part="fix"] { margin-left: auto; }
+.nw-settings [data-part="buttons"] { display: flex; justify-content: space-between; gap: 8px; }
+.nw-app :is(.nw-settings) button[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
+
+/* Check again: the nightshift's dry run, verbatim (10/6). */
+.nw-settings [data-part="preflight"] { margin: 8px 0 0; padding: 8px; max-height: 220px; overflow: auto; font: 11px/1.45 ui-monospace, monospace; white-space: pre-wrap; background: rgb(0 0 0 / .06); border-radius: 4px; }
+
+/* ---------- lane creation (10/6): Set up and Add agent's preview ---------- */
+.nw-setup { display: grid; gap: 12px; padding: 14px 16px; background: var(--nw-surface); outline: 1px solid var(--nw-seam); }
+.nw-setup [data-part="heading"] { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; }
+.nw-setup [data-part="heading"] [data-part="close"] { margin-left: auto; border: 0; background: none; color: inherit; cursor: pointer; padding: 2px; opacity: .7; }
+.nw-setup [data-part="heading"] [data-part="close"]:hover { opacity: 1; }
+.nw-setup [data-part="progress"] { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; counter-reset: step; font-size: 11.5px; color: var(--nw-ink-2); }
+.nw-setup [data-part="progress"] li { counter-increment: step; flex: 1; padding-top: 5px; border-top: 3px solid var(--nw-seam); }
+.nw-setup [data-part="progress"] li::before { content: counter(step) ". "; }
+.nw-setup:is([data-step="who"], [data-step="import"]) [data-part="progress"] li[data-step="who"],
+.nw-setup[data-step="nights"] [data-part="progress"] li:is([data-step="who"], [data-step="nights"]),
+.nw-setup[data-step="preview"] [data-part="progress"] li { border-top-color: var(--nw-awake); }
+.nw-setup:is([data-step="who"], [data-step="import"]) [data-part="progress"] li[data-step="who"],
+.nw-setup[data-step="nights"] [data-part="progress"] li[data-step="nights"],
+.nw-setup[data-step="preview"] [data-part="progress"] li[data-step="preview"] { color: var(--nw-ink); font-weight: 600; }
+.nw-setup fieldset { gap: 8px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.nw-setup label { display: flex; align-items: center; gap: 8px; color: var(--nw-ink-2); font-size: 12.5px; }
+.nw-setup label > span { width: 84px; flex: none; }
+.nw-setup label[data-part="about"] { align-items: flex-start; }
+.nw-setup label[data-part="about"] > span { padding-top: 5px; }
+.nw-setup :is(input:not([type="checkbox"]), select, textarea) { flex: 1; min-width: 0; font: inherit; color: var(--nw-ink); background: var(--nw-sunk); border: 1px solid var(--nw-seam); border-radius: 5px; padding: 5px 7px; }
+.nw-setup textarea { resize: vertical; line-height: 1.45; }
+.nw-setup input[type="number"] { flex: none; width: 72px; }
+.nw-setup [data-part="unit"] { width: auto; }
+.nw-setup [data-part="armed"] > span { width: auto; flex: 1; }
+.nw-setup [data-part="schedule"] { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.nw-setup [data-part="schedule"] label { display: inline-flex; }
+.nw-setup [data-part="import-link"], .nw-setup [data-action="check-import"] { justify-self: start; display: inline-flex; align-items: center; gap: 5px;
+  border: 0; background: none; padding: 2px 0; color: var(--nw-awake); font-size: 12.5px; cursor: pointer; }
+.nw-setup [data-part="import-link"]:hover, .nw-setup [data-action="check-import"]:hover { text-decoration: underline; }
+.nw-setup [data-part="hint"] { margin: 0; font-size: 12.5px; color: var(--nw-ink-2); line-height: 1.45; }
+.nw-setup [data-part="found"] { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; }
+.nw-setup [data-part="found"]:empty { display: none; }
+.nw-setup [data-part="found"] li[data-status="ok"] .nw-icon { color: var(--nw-ok); }
+.nw-setup [data-part="found"] li[data-status="missing"] { color: var(--nw-ink-2); }
+.nw-setup [data-part="found"] li[data-status="failed"] { color: var(--nw-failed); font-weight: 600; }
+.nw-setup [data-part="buttons"] { display: flex; justify-content: flex-end; gap: 6px; }
+.nw-setup [data-part="buttons"] [data-action="setup-back"] { margin-right: auto; }
+:is(.nw-setup, .nw-add) [data-part="error"] { margin: 0; padding: 6px 8px; border-radius: 5px; font-size: 12px; color: var(--nw-failed); background: color-mix(in srgb, var(--nw-failed) 10%, transparent); }
+
+/* The preview: the dry run's steps, verb first, one per line. */
+:is(.nw-setup, .nw-add) [data-step="preview"] h4, .nw-add [data-part="preview"] h4 { margin: 0 0 6px; font-size: 12.5px; }
+:is(.nw-setup, .nw-add) [data-part="steps"] { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12.5px; }
+:is(.nw-setup, .nw-add) [data-part="steps"] li { display: grid; grid-template-columns: 56px 1fr; gap: 0 8px; align-items: baseline; }
+:is(.nw-setup, .nw-add) [data-part="steps"] li span { grid-column: 2; }
+:is(.nw-setup, .nw-add) [data-part="steps"] li b { font-weight: 600; color: var(--nw-ink-2); }
+:is(.nw-setup, .nw-add) [data-part="steps"] code { font: 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--nw-ink); }
+:is(.nw-setup, .nw-add) [data-part="steps"] span { color: var(--nw-ink-2); }
+.nw-add [data-part="steps"] li { grid-template-columns: 50px 1fr; }
+.nw-add [data-part="preview"] { display: grid; gap: 6px; padding: 10px 12px; background: var(--nw-sunk); outline: 1px solid var(--nw-seam); }
+.nw-add [data-part="own-schedule"] { display: flex; flex-wrap: wrap; gap: 4px 12px; padding-left: 62px; }
+.nw-add [data-part="own-schedule"] label > span { width: auto; }
+.nw-add [data-part="own-schedule"] input:disabled { opacity: .55; }
+.nw-add [data-part="global-schedule"] > span { width: auto; flex: 1; }
+.nw-add [data-part="unit"] { width: auto; }
+.nw-add input[type="number"] { width: 64px; flex: none; }
+.nw-gallery > .nw-setup { grid-column: span 2; }
+/* The rack is four lane columns and a narrow add rail. With four lanes (or nine) the add slot IS the rail's
+   cell, so while it's open the rail takes a lane's width; with fewer lanes it sits in a lane column already. */
+.nw-app:not([data-layout="stack"], [data-layout="column"]):has(.nw-persona > .nw-add:nth-child(5n+6)[data-open="true"]) {
+  grid-template-columns: var(--nw-col1, var(--nw-lane-w, 236px)) repeat(3, var(--nw-lane-w, 236px)) var(--nw-lane-w, 236px); }
+
+/* Dark mode's state colours are light, right for coloured TEXT on a dark surface but too pale to carry
+   white text as a fill (Fold now and Restore read washed out, 10/6). Filled buttons use the -fill tokens,
+   defined deeper in Minimal's dark block; everywhere else they fall back to the state colour. */
+/* The test sheet's copy of the deck must not claim the app's "controls" area: the sheet's grid has none, so
+   the browser invented extra columns and pushed cards off the sheet's four. */
+.nw-gallery > .nw-controls { grid-area: auto; }
+
+/* Appearance radios in a one-look skin: shown, but plainly not active (10/6). */
+.nw-head [data-part="view-menu"] [data-view="theme"][aria-disabled="true"] { opacity: .45; cursor: default; }
+/* The head carries the menus, so it paints above its siblings. A skin that gives modules a backdrop-filter
+   (Glass) makes each one its own stacking context, and the menu's z-index then only counted inside the head:
+   it opened UNDER the deck and lanes (10/6). */
+.nw-app > .nw-head { z-index: 20; }
+
+/* ---------- the log down the side (Ra, 10/6) ----------
+   With the log shown, side by side: the log runs down the right-hand column to the bottom of the lanes and the
+   lanes take the three columns beside it. Minimal always does this, and fills lane cells nobody uses with a
+   sunk panel so the whole app is one rectangle (its "sane" shape). Glass, Amber and Metal do it when the viewer
+   ticks View > "Log runs down the side" (data-log-tall), with no backdrop. Moonlamp and Brassworks have their
+   own layouts. */
+:is(:root[data-skin="minimal"] .nw-app, .nw-app[data-log-tall="true"]):not([data-layout="stack"], [data-layout="column"])[data-show-log="true"] {
+  grid-template-areas: "head head head head head" "alarms alarms alarms alarms alarms" var(--row) "lanes lanes lanes log log"; }
+:is(:root[data-skin="minimal"] .nw-app, .nw-app[data-log-tall="true"]):not([data-layout="stack"], [data-layout="column"])[data-show-controls="true"][data-show-timeline="false"][data-show-log="true"] { --row: "controls controls controls log log"; }
+:is(:root[data-skin="minimal"] .nw-app, .nw-app[data-log-tall="true"]):not([data-layout="stack"], [data-layout="column"])[data-show-controls="false"][data-show-timeline="false"][data-show-log="true"] {
+  grid-template-areas: "head head head head head" "alarms alarms alarms alarms alarms" "lanes lanes lanes log log"; }
+:is(:root[data-skin="minimal"] .nw-app, .nw-app[data-log-tall="true"]):not([data-layout="stack"], [data-layout="column"])[data-show-log="true"] .nw-log { height: 0; min-height: 100%; }
+:root[data-skin="minimal"] .nw-app:not([data-layout="stack"], [data-layout="column"])[data-show-log="true"] .nw-lanes { align-self: stretch; background: var(--nw-sunk); }
+/* Three lane columns here, so the rail-widening rule (built for the add slot in a fifth column) stands down. */
+:is(:root[data-skin="minimal"] .nw-app, .nw-app[data-log-tall="true"]):not([data-layout="stack"], [data-layout="column"])[data-show-log="true"]:has(.nw-persona > .nw-add:nth-child(5n+6)[data-open="true"]) {
+  grid-template-columns: var(--nw-col1, var(--nw-lane-w, 236px)) repeat(3, var(--nw-lane-w, 236px)) var(--nw-rail-w, 44px); }
+
+/* ---------- vertical panels: the third layout (Ra, 10/6) ----------
+   The side-by-side app turned 90 degrees: controls top left, the timeline below them running DOWN (now at the
+   top, so time "falls"), the log under that filling to the bottom, and the lanes in one column on the right.
+   Minimal's layout, so Glass, Amber and Metal inherit it; Moonlamp and Brassworks don't offer it. */
+.nw-app[data-layout="column"][data-layout] {
+  --col-panel-w: 320px; --tl-body: 360px; --tl-top: 18px;
+  grid-template-columns: var(--col-panel-w) max-content;
+  grid-template-rows: auto auto auto auto minmax(160px, 1fr);
+  grid-template-areas: "head head" "alarms alarms" "controls lanes" "timeline lanes" "log lanes";
+}
+.nw-app[data-layout="column"] .nw-lanes { grid-template-columns: var(--nw-lane-w, 236px); align-self: start; }
+/* The timeline and the log share one region (Ra, 10/7): whichever is open takes all of it (the runtime sizes the
+   timeline's body, or the log's minimum, to the pair's region); with both closed the column ends at the deck. */
+.nw-app[data-layout="column"][data-show-log="false"] { grid-template-rows: auto auto auto auto 0; }
+.nw-app[data-layout="column"][data-show-timeline="false"] { grid-template-rows: auto auto auto 0 minmax(var(--nw-log-min, 160px), 1fr); }
+.nw-app[data-layout="column"][data-show-timeline="false"][data-show-log="false"] { grid-template-rows: auto auto auto 0 1fr; } /* the empty last row takes the slack, so the deck keeps its height */
+.nw-app[data-layout="column"] .nw-log { height: 0; min-height: 100%; grid-template-rows: auto auto minmax(0, 1fr); }
+.nw-app[data-layout="column"] .nw-log [data-part="events"] { max-height: none; min-height: 0; overflow: auto;
+  -webkit-mask: linear-gradient(#000 calc(100% - 22px), transparent); mask: linear-gradient(#000 calc(100% - 22px), transparent); }
+
+/* The timeline, vertical. Header on top; then the axis, one column per lane strip, and the output graph turned on
+   its side down the right edge. Every position is 0..1 on --t, now = 1 at the top. */
+/* The header (title, then the range buttons) gets a fixed slot, so the lines and the turned graph share one
+   exact origin: --tl-head. */
+.nw-app[data-layout="column"] .nw-timeline { --tl-head: 66px; --edge: 14px; position: relative; display: flex; align-items: flex-start; gap: 0 4px;
+  padding-top: var(--tl-head); padding-right: 82px; }
+.nw-app[data-layout="column"] .nw-timeline > [data-part="heading"] { position: absolute; top: 10px; left: 14px; right: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nw-app[data-layout="column"] .nw-timeline > [data-part="range"] { position: absolute; top: 32px; left: 14px; }
+.nw-app[data-layout="column"] .nw-timeline [data-part="axis"] { flex: none; width: 30px; height: var(--tl-body); margin: 0; }
+.nw-app[data-layout="column"] .nw-timeline [data-part="axis"] span { left: 0; top: calc(var(--tl-top) + (1 - var(--t)) * (100% - var(--tl-top) - var(--edge))); transform: translateY(-50%); }
+.nw-app[data-layout="column"] .nw-strip { flex: 1 1 0; min-width: 30px; height: var(--tl-body); padding: 0; }
+.nw-app[data-layout="column"] .nw-strip::before { left: 50%; top: 0; translate: -50% 0; font-size: 11px; white-space: nowrap; }
+.nw-app[data-layout="column"] .nw-strip::after { left: calc(50% - 1px); right: auto; top: var(--tl-top); bottom: var(--edge); width: 2px; height: auto; }
+.nw-app[data-layout="column"] .nw-node { left: 50%; top: calc(var(--tl-top) + (1 - var(--t)) * (100% - var(--tl-top) - var(--edge))); translate: -50% -50%; }
+.nw-app[data-layout="column"] .nw-strip[data-mode="expanded"] .nw-node[data-kind] { margin-left: 0; }
+.nw-app[data-layout="column"] .nw-strip[data-mode="expanded"] .nw-node[data-kind="fold"] { margin-top: 12px; }
+.nw-app[data-layout="column"] .nw-strip[data-mode="expanded"] .nw-node[data-kind="close"] { margin-top: 24px; }
+.nw-app[data-layout="column"] .nw-strip[data-mode="compressed"] { min-width: 120px; }
+.nw-app[data-layout="column"] .nw-strip[data-mode="compressed"] .nw-node { left: calc(14px + var(--stack) * 23px); top: calc(var(--tl-top) + (1 - var(--t)) * (100% - var(--tl-top) - var(--edge))); }
+.nw-app[data-layout="column"] .nw-node [data-part="lanes"] { top: 50%; left: calc(100% + 3px); translate: 0 -50%; }
+/* The output graph: laid out as the usual horizontal strip, then turned -90deg about its top-left corner and
+   slid back, so "now" (its right end) lands at the top and its baseline runs down the right-hand edge. */
+.nw-app[data-layout="column"] .nw-timeline [data-part="activity"] { position: absolute; margin: 0; left: calc(100% - 74px);
+  top: calc(var(--tl-head) + var(--tl-top)); width: calc(var(--tl-body) - var(--tl-top) - var(--edge)); height: 60px;
+  transform-origin: top left; transform: rotate(-90deg) translateX(-100%); }
+.nw-app[data-layout="column"] .nw-timeline [data-part="activity"]::before { display: none; }
+.nw-app[data-layout="column"] .nw-timeline [data-part="activity"] [data-part="peak"],
+.nw-app[data-layout="column"] .nw-timeline [data-part="activity"] [data-part="sleep"] { writing-mode: vertical-rl; }
+.nw-app[data-layout="column"] .nw-timeline [data-part="activity"] [data-part="peak"] { rotate: 90deg; writing-mode: horizontal-tb; }
+/* The Timeline toggle hides it in this layout too: the layout's own display rule above is exactly as specific as
+   the base hide rule and came later, so it won (10/6). */
+.nw-app[data-layout="column"][data-show-timeline="false"] .nw-timeline { display: none; }
+/* The sleep band runs ACROSS the vertical timeline (Ra, 10/6: "vertical really wants the symmetry"). It is the
+   graph's twin: laid out horizontally exactly like the graph's band, then turned -90deg the same way, so the
+   stripes run the same direction in both halves (drawn upright they crossed). Its label stays on the graph's
+   band. The graph's dashed hour lines carry across under it (--tl-grid / --tl-grid-mask per skin). */
+.nw-app[data-layout="column"] .nw-timeline > [data-part="sleep-bands"] { display: block; position: absolute; z-index: 0; pointer-events: none;
+  left: 48px; top: calc(var(--tl-head) + var(--tl-top));
+  width: calc(var(--tl-body) - var(--tl-top) - var(--edge)); height: calc(var(--col-panel-w) - 48px - 74px);
+  transform-origin: top left; transform: rotate(-90deg) translateX(-100%); }
+.nw-app[data-layout="column"] .nw-timeline > [data-part="sleep-bands"]::before { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent calc(50% - .5px), var(--tl-grid, var(--nw-seam)) calc(50% - .5px) calc(50% + .5px), transparent calc(50% + .5px)) 0 0 / 12.5% 100% repeat-x;
+  -webkit-mask: var(--tl-grid-mask, repeating-linear-gradient(180deg, #000 0 2px, transparent 2px 5px)); mask: var(--tl-grid-mask, repeating-linear-gradient(180deg, #000 0 2px, transparent 2px 5px)); }
+.nw-app[data-layout="column"] .nw-timeline > [data-part="sleep-bands"] [data-part="sleep"] { font-size: 0; text-shadow: none; }
+/* "now" heads the axis: time falls from here. */
+/* Sat just above where the line starts, so a fresh hour tick right at the top can't clip it (Ra, 10/6, 8h). */
+.nw-app[data-layout="column"] .nw-timeline [data-part="axis"]::before { content: "now"; position: absolute; left: 0; top: calc(var(--tl-top) - 7px); transform: translateY(-100%);
+  font: 600 10px var(--nw-mono); color: var(--nw-ink); }
+/* One stripe surface across both halves (10/6: Glass and Minimal showed a seam). A stripe gradient is anchored to
+   its own box, and the two band boxes differ in size, so their stripes started out of phase. Both now draw from
+   one large image anchored the same way; the graph's band sits exactly one lane-band width further along, so it
+   reads that image from there, and the stripes run on unbroken. */
+.nw-app[data-layout="column"] .nw-timeline :is([data-part="activity"], [data-part="sleep-bands"]) [data-part="sleep"] {
+  --band-w: calc(var(--col-panel-w) - 48px - 74px);
+  background-size: 1200px 1200px; background-repeat: no-repeat; background-position: 0 0; }
+.nw-app[data-layout="column"] .nw-timeline [data-part="activity"] [data-part="sleep"] { background-position: 0 calc(-1 * var(--band-w)); }
+
+/* The working/idle light (Ra, 10/7), from Claude Code's own session status (data-activity). Working: the
+   state light breathes. Idle: steady. Waiting (a permission prompt or a question): steady, in the bell colour,
+   because it needs a person. With reduced motion, working gets a ring instead of the breathing. */
+.nw-lane[data-activity="waiting"] [data-part="state"] { --state: var(--nw-belled); }
+.nw-lane[data-activity="working"] [data-part="state"] { animation: nw-working 1.3s ease-in-out infinite; }
+@keyframes nw-working { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) {
+  .nw-lane[data-activity="working"] [data-part="state"] { animation: none; }
+  .nw-lane[data-activity="working"] [data-part="state"] i { outline: 2px solid color-mix(in srgb, var(--state) 55%, transparent); outline-offset: 2px; }
+}
+
+/* ---------- personas (Ra, 10/7) ----------
+   The lanes are grouped by persona: each .nw-persona holds its card, its agents' cards and its own Add agent slot.
+   The persona card is a peer of an agent card: a header (badge, name, a caret folding the card's own body) and a
+   body (one light per agent, a show/hide-agents button, the persona's settings). It carries its agents' combined
+   state (data-state) and maps it to --state like a card, so its accent, tint and badge mean what a card's do.
+   Horizontal: one row per persona, the card a spine beside it; a skin says where (--nw-persona-label): "gutter"
+   (inside the app's left edge: the first column widens by it, the panel above covers it, the app stays one
+   rectangle) or "hang" (Glass: a tab off the edge, the grid untouched). Vertical: one column per persona, the card
+   on top. Stacked: the card over each group. Hidden agents leave the card standing, in its own shape. A group is a
+   subgrid of the lane columns; its left padding insets every card in the first column, on every row. */
+:root { --nw-persona-label: gutter; --nw-gutter-w: 65px; --nw-spine-pad-x: 4px; }
+.nw-persona { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; gap: inherit; align-items: start; position: relative;
+  --state: var(--nw-awake); --nw-persona-bg: color-mix(in srgb, var(--state) 6%, var(--nw-surface)); --nw-persona-shadow: inset 0 3px 0 var(--state); }
+.nw-persona[data-state="belled"]   { --state: var(--nw-belled); }
+.nw-persona[data-state="folding"]  { --state: var(--nw-folding); }
+.nw-persona[data-state="sleeping"] { --state: var(--nw-sleeping); }
+.nw-persona[data-state="orphaned"] { --state: var(--nw-orphaned); }
+.nw-persona[data-state="failed"]   { --state: var(--nw-failed); }
+.nw-persona[data-state="down"]     { --state: var(--nw-ink-2); }
+.nw-persona[data-open="false"] > :not([data-part="persona-card"]) { display: none; }
+
+/* the card, wherever it sits */
+.nw-persona > [data-part="persona-card"] { box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; background: var(--nw-persona-bg, var(--nw-surface)); outline: var(--nw-persona-outline, 1px solid var(--nw-seam)); box-shadow: var(--nw-persona-shadow, none); border-radius: var(--nw-persona-r, 0); -webkit-backdrop-filter: var(--nw-persona-blur, none); backdrop-filter: var(--nw-persona-blur, none); }
+.nw-persona > [data-part="persona-card"]:hover { z-index: 30; } /* its tips paint over later panes (Glass) */
+[data-part="persona-card"] > [data-part="persona-name"] { margin: 0; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+  font: 700 12.5px/1 var(--nw-font); letter-spacing: .14em; text-transform: uppercase; color: var(--nw-ink); }
+[data-part="persona-name"] > [data-part="label"] { white-space: nowrap; }
+[data-part="persona-name"] > [data-part="persona-avatar"] { flex: none; letter-spacing: 0; text-transform: none; rotate: none; }
+[data-part="persona-name"] > [data-part="persona-toggle"] { flex: none; display: grid; place-items: center; color: var(--nw-ink-2); }
+[data-part="persona-name"] > [data-part="persona-toggle"] .nw-icon { width: 12px; height: 12px; transition: rotate .15s; }
+[data-part="persona-card"][data-card-open="true"] > [data-part="persona-name"] > [data-part="persona-toggle"] .nw-icon { rotate: 180deg; } /* like a card's: up while open */
+[data-part="persona-name"]:hover > [data-part="persona-toggle"] { color: var(--nw-ink); }
+[data-part="persona-card"][data-card-open="false"] > [data-part="persona-body"] { display: none; }
+/* The body is a tray, recessed under a seam (Ra, 10/7 round 5): it is what tells a persona card from an agent card,
+   so the column needs no gap to say where the persona ends. */
+[data-part="persona-body"] { display: flex; align-items: center; gap: 8px; background: var(--nw-persona-tray, color-mix(in srgb, var(--nw-ink) 5%, transparent));
+  border-radius: 0 0 var(--nw-persona-r, 0) var(--nw-persona-r, 0); }
+/* one light per agent: its state's colour, breathing while it works, the bell colour while it waits on a person */
+[data-part="persona-agents"] { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+[data-part="persona-agents"] li { --state: var(--nw-awake); position: relative; width: 9px; height: 9px; border-radius: 50%; background: var(--state); box-shadow: 0 0 0 2px color-mix(in srgb, var(--state) 22%, transparent); }
+[data-part="persona-agents"] li[data-state="belled"]   { --state: var(--nw-belled); }
+[data-part="persona-agents"] li[data-state="folding"]  { --state: var(--nw-folding); }
+[data-part="persona-agents"] li[data-state="sleeping"] { --state: var(--nw-sleeping); }
+[data-part="persona-agents"] li[data-state="orphaned"] { --state: var(--nw-orphaned); }
+[data-part="persona-agents"] li[data-state="failed"]   { --state: var(--nw-failed); }
+[data-part="persona-agents"] li[data-state="down"]     { --state: var(--nw-ink-2); }
+[data-part="persona-agents"] li[data-activity="waiting"] { --state: var(--nw-belled); }
+[data-part="persona-agents"] li[data-activity="working"] { animation: nw-working 1.3s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { [data-part="persona-agents"] li[data-activity="working"] { animation: none; outline: 2px solid color-mix(in srgb, var(--state) 55%, transparent); outline-offset: 2px; } }
+[data-part="persona-buttons"] { display: flex; gap: 2px; margin-left: auto; }
+[data-part="persona-buttons"] button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--nw-ink-2); cursor: pointer; }
+[data-part="persona-buttons"] button:hover { color: var(--nw-ink); background: var(--nw-hover); }
+[data-part="persona-buttons"] button .nw-icon { width: 15px; height: 15px; }
+[data-part="persona-buttons"] button[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
+/* show/hide agents: the eye says what pressing it will do */
+[data-part="show-agents"] [data-icon="eye"], .nw-persona[data-open="false"] [data-part="show-agents"] [data-icon="eye-off"] { display: none; }
+.nw-persona[data-open="false"] [data-part="show-agents"] [data-icon="eye"] { display: block; }
+
+/* Horizontal: the card is a spine in two columns (Ra, 10/7 round 5): the header (badge, the name turned sideways so
+   tips read upright, the caret at the foot) and, past a seam, the tray (a light per agent, the buttons at the foot).
+   Folding the card's body leaves the header centred in the same width. The runtime keeps the row at least as tall
+   as the spine (the spine is positioned, so it can't size the row itself). */
+:is(.nw-app:not([data-layout="stack"], [data-layout="column"])) .nw-persona > [data-part="persona-card"] { flex-direction: row; justify-content: center; align-items: stretch; gap: 0; }
+:is(.nw-app:not([data-layout="stack"], [data-layout="column"])) [data-part="persona-card"] > [data-part="persona-name"] { flex-direction: column; padding: var(--nw-spine-top, 12.6px) var(--nw-spine-pad-x) 10px; }
+:is(.nw-app:not([data-layout="stack"], [data-layout="column"])) [data-part="persona-name"] > [data-part="label"] { writing-mode: vertical-rl; rotate: 180deg; }
+/* No caret on the spine (Ra, 10/7 round 6): it is narrow already, and folding the tray never made it smaller. The tray
+   always shows here, whatever was chosen in another layout. */
+:is(.nw-app:not([data-layout="stack"], [data-layout="column"])) [data-part="persona-name"] > [data-part="persona-toggle"] { display: none; }
+:is(.nw-app:not([data-layout="stack"], [data-layout="column"])) [data-part="persona-card"] > [data-part="persona-name"] { pointer-events: none; cursor: default; }
+:is(.nw-app:not([data-layout="stack"], [data-layout="column"])) [data-part="persona-card"][data-card-open="false"] > [data-part="persona-body"] { display: flex; }
+:is(.nw-app:not([data-layout="stack"], [data-layout="column"])) [data-part="persona-body"] { flex-direction: column; justify-content: space-between; padding: calc(var(--nw-spine-top, 12.6px) + 7px) var(--nw-spine-pad-x) 8px;
+  border-left: 1px solid var(--nw-seam); border-radius: 0 var(--nw-persona-r, 0) var(--nw-persona-r, 0) 0; }
+:is(.nw-app:not([data-layout="stack"], [data-layout="column"])) [data-part="persona-agents"], :is(.nw-app:not([data-layout="stack"], [data-layout="column"])) [data-part="persona-buttons"] { flex-direction: column; align-items: center; margin: 0; }
+.nw-app:not([data-layout="stack"], [data-layout="column"]):not([data-persona-label="hang"], [data-persona-label="own"]) { --nw-col1: calc(var(--nw-lane-w, 236px) + var(--nw-gutter-w)); }
+.nw-app:not([data-layout="stack"], [data-layout="column"]):not([data-persona-label="hang"], [data-persona-label="own"]) .nw-persona { padding-left: var(--nw-gutter-w); }
+.nw-app:not([data-layout="stack"], [data-layout="column"]):not([data-persona-label="hang"], [data-persona-label="own"]) .nw-persona > [data-part="persona-card"] { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--nw-gutter-w) - 1px); }
+.nw-app[data-persona-label="hang"]:not([data-layout="stack"], [data-layout="column"]) .nw-persona > [data-part="persona-card"] { position: absolute; right: 100%; top: 0; margin-right: 6px; }
+/* Agents hidden: the spine stays a spine and sets the row's height itself, in the same place */
+.nw-app:not([data-layout="stack"], [data-layout="column"]):not([data-persona-label="hang"], [data-persona-label="own"]) .nw-persona[data-open="false"] > [data-part="persona-card"] { position: static; grid-column: 1; justify-self: start; margin-left: calc(-1 * var(--nw-gutter-w)); }
+.nw-app[data-persona-label="hang"]:not([data-layout="stack"], [data-layout="column"]) .nw-persona[data-open="false"] > [data-part="persona-card"] { position: static; grid-column: 1; justify-self: start; margin: 0; translate: calc(-100% - 6px) 0; }
+
+/* Vertical: personas side by side, each its own column, the card on top with a little air before its agents */
+.nw-app[data-layout="column"] .nw-lanes { display: flex; align-items: start; gap: inherit; }
+.nw-app[data-layout="column"] .nw-persona { display: flex; flex-direction: column; gap: inherit; width: var(--nw-lane-w, 236px); }
+.nw-app[data-layout="column"] .nw-persona > * { align-self: stretch; width: auto; justify-self: stretch; }
+:is(.nw-app[data-layout="column"], .nw-app[data-layout="stack"], html[data-surface="popover"] .nw-app) .nw-persona > [data-part="persona-card"] { gap: 0; }
+:is(.nw-app[data-layout="column"], .nw-app[data-layout="stack"], html[data-surface="popover"] .nw-app) [data-part="persona-card"] > [data-part="persona-name"] { padding: 9px 6px 9px 12px; } /* a card header's metrics: the badge sits where a card's avatar does */
+:is(.nw-app[data-layout="column"], .nw-app[data-layout="stack"], html[data-surface="popover"] .nw-app) [data-part="persona-card"] > [data-part="persona-name"] > [data-part="persona-toggle"] { margin-left: auto; }
+:is(.nw-app[data-layout="column"], .nw-app[data-layout="stack"], html[data-surface="popover"] .nw-app) [data-part="persona-body"] { padding: 7px 6px 7px 12px; border-top: 1px solid var(--nw-seam); }
+
+/* Add persona: a small floating + after the last persona (right of it in Vertical, below it in Horizontal) */
+.nw-add-persona { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+  background: var(--nw-surface); color: var(--nw-ink-2); box-shadow: 0 2px 6px rgb(0 0 0 / .22), inset 0 0 0 1px var(--nw-seam); }
+.nw-add-persona:hover { color: var(--nw-ink); }
+.nw-add-persona .nw-icon { width: 15px; height: 15px; }
+.nw-add-persona[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+.nw-app:not([data-layout="stack"], [data-layout="column"]):not([data-persona-label="hang"], [data-persona-label="own"]) .nw-lanes > .nw-add-persona { grid-column: 1; justify-self: start; margin: 6px 0 0 calc((var(--nw-gutter-w) - 28px) / 2); }
+.nw-app[data-persona-label="hang"]:not([data-layout="stack"], [data-layout="column"]) .nw-lanes > .nw-add-persona { grid-column: 1; justify-self: start; margin-top: 6px; translate: var(--nw-add-persona-x, calc(-100% - 6px)) 0; } /* the runtime centres it under the tab */
+.nw-app[data-layout="column"] .nw-lanes > .nw-add-persona { align-self: start; margin: var(--nw-add-persona-y, 0px) 0 0 4px; }
+:is(.nw-app[data-layout="stack"], html[data-surface="popover"] .nw-app) .nw-lanes > .nw-add-persona { justify-self: center; margin: 6px 0; }
+
+/* Restore defaults, at the end of the filter chips (Ra, 10/7), and the heading names the lane while the log is
+   narrowed to one, so the narrowing is visible as well as undoable. */
+.nw-log [data-part="filters"] [data-action="reset-log"] { display: inline-grid; place-items: center; width: 24px; height: 22px; padding: 0; border: 0; border-radius: 99px;
+  background: none; color: var(--nw-ink-2); box-shadow: inset 0 0 0 1px var(--nw-seam); cursor: pointer; }
+.nw-log [data-part="filters"] [data-action="reset-log"] .nw-icon { width: 13px; height: 13px; }
+.nw-log [data-part="filters"] [data-action="reset-log"]:hover { color: var(--nw-ink); background: var(--nw-hover); }
+.nw-log:is([data-lane-only]):not([data-lane-only=""]) [data-part="heading"]::after { content: " · " attr(data-lane-label); text-transform: none; letter-spacing: 0; color: var(--nw-ink); }
+/* The session row sits above the settings' own controls: one button, left-aligned. */
+[data-part="settings"] [data-part="session-row"] { display: flex; }
+
+/* Settings are per persona (Ra, 10/7): the gear on each persona card opens them, so the head's Settings menu drops
+   its "Schedule and health check…" entry here. Skins that hide persona cards (Moonlamp, Brassworks) keep it. */
+.nw-head [data-part="settings-entry"] { display: none; }
+
+/* ---- concrete ---- */
+/* ================= Concrete ================= */
+body { color: var(--nw-ink); font-family: var(--nw-font); }
+.nw-app { gap: 0; filter: drop-shadow(6px 8px 0 rgb(18 18 18 / .9)); }
+.nw-head, .nw-controls, .nw-timeline, .nw-log, .nw-lane > header, .nw-lane [data-part="body"] > *, .nw-alarm, .nw-confirm, .nw-glyphs,
+.nw-add > [data-part="add"], .nw-add [data-part="add-form"],
+.nw-settings, .nw-setup, .nw-add [data-part="preview"] { background: var(--cc-slab); outline: 2px solid var(--nw-ink); outline-offset: -1px; box-shadow: none; }
+
+/* the head: white slab, the name set huge and tight, the clock an inverse block */
+.nw-head { height: 44px; border-bottom: 0; }
+.nw-head [data-part="title"] { font: 400 25px/1 var(--nw-cond); letter-spacing: .02em; text-transform: uppercase; color: var(--nw-ink); padding-top: 4px; }
+.nw-head [data-part="schedule"] { font: 600 11px var(--nw-mono); color: var(--nw-ink-2); }
+.nw-head [data-part="clock"] { padding: 3px 8px 2px; font: 400 17px/1 var(--nw-cond); letter-spacing: .04em; color: var(--nw-surface); background: var(--nw-ink); border-radius: 0; }
+.nw-head > button { width: 26px; height: 26px; border-radius: 0; color: var(--nw-ink); box-shadow: inset 0 0 0 1.5px var(--nw-ink); background: transparent; }
+.nw-head > button:hover, .nw-head > button[aria-expanded="true"] { color: var(--nw-ink); background: var(--cc-orange); }
+/* the glyph: a solid orange block */
+.nw-glyph { --g: 14px; width: 14px; height: 14px; border-radius: 0; background: var(--cc-orange); box-shadow: inset 0 0 0 1.5px var(--nw-ink); }
+.nw-glyph[data-phase="night"] { -webkit-mask: none; mask: none; background: transparent; }
+.nw-glyph[data-phase="down"] { background: #a9a49a; }
+.nw-glyph[data-phase="alarm"] { background: var(--cc-hazard-red); background-size: 10px 10px; }
+.nw-glyph[data-phase="alarm"]::before { display: none; }
+/* menus: white cards with a hard offset shadow */
+.nw-head [data-part="view-menu"] { border-radius: 0; background: var(--cc-slab); border: 2px solid var(--nw-ink); box-shadow: var(--cc-shadow); }
+.nw-head [data-part="view-menu"] label, .nw-head [data-part="view-menu"] button { font: 400 15px var(--nw-cond); text-transform: uppercase; letter-spacing: .05em; color: var(--nw-ink); }
+.nw-head [data-part="view-menu"] label:hover, .nw-head [data-part="view-menu"] button:hover { background: var(--cc-orange); color: var(--nw-ink); }
+.nw-head [data-part="view-menu"] input, input[type="checkbox"] { accent-color: var(--cc-orange); }
+
+/* the three main panels: crop marks, and a black index tab with the panel's name turned up the left edge */
+/* The tab is a real left border, so everything the layout positions against the padding edge (Vertical's axis, heading
+   and range) moves with it; its label hangs in the border. */
+.nw-controls, .nw-timeline, .nw-log { position: relative; background: var(--cc-crop), var(--cc-slab) !important; border-left: 24px solid var(--nw-ink) !important; }
+:is(.nw-controls, .nw-timeline, .nw-log)::before { position: absolute; left: -24px; top: 0; bottom: 0; width: 24px; z-index: 1; box-sizing: border-box; padding: 9px 0;
+  writing-mode: vertical-rl; rotate: 180deg; text-align: left; font: 400 15px/24px var(--nw-cond); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--nw-surface); background: var(--nw-ink); white-space: nowrap; overflow: hidden; }
+.nw-controls::before { content: "01 \2014 Deck"; }
+.nw-timeline::before { content: "02 \2014 Timeline"; }
+.nw-log::before { content: "03 \2014 Log"; }
+/* the tab carries the name, so the in-panel heading keeps only its range label */
+.nw-timeline [data-part="heading"] { font-size: 0 !important; }
+.nw-timeline [data-part="heading"] span { font: 600 11px var(--nw-mono); letter-spacing: 0; color: var(--nw-ink-2); }
+.nw-log [data-part="heading"] { display: none; }
+
+/* lanes: a white slab under a thick bar of the state's colour */
+.nw-lane > header { border-radius: 0; background: var(--cc-slab) !important; box-shadow: inset 0 6px 0 var(--state) !important; }
+.nw-lane > header:hover { background: linear-gradient(rgb(255 90 0 / .06), rgb(255 90 0 / .06)), var(--cc-slab) !important; }
+:is(.nw-lane [data-part="avatar"], .nw-persona [data-part="persona-avatar"]) { width: 28px; height: 28px; border-radius: 0; background: var(--state); color: #fff;
+  font: 400 19px/30px var(--nw-cond); text-shadow: none; box-shadow: inset 0 0 0 1.5px var(--nw-ink); }
+.nw-lane [data-part="name"] { font: 400 21px/1 var(--nw-cond); text-transform: uppercase; letter-spacing: .02em; color: var(--nw-ink); }
+.nw-lane [data-part="model"] { font: 600 10.5px var(--nw-mono); color: var(--nw-ink-2); text-transform: uppercase; }
+.nw-lane [data-part="state"] { padding: 3px 6px 1px; border-radius: 0; font: 400 13px/1 var(--nw-cond); letter-spacing: .06em; color: #fff; background: var(--state); box-shadow: inset 0 0 0 1.5px var(--nw-ink); }
+.nw-lane[data-state="awake"] [data-part="state"] { padding: 0; width: 14px; height: 14px; }
+.nw-lane [data-part="state"] i { display: none; }
+.nw-lane[data-state="failed"] [data-part="state"] { background: var(--cc-hazard-red); background-size: 20px 20px; text-shadow: 0 0 3px #121212, 0 0 2px #121212; }
+.nw-lane [data-part="toggle"] { width: 20px; height: 20px; border-radius: 0; color: var(--nw-ink); box-shadow: inset 0 0 0 1.5px var(--nw-ink); }
+.nw-lane [data-part="facts"] { font: 600 11px var(--nw-mono); color: var(--nw-ink-2); }
+.nw-lane [data-part="next"], .nw-lane [data-part="midday"], .nw-lane [data-part="glance"] time { color: var(--nw-ink); }
+.nw-lane :is([data-part="next"], [data-part="midday"])[aria-pressed="true"] { color: var(--cc-orange-deep); }
+
+/* meters: a flat bar inside a ruled box with a tick scale; orange fill, hazard when high or over */
+.nw-lane :is([data-part="context"] [data-part="bar"], [data-part="throughput"] svg:not(.nw-icon)) { height: 14px; border-radius: 0;
+  background: repeating-linear-gradient(90deg, var(--nw-ink) 0 1px, transparent 1px 10%) bottom / 100% 3px no-repeat, #fff; box-shadow: inset 0 0 0 1.5px var(--nw-ink); }
+.nw-lane :is([data-part="context"], [data-part="throughput"]):not([data-level="high"]):not([data-level="over"]) { --meter: var(--cc-orange); }
+.nw-lane [data-part="context"] [data-part="bar"]::before { inset: 3px auto 5px 3px; border-radius: 0; width: calc(min(var(--fill), 1) * (100% - 6px)); background: var(--meter); box-shadow: none; }
+.nw-lane [data-part="context"][data-level="high"] [data-part="bar"]::before { background: var(--cc-hazard-yel); background-size: 14px 14px; }
+.nw-lane [data-part="context"][data-level="over"] [data-part="bar"]::before { background: var(--cc-hazard-red); background-size: 14px 14px; }
+.nw-lane [data-part="throughput"] svg:not(.nw-icon) { padding: 3px 3px 4px; }
+.nw-lane [data-part="throughput"] rect { fill: var(--meter); }
+.nw-lane :is([data-part="context"], [data-part="throughput"]) [data-part="value"] { font: 400 17px/1 var(--nw-cond); color: var(--nw-ink); }
+.nw-lane :is([data-part="context"], [data-part="throughput"]) > .nw-icon { color: var(--nw-ink); }
+.nw-lane [data-part="mini"] { height: 6px; border-radius: 0; background: #fff; box-shadow: inset 0 0 0 1px var(--nw-ink); }
+.nw-lane [data-part="mini"]::before { border-radius: 0; }
+
+/* keys: square, ink-ruled; orange under the finger */
+:is(.nw-lane [data-part="actions"] button, .nw-persona [data-part="persona-buttons"] button) { width: 28px; height: 28px; border-radius: 0; color: var(--nw-ink); background: #fff; box-shadow: inset 0 0 0 1.5px var(--nw-ink); }
+:is(.nw-lane [data-part="actions"] button, .nw-persona [data-part="persona-buttons"] button):hover { background: var(--cc-orange); color: var(--nw-ink); }
+.nw-lane [data-part="actions"] button[aria-disabled="true"] { opacity: .35; }
+.nw-lane [data-part="actions"] button[data-danger="true"]:not([aria-disabled="true"]) { color: #fff; background: var(--cc-red); }
+.nw-lane [data-part="actions"] button[aria-expanded="true"] { color: var(--cc-orange); background: var(--nw-ink); }
+[data-part="fix"], .nw-alert [data-part="ack"], :is([data-part="buttons"], [data-part="session-row"]) button { border: 0; border-radius: 0; padding: 5px 10px 3px; background: #fff; color: var(--nw-ink);
+  box-shadow: inset 0 0 0 1.5px var(--nw-ink); font: 400 15px/1 var(--nw-cond); text-transform: uppercase; letter-spacing: .05em; }
+:is([data-part="fix"], .nw-alert [data-part="ack"], [data-part="buttons"] button):hover { background: var(--cc-orange); }
+[data-part="fix"]:first-child { background: var(--cc-red); color: #fff; box-shadow: inset 0 0 0 1.5px var(--nw-ink), var(--cc-shadow); }
+.nw-alert[data-level="warn"] [data-part="fix"]:first-child { background: var(--cc-yellow); color: var(--nw-ink); }
+[data-part="buttons"] button[data-primary="true"] { background: var(--cc-orange); color: var(--nw-ink); box-shadow: inset 0 0 0 1.5px var(--nw-ink), var(--cc-shadow); }
+[data-part="buttons"] button[data-danger="true"] { color: var(--cc-red); }
+.nw-confirm [data-part="buttons"] button[data-danger="true"] { background: var(--cc-red); color: #fff; box-shadow: inset 0 0 0 1.5px var(--nw-ink), var(--cc-shadow); }
+.nw-lane [data-part="settings"], .nw-add [data-part="add-form"] { background: var(--cc-slab) !important; }
+.nw-lane [data-part="settings"] :is(select, input:not([type="checkbox"])), .nw-add :is(select, input:not([type="checkbox"])),
+:is(.nw-settings, .nw-setup) :is(select, textarea, input:not([type="checkbox"])) { border-radius: 0; background: #fff; border: 1.5px solid var(--nw-ink); color: var(--nw-ink); font-family: var(--nw-mono); }
+
+/* the alert: a hazard band down the left edge, a big condensed title */
+.nw-alert { position: relative; padding-left: 26px !important; background: var(--cc-hazard-red) left top / 14px 100% no-repeat, var(--cc-slab) !important; box-shadow: none; }
+.nw-alert[data-level="warn"] { background: var(--cc-hazard-yel) left top / 14px 100% no-repeat, var(--cc-slab) !important; box-shadow: none; }
+.nw-alert > .nw-icon { color: var(--cc-red); }
+.nw-alert[data-level="warn"] > .nw-icon { color: var(--nw-ink); }
+.nw-alert [data-part="title"] { font: 400 21px/1 var(--nw-cond); text-transform: uppercase; letter-spacing: .02em; color: var(--cc-red); }
+.nw-alert[data-level="warn"] [data-part="title"] { color: var(--nw-ink); }
+.nw-alert [data-part="cause"], .nw-alert[data-level="warn"] [data-part="cause"] { color: var(--nw-ink); }
+.nw-alert [data-part="time"] { font: 600 11px var(--nw-mono); color: var(--nw-ink-2); }
+
+/* add rail */
+.nw-add > [data-part="add"] { color: var(--nw-ink); font: 400 16px var(--nw-cond); text-transform: uppercase; letter-spacing: .08em; }
+.nw-add > [data-part="add"] .nw-icon { width: 22px; height: 22px; padding: 3px; border-radius: 0; color: var(--nw-ink); background: var(--cc-orange); box-shadow: inset 0 0 0 1.5px var(--nw-ink); }
+.nw-app .nw-add > [data-part="add"]:hover { background: linear-gradient(rgb(255 90 0 / .12), rgb(255 90 0 / .12)), var(--cc-slab) !important; }
+
+/* the deck: an ink-ruled readout with an oversized count; the primary key is the orange block */
+.nw-controls [data-part="display"] { border-radius: 0; background: #fff; box-shadow: inset 0 0 0 1.5px var(--nw-ink); }
+.nw-controls [data-part="summary"] { font: 400 18px var(--nw-cond); text-transform: uppercase; letter-spacing: .04em; color: var(--nw-ink); }
+.nw-controls [data-part="summary"] b { font: 400 40px/.9 var(--nw-cond); color: var(--cc-orange); letter-spacing: 0; vertical-align: -6px; }
+.nw-controls [data-part="next"] { color: var(--nw-ink-2); font: 600 11px var(--nw-mono); text-transform: uppercase; }
+.nw-controls [data-part="next"] time, .nw-controls [data-part="next"] b { color: var(--nw-ink); }
+.nw-controls [data-part="counts"] { font: 400 15px var(--nw-cond); text-transform: uppercase; letter-spacing: .04em; color: var(--nw-ink-2); }
+.nw-controls [data-part="counts"] b { color: var(--nw-ink); }
+.nw-controls [data-part="counts"] li::before { border-radius: 0; width: 9px; height: 9px; box-shadow: inset 0 0 0 1px var(--nw-ink); }
+.nw-controls [data-part="transport"] button { border: 0; border-radius: 0; color: var(--nw-ink); background: #fff; box-shadow: inset 0 0 0 1.5px var(--nw-ink); }
+.nw-controls [data-part="transport"] button:hover { background: var(--cc-orange); }
+.nw-controls [data-part="transport"] button[data-part="primary"] { background: var(--cc-orange) !important; color: var(--nw-ink) !important; border: 0 !important;
+  font: 400 18px/1 var(--nw-cond) !important; text-transform: uppercase; letter-spacing: .05em; box-shadow: inset 0 0 0 2px var(--nw-ink), var(--cc-shadow) !important; }
+.nw-controls [data-part="transport"] button[data-part="primary"]:hover { background: var(--nw-ink) !important; color: var(--cc-orange) !important; }
+.nw-controls [data-part="transport"] button[data-danger="true"] { color: #fff; background: var(--cc-red); }
+.nw-controls [data-part="transport"] button[aria-disabled="true"] { opacity: .4; }
+.nw-controls :is([data-part="toggles"], [data-part="transport"]) button[aria-pressed="true"] { color: var(--cc-orange); background: var(--nw-ink); }
+
+/* the timeline: an engineering sheet; ink rules for lanes, square stamps for events */
+.nw-timeline { background: var(--cc-crop), linear-gradient(rgb(18 18 18 / .045) 1px, transparent 1px) 0 0 / 100% 12px,
+  linear-gradient(90deg, rgb(18 18 18 / .045) 1px, transparent 1px) 0 0 / 12px 100%, var(--cc-slab) !important; }
+.nw-timeline [data-part="range"] { padding: 0; gap: 0; border-radius: 0; background: #fff; box-shadow: inset 0 0 0 1.5px var(--nw-ink); }
+.nw-timeline [data-part="range"] button { border-radius: 0; padding: 3px 8px 1px; font: 400 14px/1 var(--nw-cond); color: var(--nw-ink); box-shadow: inset -1.5px 0 0 var(--nw-ink); }
+.nw-timeline [data-part="range"] button:last-child { box-shadow: none; }
+.nw-timeline [data-part="range"] button[aria-checked="true"] { background: var(--nw-ink); color: var(--cc-orange); }
+.nw-timeline [data-part="axis"] { font: 600 10px var(--nw-mono); color: var(--nw-ink); }
+.nw-strip::before { font: 400 16px var(--nw-cond); text-transform: uppercase; letter-spacing: .04em; color: var(--nw-ink); }
+.nw-strip[data-mode="compressed"]::before { color: var(--nw-ink-2); }
+.nw-strip::after { height: 2px; top: 11.5px; border-radius: 0; background: var(--nw-ink); }
+.nw-node { border-radius: 0; color: var(--nw-ink); background: #fff; box-shadow: inset 0 0 0 1.5px var(--nw-ink); }
+.nw-node[data-status]:not([data-status="ok"]) { background: var(--c); color: #fff; }
+.nw-node[data-alarm="true"] { background: var(--cc-hazard-red); background-size: 12px 12px; color: #fff; box-shadow: inset 0 0 0 1.5px var(--nw-ink); }
+.nw-node[data-alarm="true"] .nw-icon { filter: drop-shadow(0 0 1px #121212) drop-shadow(0 0 1px #121212); }
+.nw-node [data-part="count"] { border-radius: 0; background: var(--nw-ink); color: var(--cc-orange); box-shadow: none; font: 400 12px/1 var(--nw-cond); padding: 2px 3px 0; }
+.nw-node [data-part="lanes"] i { border-radius: 0; background: var(--nw-ink); color: var(--nw-surface); }
+.nw-strip[data-mode="compressed"] .nw-node[style*="--stack: 1"], .nw-strip[data-mode="compressed"] .nw-node[style*="--stack: 2"] { box-shadow: inset 0 0 0 1.5px var(--nw-ink); }
+.nw-timeline [data-part="activity"] { --act: var(--cc-orange); border-radius: 0; background: #fff; box-shadow: inset 0 0 0 1.5px var(--nw-ink); }
+.nw-timeline [data-part="activity"]::before { font: 400 14px var(--nw-cond); text-transform: uppercase; letter-spacing: .06em; color: var(--nw-ink); }
+.nw-timeline [data-part="activity"] [data-part="grid"] line { stroke: rgb(18 18 18 / .14); stroke-dasharray: none; }
+.nw-timeline [data-part="activity"] [data-part="fill-top"] { stop-opacity: .35; }
+.nw-timeline [data-part="activity"] [data-part="line"] { stroke-width: 2; }
+.nw-timeline :is([data-part="activity"], [data-part="sleep-bands"]) [data-part="sleep"] { background: repeating-linear-gradient(-45deg, rgb(18 18 18 / .09) 0 2px, transparent 2px 7px); border-radius: 0;
+  font: 400 15px var(--nw-cond); letter-spacing: .12em; text-transform: uppercase; color: var(--nw-ink-2); }
+.nw-timeline [data-part="activity"] :is([data-part="peak"], [data-part="cursor-label"]) { border-radius: 0; background: var(--nw-ink); color: var(--cc-orange); box-shadow: none; font: 600 10.5px var(--nw-mono); }
+.nw-timeline [data-part="activity"] [data-part="peak"]::after { border-radius: 0; }
+:is(.nw-timeline, .nw-log) [data-part="empty"] { font: 400 17px var(--nw-cond); letter-spacing: .06em; text-transform: uppercase; color: var(--nw-ink-2); }
+
+/* the log: a ruled sheet; day rules are inverse bars */
+.nw-log [data-part="events"] { border-radius: 0; background: #fff; box-shadow: inset 0 0 0 1.5px var(--nw-ink); padding: 0 1.5px; }
+.nw-log .nw-day { padding: 4px 6px 2px; background: var(--nw-ink); color: var(--nw-surface); font: 400 14px/1 var(--nw-cond); letter-spacing: .1em; text-transform: uppercase; }
+.nw-event { padding: 4px 6px; border-top: 1px solid rgb(18 18 18 / .18); color: var(--nw-ink); }
+.nw-event [data-part="time"] { font: 600 10.5px var(--nw-mono); color: var(--nw-ink-2); }
+.nw-event [data-part="lane"] { font: 400 15px/1 var(--nw-cond); text-transform: uppercase; letter-spacing: .04em; color: var(--nw-ink); }
+.nw-event > .nw-icon { color: var(--nw-ink); }
+.nw-event[data-status="failed"] > .nw-icon { color: var(--cc-red); } .nw-event[data-status="warn"] > .nw-icon { color: var(--nw-warn); }
+.nw-event[data-alarm="true"] [data-part="what"] { color: var(--cc-red); font-weight: 700; }
+.nw-event [data-part="kept"] { background: linear-gradient(90deg, rgb(255 90 0 / .22) calc(var(--kept) * 100%), transparent 0) no-repeat; color: var(--nw-ink); }
+.nw-event[data-level="over"] [data-part="est"] { color: var(--cc-red); }
+.nw-log [data-part="filters"] label { border-radius: 0; color: var(--nw-ink-2); background: #fff; box-shadow: inset 0 0 0 1.5px var(--nw-ink); }
+.nw-log [data-part="filters"] label:has(input:checked) { color: var(--cc-orange); background: var(--nw-ink); }
+
+/* Vertical layout: the lane line stands on end; the hour lines are faint ink */
+.nw-app[data-layout="column"] .nw-strip::after { width: 2px; left: calc(50% - 1px); }
+:root { --tl-grid: rgb(18 18 18 / .12); --tl-grid-mask: none; }
+.nw-app[data-layout="column"] .nw-timeline [data-part="axis"]::before { font: 400 15px var(--nw-cond); text-transform: uppercase; letter-spacing: .06em; color: var(--cc-orange-deep); }
+
+/* persona: an ink spine, its name turned up it in white, the state as the orange bar */
+.nw-persona { --nw-persona-bg: var(--nw-ink); --nw-persona-outline: none; --nw-persona-shadow: inset 0 6px 0 var(--state); }
+.nw-app .nw-persona [data-part="persona-name"] { font: 400 22px/1 var(--nw-cond); letter-spacing: .1em; text-transform: uppercase; color: var(--nw-surface); }
+.nw-persona [data-part="persona-name"] > [data-part="persona-toggle"] { border-radius: 0; color: var(--nw-surface); box-shadow: inset 0 0 0 1.5px var(--nw-surface); }
+.nw-persona [data-part="persona-buttons"] button { background: var(--nw-ink); color: var(--nw-surface); box-shadow: inset 0 0 0 1.5px var(--nw-surface); }
+.nw-persona [data-part="persona-buttons"] button:hover { background: var(--cc-orange); color: var(--nw-ink); }
+.nw-persona [data-part="persona-agents"] li { width: 10px; height: 10px; border-radius: 0; box-shadow: inset 0 0 0 1px var(--nw-surface); }
+.nw-persona [data-part="persona-body"] { --nw-persona-tray: rgb(255 255 255 / .06); }
+:root { --nw-gutter-w: 60px; }
+
+/* add persona: a square orange block like the add rail's, not a floating disc */
+.nw-add-persona { border-radius: 0; color: var(--nw-ink); background: var(--cc-orange); box-shadow: inset 0 0 0 1.5px var(--nw-ink), var(--cc-shadow); }
+.nw-add-persona:hover { background: var(--nw-ink); color: var(--cc-orange); }

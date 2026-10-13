@@ -75,7 +75,7 @@ const io = {
   now: () => Date.now(),
 };
 
-const SKIN_ORDER = ['minimal', 'glass', 'amber', 'metal', 'wacky', 'steampunk'];
+const SKIN_ORDER = ['minimal', 'glass', 'amber', 'metal', 'wacky', 'steampunk', 'concrete'];
 function skinsFromDisk() {
   const found = [];
   try {
