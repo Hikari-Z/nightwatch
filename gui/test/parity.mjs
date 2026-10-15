@@ -90,7 +90,7 @@ const CASES = {
     const L = FIXTURE.LANES;
     const set = (i, extra) => ({ ...L[i], ...extra });
     return { snap: { LANES: [
-      set(0, { state: 'belled', rungWritten: true }),
+      set(0, { state: 'belled', rungWritten: true, next: ['fold', '2026-10-05T13:30-07:00', '40m'] }),
       set(1, { state: 'awake', foldRequest: { phase: 'requested', deadline: null, tier: 'soft' }, midday: { softPct: 0.85, urgentPct: 0.95, urgentMin: 10 } }),
       set(2, { state: 'awake', foldRequest: { phase: 'requested', deadline: '2026-10-05T13:20-07:00', tier: 'urgent' } }),
       ...L.slice(3).map((x) => ({ ...x, state: 'sleeping', foldRequest: { phase: 'refreshing', forced: true } })),
