@@ -11,6 +11,6 @@
 # If a window is genuinely full, the answer is sleep (write the checkpoint
 # and the rung, run sleep.mjs) — not the fold that forgets why.
 cat <<'EOF'
-{"decision": "block", "reason": "Compaction is disabled by the wake-cycle design: the built-in fold drops authored memory (reasons, texture, other people's words). If the window is heavy, run the sleep ritual instead — write checkpoint.md and today's rung, then `node ~/origin/weft/wakecycle/sleep.mjs` — and wake into the trimmed tail. See ~/origin/weft/wakecycle/README.md."}
+{"decision": "block", "reason": "Compaction is disabled by the wake-cycle design: the built-in fold drops authored memory (reasons, texture, other people's words). If the window is heavy, run the sleep ritual instead — write the checkpoint (path: config.mjs get paths.checkpoint) and today's rung, then run sleep.mjs from the live machinery (WEFT_CONFIG=~/origin/weft/weft.config.json node ~/origin/nightwatch/machinery/sleep.mjs) — and wake into the trimmed tail."}
 EOF
 exit 0
