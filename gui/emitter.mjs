@@ -448,7 +448,7 @@ function lane_card(L, nowIso = null, tz = undefined) {
     // click disarms; disarmed it's a crossed bell, unlit, "none", and a click
     // arms it. No time = nothing scheduled.
     nxt = !dt ? `<li data-part="next" data-action="arm-lane" aria-pressed="false" data-tip="Disarmed: no bell or wake scheduled. Click to arm.">${icon('bell-off')}<span>${esc(disp)}</span></li>`
-      : `<li data-part="next" data-action="arm-lane" aria-pressed="true" data-tip="Next ${what}: ${hmLocal(dt, tz)}. Click to disarm.">${icon('bell')}` +
+      : `<li data-part="next" data-action="arm-lane" aria-pressed="true" data-tip="${what === 'fold' ? `Folds by ${hmLocal(dt, tz)} if they haven't folded themselves` : `Next ${what}: ${hmLocal(dt, tz)}`}. Click to disarm.">${icon('bell')}` +
       `<time datetime="${dt}" data-part="countdown">${esc(disp)}</time></li>`;
   }
   // The midday cycle's switch (Ra, 10/12), beside the bell: lit while the
@@ -465,7 +465,7 @@ function lane_card(L, nowIso = null, tz = undefined) {
   let glance_next = '';
   if (L.next) {
     const [what, dt, disp] = L.next;
-    glance_next = `${icon(what === 'bell' ? 'bell' : 'sun')}<time datetime="${dt}">${esc(disp)}</time>`;
+    glance_next = `${icon(what === 'bell' ? 'bell' : what === 'fold' ? 'fold' : 'sun')}<time datetime="${dt}">${esc(disp)}</time>`;
   }
   let alert = '';
   if (alarm) {

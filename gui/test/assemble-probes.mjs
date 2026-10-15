@@ -352,6 +352,20 @@ const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
   check('stage: already-awake after the fold keeps folding', L.state === 'folding', `state=${L.state}`);
   L = assemble(cfg, live([bell, { at: iso(2 * 60e3), kind: 'stale-receipt', lane: 'fable' }]), '8h').LANES[0];
   check('stage: stale-receipt after the bell keeps belled', L.state === 'belled', `state=${L.state}`);
+  // One countdown per card, the next thing that happens (opus, 10/15): not
+  // tomorrow's bell while tonight's fold or the morning wake is pending.
+  const grace = cfg.schedule?.orphanGraceMs ?? 45 * 60e3;
+  L = assemble(cfg, live([bell]), '8h').LANES[0];
+  check('countdown: a belled lane counts to the floor (the bell plus the orphan grace)',
+    L.next?.[0] === 'fold' && Date.parse(L.next[1]) === Date.parse(bell.at) + grace, `next=${JSON.stringify(L.next)}`);
+  L = assemble(cfg, live([bell, folded]), '8h').LANES[0];
+  check('countdown: folded with the window open counts to the wake, not the next bell', L.next?.[0] === 'wake', `next=${JSON.stringify(L.next)}`);
+  L = assemble(cfg, live([{ at: iso(grace + 60e3), kind: 'bell-rung', lane: 'fable', session: REG }]), '8h').LANES[0];
+  check('countdown: past the floor it reads now', L.next?.[0] === 'fold' && L.next[2] === 'now', `next=${JSON.stringify(L.next)}`);
+  L = assemble(cfg, live([{ at: iso(6 * 60e3), kind: 'fold-requested', lane: 'fable', session: REG, tier: 'soft', deadline: null }, bell]), '8h').LANES[0];
+  check('countdown: a midday bell keeps the bell slot (its own line narrates the fold)', L.next?.[0] === 'bell', `next=${JSON.stringify(L.next)} fr=${JSON.stringify(L.foldRequest)}`);
+  L = assemble(cfg, live([]), '8h').LANES[0];
+  check('countdown: an awake lane still counts to the bell', L.state === 'awake' && L.next?.[0] === 'bell', `state=${L.state} next=${JSON.stringify(L.next)}`);
   // Closed: already-awake still counts, so a hand-rescued lane that later
   // closes reads sleeping, not failed.
   const dead = (lines) => ({ ...live(lines), livePids: () => [] });

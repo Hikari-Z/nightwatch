@@ -362,6 +362,11 @@ export function assemble(cfg, io, range = '8h') {
     const mins = Math.round((d.getTime() - nowMs) / 60_000);
     return [d.toISOString(), `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`];
   };
+  // The same pair for a fixed instant; past it reads "now", as the runtime's ticker does.
+  const isoIn = (ms) => {
+    const mins = Math.round((ms - nowMs) / 60_000);
+    return [new Date(ms).toISOString(), mins <= 0 ? 'now' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`];
+  };
 
   // The persona this config describes: their configured name, else their folder's
   // name (never a hardcoded "Weft"; another house's persona is someone else).
@@ -536,7 +541,15 @@ export function assemble(cfg, io, range = '8h') {
     const sinceMs = alive ? (regAt(sessionSid) ?? r?.at) : (sleptEvt ? Date.parse(sleptEvt.at) : r?.at);
     const sinceIso = sinceMs ? new Date(sinceMs).toISOString() : nowIso;
     const sched = lc.schedule ?? cfg.schedule ?? {};
+    // One countdown per card, the one that matters next (design-stage-words.md):
+    // belled at night, the floor (the bell plus the orphan grace, after which
+    // the nightshift folds them once their session is quiet); folded with the
+    // window still open, the wake. A midday fold narrates its own line instead.
+    const floorMs = state === 'belled' && !foldRequest && last?.at
+      ? Date.parse(last.at) + (cfg.schedule?.orphanGraceMs ?? 45 * 60_000) : NaN;
     const next = !armed.includes(id) ? [alive ? 'bell' : 'wake', '', 'none']
+      : floorMs > 0 ? ['fold', ...isoIn(floorMs)]
+      : state === 'folding' && !foldRequest ? ['wake', ...nextAt(sched.wake ?? '08:00')]
       : alive ? ['bell', ...nextAt(sched.sleep ?? '02:00')] : ['wake', ...nextAt(sched.wake ?? '08:00')];
     // ...or when the lane is plainly running a session other than the one
     // that was folded: whatever happened, the refresh is over.

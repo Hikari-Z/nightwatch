@@ -462,7 +462,7 @@ def lane_card(L, now=None):
         if not dt:
             nxt = f'<li data-part="next" data-action="arm-lane" aria-pressed="false" data-tip="Disarmed: no bell or wake scheduled. Click to arm.">{icon("bell-off")}<span>{esc(disp)}</span></li>'
         else:
-            nxt = (f'<li data-part="next" data-action="arm-lane" aria-pressed="true" data-tip="Next {what}: {local(dt).strftime("%H:%M")}. Click to disarm.">{icon("bell")}'
+            nxt = (f'<li data-part="next" data-action="arm-lane" aria-pressed="true" data-tip="{("Folds by " + local(dt).strftime("%H:%M") + " if they haven\'t folded themselves") if what == "fold" else ("Next " + what + ": " + local(dt).strftime("%H:%M"))}. Click to disarm.">{icon("bell")}'
                    f'<time datetime="{dt}" data-part="countdown">{esc(disp)}</time></li>')
     # The midday cycle's switch (Ra, 10/12); twin of emitter.mjs.
     mc = L.get("midday")
@@ -477,7 +477,7 @@ def lane_card(L, now=None):
     glance_next = ""
     if L["next"]:
         what, dt, disp = L["next"]
-        glance_next = f'{icon("bell" if what=="bell" else "sun")}<time datetime="{dt}">{esc(disp)}</time>'
+        glance_next = f'{icon("bell" if what=="bell" else "fold" if what=="fold" else "sun")}<time datetime="{dt}">{esc(disp)}</time>'
     alert = ""
     if alarm:
         a = L["alert"]
