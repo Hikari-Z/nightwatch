@@ -517,7 +517,12 @@ function doctorSweep({ remove = false, yes = false } = {}) {
     if (ext === '.plist') {
       cfg = plutilRaw(file, 'EnvironmentVariables.WEFT_CONFIG');
       script = plutilRaw(file, 'ProgramArguments.1');
-      parsed = cfg !== null || script !== null;
+      // ProgramArguments.1 assumes [node, script]; a hand-added node flag
+      // shifts the script and index 1 reads as '--inspect', whose exists()
+      // is false — which would make a LIVING job removable (opus's nit on
+      // e88ab57). A value that isn't a .mjs path wasn't parsed.
+      if (script !== null && !script.endsWith('.mjs')) script = null;
+      parsed = (cfg !== null && cfg.includes('/')) || script !== null;
     } else {
       let text = '';
       try { text = readFileSync(file, 'utf8'); } catch { continue; }

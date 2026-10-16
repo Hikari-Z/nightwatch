@@ -120,6 +120,19 @@ try {
   check('the living binary job survives --remove --yes', () =>
     assert.ok(existsSync(join(jobsDir, ampJob.fileName))));
   rmSync(join(jobsDir, 'house.nightwatch.garbage.plist'));
+  // A hand-added node flag shifts ProgramArguments; the script index then
+  // reads '--inspect', which must make the job UNREADABLE, never removable.
+  writeFileSync(join(jobsDir, 'house.nightwatch.flagged.plist'), `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>Label</key><string>house.nightwatch.flagged</string>
+  <key>ProgramArguments</key><array><string>/usr/bin/node</string><string>--inspect</string><string>${join(HERE, 'nightshift.mjs')}</string></array>
+</dict></plist>\n`);
+  check('a flag-shifted living job is unreadable, not missing', () =>
+    assert.match(nw(['doctor-sweep']), /house\.nightwatch\.flagged.*unparseable/));
+  nw(['doctor-sweep', '--remove', '--yes']);
+  check('a flag-shifted living job survives --remove --yes', () =>
+    assert.ok(existsSync(join(jobsDir, 'house.nightwatch.flagged.plist'))));
+  rmSync(join(jobsDir, 'house.nightwatch.flagged.plist'));
 
   // 6. A clean second sweep has nothing to do.
   check('a second sweep finds a clean house', () => assert.match(nw(['doctor-sweep']), /Nothing to do/));
