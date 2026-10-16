@@ -4,9 +4,12 @@
 // Drive the served Nightwatch page through CDP: click each control, read back
 // what the runtime wrote. Usage: node drive.mjs [baseUrl]
 import { spawn } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 const BASE = process.argv[2] ?? 'http://127.0.0.1:7352/';
 const PORT = 9337;
+// A Chrome already on this port would quietly host the test instead of ours
+// (10/16: a two-day-old leftover did). Refuse to start beside one.
+try { await fetch(`http://127.0.0.1:${PORT}/json/version`); console.error(`port ${PORT} already has a Chrome on it: stop it first`); process.exit(2); } catch { /* free, as it should be */ }
 const prof = mkdtempSync(process.env.TMPDIR + '/nwcdp-');
 const ch = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   ['--headless=new', '--disable-gpu', `--remote-debugging-port=${PORT}`, `--user-data-dir=${prof}`, '--window-size=1100,1000', 'about:blank'],
@@ -219,4 +222,4 @@ for (const skin of ['minimal', 'glass', 'amber', 'metal']) {
   }
 }
 
-console.log(`\n${pass} passed, ${fail} failed`); ws.close(); ch.kill(); process.exit(fail ? 1 : 0);
+console.log(`\n${pass} passed, ${fail} failed`); ws.close(); ch.kill(); await sleep(300); rmSync(prof, { recursive: true, force: true }); process.exit(fail ? 1 : 0);
