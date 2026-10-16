@@ -169,7 +169,7 @@ function liveSessions() {
   const out = [];
   const seenPids = new Set();
   let socks = [];
-  try { socks = readdirSync(BRIDGE_SOCK_DIR).filter((f) => /^sock-[0-9a-f-]{36}\.sock$/.test(f)); } catch { return out; }
+  try { socks = readdirSync(BRIDGE_SOCK_DIR).filter((f) => /^sock-[0-9a-f-]{36}\.sock$/.test(f)); } catch { /* no bridge here: status files below */ }
   for (const f of socks) {
     const sessionId = f.slice(5, -5);
     try {
@@ -187,6 +187,28 @@ function liveSessions() {
         pid = ppid;
       }
     } catch { /* stale sock, dead chain */ }
+  }
+  // Without the bridge (every install but the one it came from: the first
+  // WSL hub, 10/16, read "live sessions: (none)" with its lane plainly up,
+  // so the bell could never ring), Claude Code's own status files name each
+  // live session: ~/.claude/sessions/<pid>.json. Those cover every claude on
+  // the machine, a person's unrelated tabs included, so one counts only
+  // when this hub registered its session (wakecycle/lane.<sessionId>) —
+  // never by the cwd heuristic, which would bell or close a stranger.
+  let files = [];
+  try { files = readdirSync(HARNESS_SESSIONS_DIR).filter((f) => /^\d+\.json$/.test(f)); } catch {}
+  for (const f of files) {
+    const pid = Number(f.slice(0, -5));
+    if (seenPids.has(pid)) continue;
+    try {
+      process.kill(pid, 0);
+      const comm = execFileSync('ps', ['-o', 'comm=', '-p', String(pid)], { encoding: 'utf8' }).trim();
+      if (comm !== 'claude' && !comm.endsWith('/claude')) continue;
+      const sessionId = currentSessionOf(pid);
+      if (!sessionId || !existsSync(join(WAKECYCLE, `lane.${sessionId}`))) continue;
+      seenPids.add(pid);
+      out.push({ pid, sessionId });
+    } catch { /* gone, or not ours */ }
   }
   return out;
 }
