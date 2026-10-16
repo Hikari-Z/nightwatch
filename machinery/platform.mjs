@@ -94,8 +94,12 @@ export const TMUX_SUMMON =
  *  on Linux that shell often can't see node: nvm (and an npm-installed
  *  claude beside it) lives on a PATH only an interactive bash adds, while the
  *  window runs `sh -lc`. wake.sh needs node from its first line, so callers
- *  prefix the daemon's own node dir, plus the configured claude's dir. Pure. */
-export function withToolPath(shellCommand, { nodePath = process.execPath, claudeBin } = {}) {
+ *  prefix the daemon's own node dir, plus the configured claude's dir. Pure.
+ *  Not on darwin: Terminal's login shell already finds both there, and the
+ *  prefix only reorders PATH (review on #1: it put /opt/homebrew/bin, with a
+ *  stale cask claude, ahead of the live one), so the command passes through. */
+export function withToolPath(shellCommand, { nodePath = process.execPath, claudeBin, kind = platformKind() } = {}) {
+  if (kind === 'darwin') return shellCommand;
   const dirs = [...new Set([dirname(nodePath), ...(claudeBin ? [dirname(claudeBin)] : [])])];
   return `PATH="${dirs.join(':')}:$PATH" ${shellCommand}`;
 }

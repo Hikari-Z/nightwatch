@@ -133,15 +133,22 @@ check('the tmux summons really opens a window, then a second lane joins the same
   }
 });
 check('withToolPath prefixes the daemon node dir, and claude\'s when distinct', () => {
-  assert.equal(withToolPath('sh w.sh main', { nodePath: '/n/bin/node' }), 'PATH="/n/bin:$PATH" sh w.sh main');
-  assert.equal(withToolPath('x', { nodePath: '/n/bin/node', claudeBin: '/c/bin/claude' }), 'PATH="/n/bin:/c/bin:$PATH" x');
-  assert.equal(withToolPath('x', { nodePath: '/n/bin/node', claudeBin: '/n/bin/claude' }), 'PATH="/n/bin:$PATH" x');
+  assert.equal(withToolPath('sh w.sh main', { nodePath: '/n/bin/node', kind: 'linux' }), 'PATH="/n/bin:$PATH" sh w.sh main');
+  assert.equal(withToolPath('x', { nodePath: '/n/bin/node', claudeBin: '/c/bin/claude', kind: 'wsl' }), 'PATH="/n/bin:/c/bin:$PATH" x');
+  assert.equal(withToolPath('x', { nodePath: '/n/bin/node', claudeBin: '/n/bin/claude', kind: 'linux' }), 'PATH="/n/bin:$PATH" x');
 });
 check('withToolPath keeps a summons runnable when the login shell has no node', () => {
   // The bug it fixes: sh -lc under nvm finds no node. Run the prefixed
   // command with a PATH that lacks node and prove node resolves.
-  const out = execFileSync('/bin/sh', ['-c', withToolPath('node -e "console.log(1+1)"')], { env: { PATH: '/usr/bin:/bin' }, encoding: 'utf8' });
+  const out = execFileSync('/bin/sh', ['-c', withToolPath('node -e "console.log(1+1)"', { kind: 'linux' })], { env: { PATH: '/usr/bin:/bin' }, encoding: 'utf8' });
   assert.equal(out.trim(), '2');
+});
+check('withToolPath leaves darwin alone: the wake command is main\'s, byte for byte', () => {
+  const cmd = 'WEFT_CONFIG="/h/weft.config.json" sh "/m/wake.sh" main';
+  assert.equal(withToolPath(cmd, { nodePath: '/opt/homebrew/bin/node', claudeBin: '/u/.local/bin/claude', kind: 'darwin' }), cmd);
+  assert.deepEqual(
+    summonWindowArgv({ title: 'main', shellCommand: withToolPath(cmd, { claudeBin: '/u/.local/bin/claude', kind: 'darwin' }) }, 'darwin'),
+    summonWindowArgv({ title: 'main', shellCommand: cmd }, 'darwin'));
 });
 check('activate: false drops only the focus steal (the app-driven wake)', () => {
   const argv = summonWindowArgv({ title: 'm', shellCommand: 'c', activate: false }, 'darwin');
