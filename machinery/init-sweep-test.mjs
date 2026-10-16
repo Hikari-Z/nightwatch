@@ -139,7 +139,12 @@ try {
   writeFileSync(join(jobsDir, 'house.nightwatch.ghost2.plist'),
     plist('house.nightwatch.ghost2', join(scratch, 'gone-hub', 'nightwatch.config.json'), join(scratch, 'gone-wt', 'nightshift.mjs')));
   writeFileSync(join(jobsDir, 'house.nightwatch.garbage2.plist'), 'still not a plist\n');
-  const parsedJson = JSON.parse(nw(['doctor-sweep', '--json']));
+  const envelope = JSON.parse(nw(['doctor-sweep', '--json']));
+  check('--json is a versioned envelope with a sweep stamp', () => {
+    assert.equal(envelope.version, 1);
+    assert.ok(!Number.isNaN(Date.parse(envelope.sweptAt)));
+  });
+  const parsedJson = envelope.findings;
   check('--json names each finding with a stable id', () => {
     const ids = parsedJson.map((f) => f.id);
     assert.ok(ids.includes('house.nightwatch.ghost2'), JSON.stringify(ids));

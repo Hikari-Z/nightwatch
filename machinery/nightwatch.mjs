@@ -617,7 +617,14 @@ function doctorSweep({ remove = false, yes = false } = {}) {
 /** --json: the findings as data for the app's Doctor panel (opus, 10/16). */
 function doctorSweepJson() {
   const { findings } = sweepFindings();
-  process.stdout.write(JSON.stringify(findings.map(({ id, kind, label, file, hub, missing, removable, volumes }) => ({ id, kind, label: label ?? null, file, hub, missing, removable, volumes })), null, 2) + '\n');
+  // Versioned envelope (opus, for the Rust bridge): a version the consumer
+  // can refuse instead of misrendering, and sweptAt so the panel can say
+  // how old its list is.
+  process.stdout.write(JSON.stringify({
+    version: 1,
+    sweptAt: new Date().toISOString(),
+    findings: findings.map(({ id, kind, label, file, hub, missing, removable, volumes }) => ({ id, kind, label: label ?? null, file, hub, missing, removable, volumes })),
+  }, null, 2) + '\n');
 }
 
 /**
