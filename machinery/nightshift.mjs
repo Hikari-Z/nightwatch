@@ -228,6 +228,23 @@ function laneAttribution(sessionId) {
 function laneOf(sessionId) {
   return laneAttribution(sessionId)?.lane ?? null;
 }
+// The lane's live sessions, best-attributed first (registry > marker >
+// fallback). Everywhere the machinery PICKS one session to act for a lane —
+// the bell, the close, --fold-now, --midday, --ring — it must prefer the
+// session it can prove over the one it guessed: after a4fd805 a raw panel
+// no longer suppresses the lane's wake, so two sessions can read as one
+// lane all day, and a bell addressed to the guessed one would make the real
+// session fold the RAW PANEL's transcript as the lane's receipt while its
+// own day goes unfolded (opus's trace, 10/16). Routing still reaches a raw
+// panel when it is all there is.
+function laneSessionsRanked(sessions, attribution, lane) {
+  const rank = { registry: 0, marker: 1, fallback: 2 };
+  return sessions
+    .map((s) => ({ ...s, at: attribution(s.sessionId) }))
+    .filter((s) => s.at?.lane === lane)
+    .map((s) => ({ ...s, lane: s.at.lane }))
+    .sort((a, b) => (rank[a.at.grade] ?? 3) - (rank[b.at.grade] ?? 3));
+}
 function transcriptQuietMs(sessionId) {
   try { return Date.now() - statSync(join(PROJECT_DIR, `${sessionId}.jsonl`)).mtimeMs; } catch { return Infinity; }
 }
@@ -561,7 +578,7 @@ function tickWith(io) {
       }
     }
 
-    const live = io.liveSessions().map((s) => ({ ...s, lane: io.laneOf(s.sessionId) })).filter((s) => s.lane === lane);
+    const live = laneSessionsRanked(io.liveSessions(), io.laneAttribution, lane);
 
     if (inSleepWindow(m)) {
       // Bell: once per window, only if the lane is actually up.
@@ -840,7 +857,7 @@ async function rehearse() {
         const s = w.sessions.find((x) => x.sessionId === sid);
         return s ? { lane: s.lane, grade: s.grade ?? 'registry' } : null;
       },
-      ringBell: (lane, sid) => w.events.push(`bell:${lane}@${w.day}d${fmt(w.min)}`),
+      ringBell: (lane, sid) => { w.events.push(`bell:${lane}@${w.day}d${fmt(w.min)}`); (w.bellSids ??= []).push(sid); },
       quietMs: (sid) => w.sessions.find((s) => s.sessionId === sid)?.quietMs ?? 0,
       nextWakeMtime: (lane) => w.nextWake[lane] ?? 0,
       closePid: (pid) => {
@@ -951,6 +968,21 @@ async function rehearse() {
     check('same-model-stray', 'the mistrust is logged, not silent', w.logs.some((l) => l.includes('not trusted for wake-suppression')), w.logs.filter((l) => /awake|trusted/.test(l)).join(' | '));
     check('same-model-stray', 'never stamped "already awake" on the guess', !w.logs.some((l) => l.includes('already awake')), w.logs.join(' | '));
     check('same-model-stray', 'the launched wake is confirmed on the registry-grade session', w.logs.some((l) => l.startsWith('wake confirmed for fable')), w.logs.filter((l) => /confirm/.test(l)).join(' | '));
+  }
+
+  { // Scenario 21: the mis-bell (opus's 10/16 trace) — a registry session
+    // and a fallback stray both read as fable at the bell. The note must
+    // name the REGISTRY session: the stray never arms a watcher, so a note
+    // carrying the stray's id would make the real session fold the stray's
+    // transcript as fable's receipt while its own day goes unfolded.
+    const w = makeWorld(['fable']);
+    // The stray listed FIRST, so an unranked [0] picks it (the revert shape).
+    w.sessions = [
+      { pid: 7, sessionId: 'stray-y', lane: 'fable', grade: 'fallback', quietMs: 0 },
+      { pid: 8, sessionId: 'real-f', lane: 'fable', grade: 'registry', quietMs: 0 },
+    ];
+    w.step(7 * 60 + 5); // 19:00 -> past 02:00: the bell rings in the window
+    check('mis-bell', 'the bell names the registry session, not the stray', (w.bellSids ?? [])[0] === 'real-f', JSON.stringify(w.bellSids));
   }
 
   { // Scenario 6 (REWRITTEN under Ra's 10/9 ruling — was: >20h is stale):
@@ -1300,7 +1332,7 @@ if (process.argv.includes('--fold-now')) {
     console.error(`--fold-now: unknown agent "${lane ?? ''}" (known: ${Object.keys(CFG.lanes ?? {}).join(', ')})`);
     process.exit(2);
   }
-  const live = liveSessions().map((x) => ({ ...x, lane: laneOf(x.sessionId) })).filter((x) => x.lane === lane);
+  const live = laneSessionsRanked(liveSessions(), laneAttribution, lane);
   if (!live.length) {
     console.error(`--fold-now: agent ${lane} is not awake — nothing to fold`);
     process.exit(3);
@@ -1375,7 +1407,7 @@ if (process.argv.includes('--midday')) {
     process.exit(2);
   }
   const live = named ? [{ sessionId: named }]
-    : liveSessions().map((x) => ({ ...x, lane: laneOf(x.sessionId) })).filter((x) => x.lane === lane);
+    : laneSessionsRanked(liveSessions(), laneAttribution, lane);
   if (!live.length) {
     console.error(`--midday: agent ${lane} is not awake — nothing to fold`);
     process.exit(3);
@@ -1431,7 +1463,7 @@ if (process.argv.includes('--ring')) {
     console.error(`--ring: unknown agent "${lane ?? ''}" (known: ${Object.keys(CFG.lanes ?? {}).join(', ')})`);
     process.exit(2);
   }
-  const live = liveSessions().map((s) => ({ ...s, lane: laneOf(s.sessionId) })).filter((s) => s.lane === lane);
+  const live = laneSessionsRanked(liveSessions(), laneAttribution, lane);
   if (!live.length) {
     console.error(`--ring: agent ${lane} is not awake — nothing to bell`);
     process.exit(3);
