@@ -155,6 +155,40 @@ await ev(`document.querySelector('.nw-head [data-part="view-menu"][data-menu="ap
 await click('.nw-app > .nw-settings [data-action="run-doctor"]'); await sleep(150);
 await check('check again writes the dry run into the panel', `document.querySelector('.nw-settings [data-part="preflight"]')?.textContent`, 'ok config | WOULD nothing');
 await check('fold line on the card', `document.querySelector('.nw-app > .nw-lanes .nw-lane[data-lane="opus"] [data-part="fold-request"]')?.textContent.trim()`, 'Bell rung · forcing in 7m');
+// ---- the Doctor's leftover sweep (10/16): findings as data, one confirmed removal at a time.
+// A host that can sweep. Its findings shrink when an item is removed, as the real CLI's do.
+await ev(`(()=>{const base=window.NW_HOST; window.__sweepCalls=[]; window.__sweepReply=null;
+  window.__findings=[
+    {id:'house.nightwatch.gone',kind:'job',label:'house.nightwatch.gone',hub:'/Users/x/<b>gone</b>',missing:['hub'],removable:true,volumes:false},
+    {id:'house.nightwatch.junk',kind:'job',label:'house.nightwatch.junk',hub:null,missing:['unparseable'],removable:false,volumes:false},
+    {id:'registry:/Volumes/Ext/hub',kind:'registry',label:null,hub:'/Volumes/Ext/hub',missing:['hub'],removable:true,volumes:true}];
+  window.NW_HOST={can:(a)=>a==='sweep'||a==='remove-orphan'||base.can(a), act:(a,o)=>{
+    if(a==='sweep') return Promise.resolve(window.__sweepReply ?? JSON.stringify({version:1,sweptAt:'x',findings:window.__findings}));
+    if(a==='remove-orphan'){window.__sweepCalls.push(o.data); window.__findings=window.__findings.filter(f=>f.id!==o.data.id); return Promise.resolve('removed '+o.data.id);}
+    return base.act(a,o);}};})()`);
+const ORPHANS = `[...document.querySelectorAll('.nw-settings [data-part="doctor"] li[data-part="orphan"]')].map(li=>[li.textContent.trim(), !!li.querySelector('[data-action="remove-orphan"]')])`;
+await click('.nw-app > .nw-settings [data-action="run-doctor"]'); await sleep(250);
+await check('check again lists each leftover; an unreadable one has no Remove', ORPHANS, [
+  ['Background job house.nightwatch.gone: its hub folder is gone (/Users/x/<b>gone</b>)Remove', true],
+  ["Background job house.nightwatch.junk: Nightwatch can't read it; check it by hand", false],
+  ['Hub entry /Volumes/Ext/hub: its hub folder is gone, on a drive that may just be unplugged' + 'Remove', true]]);
+await check('a path from disk renders as text, never markup', `document.querySelectorAll('.nw-settings [data-part="doctor"] li[data-part="orphan"] b').length`, 0);
+await click('.nw-settings [data-part="orphan"] [data-orphan-id="registry:/Volumes/Ext/hub"]');
+await check('a leftover on a drive asks in danger red, saying it may just be unplugged', `[document.querySelector('.nw-app > .nw-confirm [data-part="title"]')?.textContent.trim(), document.querySelector('.nw-app > .nw-confirm [data-part="yes"]')?.dataset.danger]`, ['Remove a leftover on an external drive?', 'true']);
+await click('.nw-app > .nw-confirm [data-part="no"]'); await sleep(150);
+await check('declining removes nothing', 'window.__sweepCalls', []);
+await click('.nw-settings [data-part="orphan"] [data-orphan-id="house.nightwatch.gone"]');
+await check('an ordinary leftover asks plainly', `[document.querySelector('.nw-app > .nw-confirm [data-part="title"]')?.textContent.trim(), document.querySelector('.nw-app > .nw-confirm [data-part="yes"]')?.dataset.danger ?? null]`, ['Remove this leftover?', null]);
+await click('.nw-app > .nw-confirm [data-part="yes"]'); await sleep(250);
+await check('removing names exactly that one item', 'window.__sweepCalls', [{ id: 'house.nightwatch.gone' }]);
+await check('and the list is read again after', `${ORPHANS}.length`, 2);
+await ev(`window.__sweepReply=JSON.stringify({version:2,findings:[]})`);
+await click('.nw-app > .nw-settings [data-action="run-doctor"]'); await sleep(250);
+await check('a format this window does not know is said, not guessed at', ORPHANS, [["The leftover check answered in a format this window doesn't know; update the app.", false]]);
+await ev(`window.__sweepReply=null; window.__findings=[]`);
+await click('.nw-app > .nw-settings [data-action="run-doctor"]'); await sleep(250);
+await check('nothing left says so, once', ORPHANS, [['No leftovers from removed hubs', false]]);
+
 // ---- persona rows (Ra, 10/7), on the two-persona fixture
 const FX = (q) => new URL(`../fixture.html?${q}`, import.meta.url).href;
 await go(FX('skin=minimal&layout=row')); await sleep(500);

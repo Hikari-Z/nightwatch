@@ -35,7 +35,7 @@
   // Actions that change the world. Everything else is view.
   const WRITES = new Set(['open-terminal', 'hide-terminal', 'wake', 'sleep', 'emergency-fold', 'wake-all', 'sleep-all', 'fold-all',
     'toggle-nightly', 'arm-lane', 'toggle-midday', 'save-lane', 'remove-lane', 'save-settings', 'restore-checkpoint', 'retry-wake',
-    'restart-daemon', 'run-doctor', 'confirm', 'hide-window']);
+    'restart-daemon', 'run-doctor', 'remove-orphan', 'confirm', 'hide-window']);
   // Lane creation (10/6): flow buttons, each needing one host capability.
   // plan = the machinery's dry run, apply = the build (nightwatch.mjs).
   const NEEDS = { setup: 'plan', 'add-persona': 'plan', 'setup-next': 'plan', 'plan-lane': 'plan', 'check-import': 'inspect-import',
@@ -70,6 +70,13 @@
   // what happened after. The dialog and the status line use the contract's
   // .nw-confirm and a viewer-chrome .nw-toast.
   const CONFIRM = {
+    // A leftover from the Doctor's sweep (10/16): a background job or hub
+    // entry whose hub is gone. One at a time, never in a batch.
+    'remove-orphan': (lane, btn) => btn?.dataset.volumes === 'true'
+      ? { title: 'Remove a leftover on an external drive?', verb: 'Remove anyway', icon: 'x', danger: true,
+          body: `${btn.dataset.orphanName}: its hub is on a drive that may just be unplugged. If the drive comes back, the hub will need setting up again. Remove it only if that drive is gone for good.` }
+      : { title: 'Remove this leftover?', verb: 'Remove', icon: 'x',
+          body: `${btn?.dataset.orphanName}: its hub no longer exists, so it can't do anything. Removing it stops the background job (if it is one) and deletes it; nothing else is touched.` },
     wake: (lane) => ({ title: `Wake ${lane} now?`, verb: 'Wake', icon: 'sun',
       body: `Opens a Terminal window that resumes ${lane} from their last sleep, the same way the 08:00 wake does. If ${lane} is already awake, nothing happens.` }),
     'retry-wake': (lane) => ({ title: `Try waking ${lane} again?`, verb: 'Retry wake', icon: 'retry',
@@ -136,6 +143,7 @@
   // What each save sends: exactly its own panel's fields (k as the user
   // typed it; the host converts and validates).
   const PAYLOAD = {
+    'remove-orphan': (btn) => ({ id: btn.dataset.orphanId }),
     'save-lane': (btn) => {
       const p = btn.closest('[data-part="settings"]');
       return {
@@ -190,6 +198,41 @@
     }
   }
 
+  // The Doctor's sweep (10/16): leftovers that outlived their hub, read
+  // fresh on each Check again and listed beside the health items. Built with
+  // textContent only, since a finding names paths from the user's disk. A
+  // job the sweep couldn't read is listed with no button: it's never removed
+  // from here.
+  const icon = (name) => {
+    const svg = doc.createElementNS(SVGNS, 'svg'); svg.setAttribute('class', 'nw-icon'); svg.setAttribute('data-icon', name); svg.setAttribute('aria-hidden', 'true');
+    const use = doc.createElementNS(SVGNS, 'use'); use.setAttribute('href', `#i-${name}`); svg.append(use);
+    return svg;
+  };
+  const MISSING = { hub: 'its hub folder is gone', config: 'its hub has no config', machinery: 'its Nightwatch code is gone', unparseable: "Nightwatch can't read it; check it by hand" };
+  async function renderSweep(doc_) {
+    const ul = doc_.querySelector('ul'); if (!ul || !canDo('sweep')) return;
+    ul.querySelectorAll('[data-part="orphan"]').forEach((li) => li.remove());
+    const row = (status, iconName, text) => {
+      const li = doc.createElement('li'); li.dataset.part = 'orphan'; li.dataset.status = status;
+      li.append(icon(iconName), ` ${text}`); ul.append(li); return li;
+    };
+    let report;
+    try { report = JSON.parse(await host().act('sweep')); }
+    catch (err) { row('warn', 'warn', `Couldn't check for leftovers: ${String(err?.message ?? err)}`); return; }
+    if (report?.version !== 1 || !Array.isArray(report.findings)) { row('warn', 'warn', 'The leftover check answered in a format this window doesn\'t know; update the app.'); return; }
+    if (!report.findings.length) { row('ok', 'check', 'No leftovers from removed hubs'); return; }
+    for (const f of report.findings) {
+      const name = f.kind === 'job' ? `Background job ${f.label ?? f.id}` : `Hub entry ${f.hub}`;
+      const why = (f.missing ?? []).map((m) => MISSING[m] ?? m).join('; ');
+      const li = row('warn', 'warn', `${name}: ${why}${f.hub && f.kind === 'job' ? ` (${f.hub})` : ''}${f.volumes ? ', on a drive that may just be unplugged' : ''}`);
+      if (!f.removable) continue;
+      const b = doc.createElement('button'); b.type = 'button'; b.dataset.action = 'remove-orphan'; b.dataset.part = 'fix';
+      b.dataset.orphanId = f.id; b.dataset.orphanName = name; b.dataset.volumes = String(!!f.volumes);
+      const label = doc.createElement('span'); label.textContent = 'Remove';
+      b.append(icon('x'), label); li.append(b);
+    }
+  }
+
   async function perform(a, btn) {
     const lane = btn.closest('[data-lane]')?.dataset.lane ?? null; // the page's key, for page state
     const ref = laneRef(btn);                                       // what the host is told
@@ -207,7 +250,12 @@
           let pre = doc_.querySelector('[data-part="preflight"]');
           if (!pre) { pre = doc.createElement('pre'); pre.dataset.part = 'preflight'; doc_.append(pre); }
           pre.textContent = msg;
+          await renderSweep(doc_);
         }
+      } else if (a === 'remove-orphan') {
+        if (msg) toast(msg);
+        const doc_ = btn.closest('[data-part="doctor"]');
+        if (doc_) await renderSweep(doc_);
       } else if (msg) toast(msg);
       if ((a === 'open-terminal' || a === 'hide-terminal') && lane) { terminalOpen[lane] = a === 'open-terminal'; paintTerminal(lane); }
       setTimeout(() => refresh({ force: true }), 4000);
