@@ -336,6 +336,7 @@ const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
   const rows = s.LOG.flatMap(([, r]) => r).filter((r) => r[1] === 'fable');
   check('log: an untrusted lane match shows, as a launch, naming its grade',
     rows.some((r) => r[2] === 'launch' && /unregistered panel/.test(r[4]) && /by fallback/.test(r[4])), JSON.stringify(rows));
+  check('log: and it is drawn amber, not routine', rows.some((r) => r[2] === 'launch' && r[3] === 'warn'), JSON.stringify(rows));
 }
 
 // ---- the fold-cycle stage on a live lane (opus, 10/9). The card's state

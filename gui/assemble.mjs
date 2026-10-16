@@ -339,7 +339,9 @@ export function assemble(cfg, io, range = '8h') {
     const ctxHigh = e.kind === 'context-high';
     const tip = ctxHigh ? `${e.cycleStalled ? 'Midday fold stalled' : 'Context high'}, ${Math.round((e.ratio ?? 0) * 100)}%`
       : `${TIP[e.kind] ?? e.kind}${e.kept ? `, ${e.kept}/${e.total} kept` : ''}${e.overshoot ? `, ${e.overshoot.ratio}x its target` : ''}${e.grade ? ` (by ${e.grade})` : ''}${e.cause ? ` (${e.cause})` : ''}`;
-    const status = e.alarm ? 'failed' : ctxHigh ? 'warn' : (e.kind === 'already-awake' ? 'manual' : 'ok');
+    // A stray panel reading as a lane is amber (Fable, 10/16): a4fd805's trade, that a true double
+    // panel is visible and cheap, holds only if it's visible. A mark, not a card state; no notification.
+    const status = e.alarm ? 'failed' : (ctxHigh || e.kind === 'untrusted-lane-match') ? 'warn' : (e.kind === 'already-awake' ? 'manual' : 'ok');
     if (ts >= nightStart && lane !== 'nightshift') {
       (NIGHT[lane] ??= []).push([kind, status, Math.max(0, Math.min(1, (ts - nightStart) / span)), hm(e.at), tip, 1]);
     }
