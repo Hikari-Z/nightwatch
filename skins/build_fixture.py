@@ -1078,7 +1078,7 @@ def page():
   <section class="nw-gallery" aria-label="state gallery">
     <h3 data-part="heading">Skin test sheet: every state once (not part of the app)</h3>
     {gallery_states}
-    {lane_card(dict(LANES[1], id="settings", open=True, settingsOpen=True), NOW)}
+    {lane_card(dict(LANES[1] if len(LANES) > 1 else LANES[0], id="settings", open=True, settingsOpen=True), NOW)}
     {add_slot(True)}
     {add_slot(True, "preview", PREVIEW_EXAMPLE)}
     {setup_dialog(True, "who")}

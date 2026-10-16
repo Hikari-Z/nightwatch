@@ -966,7 +966,7 @@ function gallery(ctx) {
   return `<section class="nw-gallery" aria-label="state gallery">
     <h3 data-part="heading">Skin test sheet: every state once (not part of the app)</h3>
     ${gallery_states}
-    ${lane_card({ ...ctx.LANES[1], id: 'settings', open: true, settingsOpen: true }, ctx.NOW, ctx.TZ)}
+    ${lane_card({ ...(ctx.LANES[1] ?? ctx.LANES[0]), id: 'settings', open: true, settingsOpen: true }, ctx.NOW, ctx.TZ)}
     ${add_slot(true, ctx.SCHEDULE)}
     ${add_slot(true, ctx.SCHEDULE, 'preview', PREVIEW_EXAMPLE)}
     ${setup_dialog(ctx.SCHEDULE, true, 'who')}
