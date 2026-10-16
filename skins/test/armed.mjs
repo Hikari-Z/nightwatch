@@ -5,9 +5,10 @@
 // nightshift.armed is never touched. Run:
 //   node --experimental-websocket skins/test/armed.mjs
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { launchChrome, onExit } from './chrome.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const HUB = join(HERE, '..', '..');
@@ -18,6 +19,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // A scratch config: the hub's own, with only the armed file redirected.
 const scratch = mkdtempSync(join(process.env.TMPDIR ?? '/tmp', 'nw-armed-'));
+onExit(() => rmSync(scratch, { recursive: true, force: true }));
 const armedFile = join(scratch, 'nightshift.armed');
 // The product repo holds no hub; read a real hub's config (Weft's by default).
 const HUB_CONFIG = process.env.NW_TEST_HUB_CONFIG ?? join(process.env.HOME, 'origin', 'weft', 'weft.config.json');
@@ -32,11 +34,9 @@ const server = spawn(process.execPath, ['server.mjs'], {
   cwd: GUI, stdio: 'ignore',
   env: { ...process.env, WEFT_CONFIG: join(scratch, 'config.json'), NIGHTWATCH_PORT: String(VIEWER_PORT), NIGHTWATCH_REGISTRY: '/nonexistent' },
 });
-const prof = mkdtempSync(join(process.env.TMPDIR ?? '/tmp', 'nwcdp-'));
-const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  ['--headless=new', '--disable-gpu', `--remote-debugging-port=${CDP_PORT}`, `--user-data-dir=${prof}`, '--window-size=1100,1000', 'about:blank'],
-  { stdio: 'ignore' });
-const done = (code) => { server.kill(); chrome.kill(); process.exit(code); };
+onExit(() => server.kill()); // its viewer goes too
+launchChrome({ port: CDP_PORT }); // killed and removed on every way out
+const done = (code) => process.exit(code);
 
 let tab;
 for (let i = 0; i < 50 && !tab; i++) {

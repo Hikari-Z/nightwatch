@@ -2,15 +2,14 @@
 // the label reads that bucket's rate (series[i] / bucket minutes), the static tip
 // steps aside, and leaving restores it. Runs on the fixture, no server. Usage:
 //   node --experimental-websocket skins/test/cursor.mjs [skin] [layout] [out.png]
-import { spawn } from 'node:child_process';
-import { mkdtempSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
+import { writeFileSync, copyFileSync, rmSync } from 'node:fs';
+import { launchChrome, onExit } from './chrome.mjs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const dir = dirname(dirname(fileURLToPath(import.meta.url)));
 const [skin = 'glass', layout = 'row', outPng, theme = 'dark'] = process.argv.slice(2);
-const PORT = 9341, prof = mkdtempSync(process.env.TMPDIR + '/nwcur-');
-const ch = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  ['--headless=new', '--disable-gpu', `--remote-debugging-port=${PORT}`, `--user-data-dir=${prof}`, '--window-size=1300,1100', 'about:blank'], { stdio: 'ignore' });
+const PORT = 9341;
+const { ch, prof } = launchChrome({ port: PORT, prefix: 'nwcur-', size: '1300,1100' }); // killed and removed on every way out
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let tab; for (let i = 0; i < 50 && !tab; i++) { try { tab = await (await fetch(`http://127.0.0.1:${PORT}/json/new?about:blank`, { method: 'PUT' })).json(); } catch { await sleep(200); } }
 const ws = new WebSocket(tab.webSocketDebuggerUrl); await new Promise((r) => ws.addEventListener('open', r, { once: true }));
@@ -20,6 +19,7 @@ const send = (method, params = {}) => new Promise((r) => { const i = ++id; pend.
 const ev = async (e) => { const r = await send('Runtime.evaluate', { expression: e, returnByValue: true }); return r.result?.exceptionDetails ? 'THREW ' + JSON.stringify(r.result.exceptionDetails.exception?.description) : r.result?.result?.value; };
 await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
 const tmp = `${dir}/_cur_fixture.html`; copyFileSync(`${dir}/fixture.html`, tmp);
+onExit(() => rmSync(tmp, { force: true })); // the copy sits in skins/, beside the real fixture
 await send('Page.navigate', { url: `file://${tmp}?skin=${skin}&layout=${layout}` }); await sleep(1500);
 await ev(`(()=>{const a=document.querySelector('.nw-app'); a.dataset.showTimeline='true'; a.dataset.showLog='false'; window.dispatchEvent(new Event('resize'));})()`); await sleep(400);
 const info = await ev(`(()=>{const a=document.querySelector('.nw-timeline [data-part="activity"]'); if(!a) return null; const s=a.querySelector('svg').getBoundingClientRect(); return {s:[s.left,s.top,s.right,s.bottom], series:a.dataset.series.split(',').map(Number), bm:+a.dataset.bucketMin, vis: a.getClientRects().length>0, col: document.querySelector('.nw-app').dataset.layout}})()`);
@@ -46,4 +46,4 @@ await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 }); awai
 const gone = await ev(`(()=>{const a=document.querySelector('.nw-timeline [data-part="activity"]'); return !a.querySelector('[data-part="cursor"]') && !a.querySelector('[data-part="cursor-label"]') && a.hasAttribute('data-tip')})()`);
 gone ? ok++ : bad++; console.log(gone ? 'PASS' : 'FAIL', 'leaving restores the tip and removes the cursor');
 console.log('errors', await ev('JSON.stringify(window.__errs ?? [])'), `${ok} pass ${bad} fail`);
-await Promise.race([send('Browser.close'), sleep(1000)]); rmSync(tmp); ch.kill(); await sleep(300); rmSync(prof, { recursive: true, force: true }); process.exit(bad ? 1 : 0);
+await Promise.race([send('Browser.close'), sleep(1000)]); ch.kill(); await sleep(300); rmSync(prof, { recursive: true, force: true }); process.exit(bad ? 1 : 0);

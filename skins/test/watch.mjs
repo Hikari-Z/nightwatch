@@ -1,6 +1,5 @@
-import { spawn } from 'node:child_process'; import { mkdtempSync, rmSync } from 'node:fs';
-const PORT=9338, prof=mkdtempSync(process.env.TMPDIR+'/nwcdp-');
-const ch=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless=new','--disable-gpu',`--remote-debugging-port=${PORT}`,`--user-data-dir=${prof}`,'about:blank'],{stdio:'ignore'});
+import { rmSync } from 'node:fs'; import { launchChrome } from './chrome.mjs';
+const PORT=9338; const { ch, prof } = launchChrome({ port: PORT, size: null }); // killed and removed on every way out
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms)); let tab;
 for(let i=0;i<50&&!tab;i++){try{tab=await(await fetch(`http://127.0.0.1:${PORT}/json/new?about:blank`,{method:'PUT'})).json()}catch{await sleep(200)}}
 const ws=new WebSocket(tab.webSocketDebuggerUrl); await new Promise(r=>ws.addEventListener('open',r,{once:true}));

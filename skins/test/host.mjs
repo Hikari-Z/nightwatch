@@ -3,17 +3,15 @@
 //   node --experimental-websocket skins/test/drive.mjs [baseUrl]
 // Drive the served Nightwatch page through CDP: click each control, read back
 // what the runtime wrote. Usage: node drive.mjs [baseUrl]
-import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { launchChrome, sweepOrphans } from './chrome.mjs';
+import { rmSync } from 'node:fs';
 const BASE = process.argv[2] ?? 'http://127.0.0.1:7352/';
 const PORT = 9337;
 // A Chrome already on this port would quietly host the test instead of ours
 // (10/16: a two-day-old leftover did). Refuse to start beside one.
+sweepOrphans(); // a Chrome left by a killed run would otherwise hold the port
 try { await fetch(`http://127.0.0.1:${PORT}/json/version`); console.error(`port ${PORT} already has a Chrome on it: stop it first`); process.exit(2); } catch { /* free, as it should be */ }
-const prof = mkdtempSync(process.env.TMPDIR + '/nwcdp-');
-const ch = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  ['--headless=new', '--disable-gpu', `--remote-debugging-port=${PORT}`, `--user-data-dir=${prof}`, '--window-size=1100,1000', 'about:blank'],
-  { stdio: 'ignore' });
+const { ch, prof } = launchChrome({ port: PORT }); // killed and removed on every way out (chrome.mjs)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let tab;
 for (let i = 0; i < 50 && !tab; i++) {

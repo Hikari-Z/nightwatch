@@ -2,14 +2,11 @@
 // runtime.js wrote: hit areas, and (10/6) the canvas: the window covers the screen and the app is placed and
 // dragged inside it. Needs the viewer on 7352. Run:
 //   node --experimental-websocket skins/test/hits.mjs [baseUrl]
-import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { launchChrome } from './chrome.mjs';
+import { rmSync } from 'node:fs';
 const BASE = process.argv[2] ?? 'http://127.0.0.1:7352/';
 const PORT = 9337;
-const prof = mkdtempSync(process.env.TMPDIR + '/nwcdp-');
-const ch = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  ['--headless=new', '--disable-gpu', `--remote-debugging-port=${PORT}`, `--user-data-dir=${prof}`, '--window-size=1100,1000', 'about:blank'],
-  { stdio: 'ignore' });
+const { ch, prof } = launchChrome({ port: PORT }); // killed and removed on every way out (chrome.mjs)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let tab;
 for (let i = 0; i < 50 && !tab; i++) {
