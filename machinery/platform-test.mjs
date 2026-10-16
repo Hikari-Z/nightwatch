@@ -7,8 +7,11 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
   platformKind, summonWindowArgv, summonWindow, writeSummonScript, summonArgvFor, daemonJob, registryDir,
-  bannerArgv, notifyBanner, closeTtyArgv,
+  bannerArgv, notifyBanner, closeTtyArgv, withToolPath, TMUX_SUMMON,
 } from './platform.mjs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 let pass = 0, fail = 0;
 function check(name, fn) {
@@ -93,9 +96,52 @@ check('wsl summon goes through Windows Terminal interop with the lane title', ()
   const argv = summonWindowArgv({ title: 'main', shellCommand: 'sh /m/wake.sh main' }, 'wsl');
   assert.deepEqual(argv, [{ bin: 'wt.exe', args: ['nt', '--title', 'main', 'wsl.exe', '--cd', '~', '--', 'sh', '-lc', 'sh /m/wake.sh main'] }]);
 });
-check('linux summon uses the alternatives terminal', () => {
-  const argv = summonWindowArgv({ title: 'x', shellCommand: 'echo hi' }, 'linux');
+check('linux with a desktop session uses the alternatives terminal', () => {
+  const argv = summonWindowArgv({ title: 'x', shellCommand: 'echo hi' }, 'linux', { DISPLAY: ':0' });
   assert.deepEqual(argv, [{ bin: 'x-terminal-emulator', args: ['-e', 'sh', '-lc', 'echo hi'] }]);
+  assert.deepEqual(summonWindowArgv({ title: 'x', shellCommand: 'echo hi' }, 'linux', { WAYLAND_DISPLAY: 'wayland-0' }), argv);
+});
+check('headless linux summons into tmux, title and command as positional args', () => {
+  const argv = summonWindowArgv({ title: 'main', shellCommand: RAW }, 'linux', {});
+  assert.deepEqual(argv, [{ bin: 'sh', args: ['-c', TMUX_SUMMON, 'nightwatch-summon', 'main', RAW] }]);
+});
+check('summonArgvFor threads an injected env through (headless linux, no script written)', () => {
+  let wrote = false;
+  const argv = summonArgvFor({ title: 'main', shellCommand: 'echo hi', scriptDir: '/s' }, 'linux', { env: {}, writeFileSync: () => { wrote = true; }, mkdirSync: () => {} });
+  assert.equal(argv[0].bin, 'sh');
+  assert.equal(wrote, false);
+});
+check('the tmux summons really opens a window, then a second lane joins the same session', () => {
+  try { execFileSync('tmux', ['-V'], { stdio: 'ignore' }); } catch { console.log('    (tmux not installed — skipped)'); return; }
+  // A private socket dir: the test never touches a tmux server a human is using.
+  const dir = mkdtempSync(join(tmpdir(), 'nw-tmux-'));
+  const env = { ...process.env, TMUX_TMPDIR: dir, TMUX: '' };
+  try {
+    for (const lane of ['main', 'opus']) {
+      const [{ bin, args }] = summonWindowArgv({ title: lane, shellCommand: `echo woke > "${dir}/${lane}"; sleep 5` }, 'linux', {});
+      execFileSync(bin, args, { env });
+    }
+    const t0 = Date.now();
+    while (!(existsSync(join(dir, 'main')) && existsSync(join(dir, 'opus'))) && Date.now() - t0 < 5000) execFileSync('sleep', ['0.1']);
+    assert.equal(readFileSync(join(dir, 'main'), 'utf8').trim(), 'woke');
+    assert.equal(readFileSync(join(dir, 'opus'), 'utf8').trim(), 'woke');
+    const windows = execFileSync('tmux', ['list-windows', '-t', 'nightwatch', '-F', '#W'], { env, encoding: 'utf8' }).trim().split('\n');
+    assert.deepEqual(windows.filter((w) => w !== 'bash' && w !== 'sh').sort(), ['main', 'opus']);
+  } finally {
+    try { execFileSync('tmux', ['kill-server'], { env, stdio: 'ignore' }); } catch {}
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+check('withToolPath prefixes the daemon node dir, and claude\'s when distinct', () => {
+  assert.equal(withToolPath('sh w.sh main', { nodePath: '/n/bin/node' }), 'PATH="/n/bin:$PATH" sh w.sh main');
+  assert.equal(withToolPath('x', { nodePath: '/n/bin/node', claudeBin: '/c/bin/claude' }), 'PATH="/n/bin:/c/bin:$PATH" x');
+  assert.equal(withToolPath('x', { nodePath: '/n/bin/node', claudeBin: '/n/bin/claude' }), 'PATH="/n/bin:$PATH" x');
+});
+check('withToolPath keeps a summons runnable when the login shell has no node', () => {
+  // The bug it fixes: sh -lc under nvm finds no node. Run the prefixed
+  // command with a PATH that lacks node and prove node resolves.
+  const out = execFileSync('/bin/sh', ['-c', withToolPath('node -e "console.log(1+1)"')], { env: { PATH: '/usr/bin:/bin' }, encoding: 'utf8' });
+  assert.equal(out.trim(), '2');
 });
 check('activate: false drops only the focus steal (the app-driven wake)', () => {
   const argv = summonWindowArgv({ title: 'm', shellCommand: 'c', activate: false }, 'darwin');
@@ -149,6 +195,14 @@ check('wsl job is a systemd user unit, enabled now, quoted against spaces and %'
     { bin: 'systemctl', args: ['--user', 'enable', '--now', 'house.nightwatch.weft.service'] },
   ]);
   assert.deepEqual(job.unloadArgv(), [{ bin: 'systemctl', args: ['--user', 'disable', '--now', 'house.nightwatch.weft.service'] }]);
+});
+check("a systemd unit carries the installer's PATH (wt.exe/msg.exe under WSL interop, nvm's node)", () => {
+  const job = daemonJob({ ...J, path: '/n/bin:/usr/bin:/mnt/c/Program Files/x:/mnt/c/Users/T/AppData/Local/Microsoft/WindowsApps' }, 'wsl');
+  assert.ok(job.content.includes('Environment="PATH=/n/bin:/usr/bin:/mnt/c/Program Files/x:/mnt/c/Users/T/AppData/Local/Microsoft/WindowsApps"\n'), job.content);
+  assert.ok(daemonJob({ ...J, path: '/a/50%' }, 'linux').content.includes('Environment="PATH=/a/50%%"'));
+  assert.ok(daemonJob({ ...J, path: '/q"x' }, 'linux').content.includes('Environment="PATH=/q\\"x"'));
+  assert.ok(!daemonJob({ ...J, path: '' }, 'wsl').content.includes('PATH='), 'no PATH line when none is known');
+  assert.ok(!daemonJob({ ...J, path: '/n/bin' }, 'darwin').content.includes('/n/bin'), 'darwin plist unchanged');
 });
 check('an explicit configPath overrides the hub default', () =>
   assert.ok(daemonJob({ ...J, configPath: '/elsewhere/weft.config.json' }, 'darwin').content.includes('/elsewhere/weft.config.json')));
