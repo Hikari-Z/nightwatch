@@ -26,7 +26,7 @@
  */
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { daemonJob, registryDir, summonArgvFor } from './platform.mjs';
@@ -111,7 +111,11 @@ function initSteps(spec) {
   const imp = spec.import ? inspectImport(expand(spec.import.from), true) : null;
   const ctx = { name: name ?? imp?.name ?? null, person, model: lane.model, sleep, hub, laneId: lane.id, siblings: [] };
   const part = hub + '.partial';
-  const noActivate = !!process.env.WEFT_NW_NO_ACTIVATE;
+  const noActivate = !!process.env.WEFT_NW_NO_ACTIVATE || !LIVE;
+  if (LIVE) {
+    if (scratchRooted(spec.hub)) die('apply --live: the hub is in scratch space — a bench must not install user-global state. Drop --live (staged only), or put the hub somewhere real.');
+    if (process.env.NW_INSTALL_DIR || process.env.NW_REGISTRY_DIR) die('apply --live: NW_INSTALL_DIR / NW_REGISTRY_DIR are bench seams — a live install must not run with them set.');
+  }
   const steps = [];
   const identitySource = imp?.identity ? `imported identity.md plus the standard welcome` : `"About them" plus the standard welcome`;
 
@@ -215,6 +219,11 @@ function initSteps(spec) {
     steps.push({
       verb: 'Start', what: 'the nightshift, with a test', detail: 'loads the background job and proves it can open a Terminal window (the one permission prompt)',
       run() {
+        // Guard at the point of effect, not only at the flag: whatever the
+        // argument plumbing said, nothing user-global is written for a hub
+        // in scratch space (the 10/16 incident: a broken path check upstream
+        // let a bench reach this line).
+        if (scratchRooted(hub)) throw new Error('refusing to install launchd jobs for a hub in scratch space');
         const job = daemonJob({ slug, hub, machineryDir: WC });
         mkdirSync(job.installDir, { recursive: true });
         writeFileSync(join(job.installDir, job.fileName), job.content);
@@ -235,6 +244,18 @@ function initSteps(spec) {
         const watchJob = daemonJob({ slug, hub, jobKind: 'watch', machineryDir: WC });
         writeFileSync(join(watchJob.installDir, watchJob.fileName), watchJob.content);
         for (const { bin, args } of watchJob.loadArgv(join(watchJob.installDir, watchJob.fileName))) execFileSync(bin, args);
+        // The install manifest: every user-global thing this init wrote,
+        // recorded in the hub it serves. doctor-sweep reads these shapes
+        // back; a crash or a deleted hub leaves the records, not a mystery.
+        writeFileSync(join(hub, 'wakecycle', 'installed.json'), JSON.stringify({
+          version: 1,
+          installedAt: new Date().toISOString(),
+          jobs: [
+            { label: job.label, file: join(job.installDir, job.fileName) },
+            { label: watchJob.label, file: join(watchJob.installDir, watchJob.fileName) },
+          ],
+          registry: { file: join(regDir, 'hubs.json'), entry: hub },
+        }, null, 2) + '\n');
         launchLegTest(hub);
       },
     });
@@ -460,7 +481,101 @@ function listUnclaimed() {
   return outRows;
 }
 
+// ------------------------------------------------------- doctor-sweep
+/**
+ * Find installed house.nightwatch.* jobs whose hub or machinery no longer
+ * exists, and registry entries whose hub is gone — from the records on
+ * disk, never from a teardown (a SIGKILL'd bench and a deleted worktree run
+ * no exit path; the 10/13 porch leak respawned a crash loop for two days).
+ * Report always; remove only with --remove, confirming per item unless
+ * --yes. A job whose targets exist is never touched.
+ */
+function doctorSweep({ remove = false, yes = false } = {}) {
+  const probe = daemonJob({ slug: '_probe', hub: '/nonexistent', machineryDir: WC });
+  const jobsDir = probe.installDir;
+  const ext = probe.fileName.slice(probe.fileName.lastIndexOf('.'));
+  const exists = (x) => { try { return existsSync(x); } catch { return false; } };
+  const findings = [];
+  let files = [];
+  try { files = readdirSync(jobsDir).filter((f) => f.startsWith('house.nightwatch.') && f.endsWith(ext)); } catch { /* no jobs dir */ }
+  for (const f of files) {
+    const file = join(jobsDir, f);
+    let text = '';
+    try { text = readFileSync(file, 'utf8'); } catch { continue; }
+    const cfg = text.match(/WEFT_CONFIG<\/key>\s*<string>([^<]+)<\/string>/)?.[1]
+      ?? text.match(/Environment="WEFT_CONFIG=([^"]+)"/)?.[1] ?? null;
+    const script = text.match(/<string>([^<]+\.mjs)<\/string>/)?.[1]
+      ?? text.match(/ExecStart="[^"]+" "([^"]+\.mjs)"/)?.[1] ?? null;
+    const missing = [];
+    if (cfg && !exists(cfg) && !exists(dirname(cfg))) missing.push('hub');
+    else if (cfg && !exists(cfg)) missing.push('config');
+    if (script && !exists(script)) missing.push('machinery');
+    if (!cfg && !script) missing.push('unparseable');
+    if (missing.length) findings.push({ kind: 'job', label: f.slice(0, -ext.length), file, hub: cfg ? dirname(cfg) : null, missing });
+  }
+  const regPath = join(registryDir(), 'hubs.json');
+  let reg = null;
+  try { reg = JSON.parse(readFileSync(regPath, 'utf8')); } catch { /* no registry */ }
+  for (const h of reg?.hubs ?? []) {
+    if (!exists(expand(h.path))) findings.push({ kind: 'registry', file: regPath, hub: h.path, missing: ['hub'] });
+  }
+  if (!findings.length) { out('doctor-sweep: every installed job and registry entry points at a living hub. Nothing to do.'); return; }
+  for (const fd of findings) {
+    out(`${fd.kind === 'job' ? fd.label : 'hubs.json entry'}: ${fd.hub ?? fd.file} — missing ${fd.missing.join(', ')}`);
+  }
+  if (!remove) { out(`${findings.length} orphan(s). Rerun with --remove to take them out (confirms each; --yes skips the confirms).`); return; }
+  const confirm = (q) => {
+    if (yes) return true;
+    if (!process.stdin.isTTY) die('doctor-sweep --remove needs a terminal to confirm, or --yes to skip the confirms.');
+    process.stdout.write(q + ' [y/N] ');
+    try {
+      const ans = execFileSync('sh', ['-c', 'read -r ans </dev/tty && printf %s "$ans"'], { encoding: 'utf8' });
+      return /^y/i.test(ans.trim());
+    } catch { return false; }
+  };
+  for (const fd of findings) {
+    if (fd.kind === 'job') {
+      if (!confirm(`Unload and delete ${fd.label}?`)) continue;
+      const kindExt = ext === '.plist' ? 'darwin' : 'linux';
+      const job = daemonJob({ slug: fd.label.replace(/^house\.nightwatch\./, '').replace(/\.watch$/, ''), hub: fd.hub ?? '/nonexistent', machineryDir: WC, ...(fd.label.endsWith('.watch') ? { jobKind: 'watch' } : {}) }, kindExt);
+      for (const { bin, args } of job.unloadArgv(fd.file)) {
+        try { execFileSync(bin, args, { stdio: 'pipe' }); } catch { /* never loaded or already out — the rm is the point */ }
+      }
+      rmSync(fd.file, { force: true });
+      out(`removed ${fd.label} (${fd.file})`);
+    } else {
+      if (!confirm(`Drop the hubs.json entry for missing hub ${fd.hub}?`)) continue;
+      const fresh = JSON.parse(readFileSync(regPath, 'utf8'));
+      fresh.hubs = (fresh.hubs ?? []).filter((h) => h.path !== fd.hub);
+      writeFileSync(regPath + '.tmp', JSON.stringify(fresh, null, 2) + '\n');
+      renameSync(regPath + '.tmp', regPath);
+      out(`dropped ${fd.hub} from ${regPath}`);
+    }
+  }
+}
 // ----------------------------------------------------------------- main
+// Refuse-by-default (the porch-leak law, 10/15, design settled with opus):
+// init writes NOTHING user-global — no launchd job, no hubs.json entry —
+// unless apply is run with --live, and it refuses --live when the hub sits
+// in scratch space or the bench seams (NW_INSTALL_DIR / NW_REGISTRY_DIR)
+// are set. A bench that forgets the hermetic path is then safe by
+// construction; nothing it installs can outlive it, because nothing is
+// installed. Teardown on exit paths is deliberately NOT the defense: the
+// 10/13 leak came from a SIGKILL and a deleted worktree, which run no exit
+// path. What a --live install writes is recorded in the hub's
+// wakecycle/installed.json, and `doctor-sweep` finds installed jobs whose
+// hub or machinery no longer exists, from the records, not the teardown.
+const LIVE = process.argv.includes('--live');
+function scratchRooted(p) {
+  // realpath BOTH sides and compare unresolved spellings too: on macOS
+  // tmpdir() says /var/folders/… while realpath says /private/var/folders/…,
+  // and a hub that does not exist yet cannot be resolved at all. This exact
+  // mismatch let a --live apply from a test install real launchd jobs on
+  // 10/16 — the incident this guard exists for found the guard's own hole.
+  const real = (x) => { try { return realpathSync(x); } catch { return x; } };
+  const candidates = [tmpdir(), real(tmpdir()), '/tmp', '/private/tmp', '/var/folders', '/private/var/folders'];
+  return [expand(p), real(expand(p))].some((r) => candidates.some((t) => r === t || r.startsWith(t + '/')));
+}
 const [cmd, arg] = process.argv.slice(2);
 try {
   if (cmd === 'plan' || cmd === 'apply') {
@@ -478,7 +593,9 @@ try {
         }
       }
       const who = ctx.name ?? (spec.op === 'init' ? 'the new persona' : `the ${spec.lane.id} agent`);
-      const opened = process.env.WEFT_NW_NO_ACTIVATE ? 'prepared their first session (activation off)' : 'opened their first session';
+      const opened = process.env.WEFT_NW_NO_ACTIVATE ? 'prepared their first session (activation off)'
+        : (spec.op === 'init' && !LIVE) ? 'staged everything — nothing user-global was written (no launchd job, no registry entry); rerun apply with --live to install'
+        : 'opened their first session';
       out(spec.op === 'init' ? `Created ${who}'s hub at ${hub} and ${opened}.` : `Added the ${spec.lane.id} agent and ${process.env.WEFT_NW_NO_ACTIVATE ? 'prepared' : 'opened'} its first session.`);
     }
   } else if (cmd === 'inspect-import') {
@@ -486,8 +603,10 @@ try {
     out(inspectImport(arg));
   } else if (cmd === 'list-unclaimed') {
     out(listUnclaimed());
+  } else if (cmd === 'doctor-sweep') {
+    doctorSweep({ remove: process.argv.includes('--remove'), yes: process.argv.includes('--yes') });
   } else {
-    die('Usage: nightwatch.mjs plan|apply <spec.json> | inspect-import <folder> | list-unclaimed');
+    die('Usage: nightwatch.mjs plan|apply <spec.json> [--live] | inspect-import <folder> | list-unclaimed | doctor-sweep [--remove] [--yes]');
   }
 } catch (e) {
   die(e?.message ?? String(e));

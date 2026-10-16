@@ -135,7 +135,7 @@ export function daemonJob({ slug, hub, jobKind = 'nightshift', node = process.ex
       label,
       fileName: `${label}.plist`,
       content,
-      installDir: join(homedir(), 'Library', 'LaunchAgents'),
+      installDir: process.env.NW_INSTALL_DIR || join(homedir(), 'Library', 'LaunchAgents'),
       loadArgv: (installedPath) => [{ bin: 'launchctl', args: ['load', installedPath] }],
       unloadArgv: (installedPath) => [{ bin: 'launchctl', args: ['unload', installedPath] }],
     };
@@ -163,7 +163,7 @@ WantedBy=default.target
     label,
     fileName: `${label}.service`,
     content,
-    installDir: join(homedir(), '.config', 'systemd', 'user'),
+    installDir: process.env.NW_INSTALL_DIR || join(homedir(), '.config', 'systemd', 'user'),
     loadArgv: () => [
       { bin: 'systemctl', args: ['--user', 'daemon-reload'] },
       { bin: 'systemctl', args: ['--user', 'enable', '--now', `${label}.service`] },
@@ -174,6 +174,11 @@ WantedBy=default.target
 
 /** The per-user registry the app reads (hubs.json lives here). */
 export function registryDir(kind = platformKind()) {
+  // NW_REGISTRY_DIR (with NW_INSTALL_DIR above) is a BENCH seam: tests point
+  // both at scratch dirs so nothing user-global is touched. apply --live
+  // refuses to run while either is set, so the seam can't misdirect a real
+  // install (see nightwatch.mjs).
+  if (process.env.NW_REGISTRY_DIR) return process.env.NW_REGISTRY_DIR;
   if (kind === 'darwin') return join(homedir(), 'Library', 'Application Support', 'Nightwatch');
   const xdg = process.env.XDG_CONFIG_HOME;
   return join(xdg && xdg.length ? xdg : join(homedir(), '.config'), 'nightwatch');
