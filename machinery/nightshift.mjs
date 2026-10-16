@@ -186,20 +186,24 @@ function liveSessions() {
   }
   return out;
 }
-function laneOf(sessionId) {
-  // Registry first: wake.sh exports WEFT_LANE and the SessionStart hook
-  // writes wakecycle/lane.<sessionId> from inside the new session. This is
-  // ground truth for every session the nightshift itself launched. Manual
-  // panels have no registry entry and fall through to the heuristic below.
+// Lane attribution with its GRADE, because not every answer is evidence
+// (Ra's 10/13 find): 'registry' is ground truth (wake.sh exports WEFT_LANE,
+// the SessionStart hook writes wakecycle/lane.<sessionId> from inside the
+// new session); 'marker' is a real signal (the session's tail shows a cwd a
+// lane claims via lanes[].cwdMarker); 'fallback' is a GUESS — any
+// cwd-bearing session no marker claims used to read as the switchboard
+// lane, which is nearly always right while every lane runs a different
+// model and wrong half the time once two lanes share one. Consumers that
+// only route or display may take any grade; wake-suppression takes
+// registry only (see the already-awake guard).
+function laneAttribution(sessionId) {
   try {
     const reg = JSON.parse(readFileSync(join(WAKECYCLE, `lane.${sessionId}`), 'utf8'));
-    if (typeof reg.lane === 'string' && reg.lane) return reg.lane;
+    if (typeof reg.lane === 'string' && reg.lane) return { lane: reg.lane, grade: 'registry' };
   } catch { /* unregistered — heuristic */ }
   // Whole-tail vote, not last-cwd: the opus lane makes machinery trips into
   // ~/origin/weft (10/2: its wake fixed index.json there, its LAST cwd read
   // as fable, and the 08:00 wake silently concluded fable was already up).
-  // The fable lane never works IN voidwerks, so any voidwerks cwd in the
-  // tail marks the session opus.
   const path = join(PROJECT_DIR, `${sessionId}.jsonl`);
   try {
     const lines = readFileSync(path, 'utf8').split('\n').filter((l) => l.trim()).slice(-200);
@@ -213,13 +217,16 @@ function laneOf(sessionId) {
         // (lanes[].cwdMarker, substring match). Was `includes('voidwerks')
         // → opus` hardcoded, which no second household could reuse.
         for (const [name, lc] of Object.entries(CFG.lanes)) {
-          if (lc && lc.cwdMarker && String(cwd).includes(lc.cwdMarker)) return name;
+          if (lc && lc.cwdMarker && String(cwd).includes(lc.cwdMarker)) return { lane: name, grade: 'marker' };
         }
       } catch {}
     }
-    if (sawCwd) return switchboardLane(CFG);
+    if (sawCwd) return { lane: switchboardLane(CFG), grade: 'fallback' };
   } catch {}
   return null;
+}
+function laneOf(sessionId) {
+  return laneAttribution(sessionId)?.lane ?? null;
 }
 function transcriptQuietMs(sessionId) {
   try { return Date.now() - statSync(join(PROJECT_DIR, `${sessionId}.jsonl`)).mtimeMs; } catch { return Infinity; }
@@ -329,6 +336,7 @@ const io = {
   saveState,
   liveSessions,
   laneOf,
+  laneAttribution,
   ringBell,
   quietMs: transcriptQuietMs,
   nextWakeMtime: (lane) => {
@@ -710,15 +718,29 @@ function tickWith(io) {
           }
           io.log(`no wake confirmation for ${lane} after 5m — retrying (attempt ${(laneState.wakeAttempts ?? 0) + 1} of 3)`);
         }
-        const live = io.liveSessions().map((s) => ({ ...s, lane: io.laneOf(s.sessionId) })).filter((s) => s.lane === lane);
-        if (live.length) { // already up (manual wake) — stamp so we stop looking
-          io.log(`${lane} looks already awake (session ${live[0].sessionId.slice(0, 8)}… reads as ${lane}) — stamping wokenAt, no Terminal launch`);
-          io.emit('already-awake', { lane, session: live[0].sessionId });
+        // Wake-suppression trusts REGISTRY attribution only (Ra's 10/13
+        // ruling): a marker or fallback read is enough to route a bell, but
+        // not to conclude a lane is up and skip its wake — with same-model
+        // peers the fallback claims any unmarked panel for the switchboard
+        // lane, and a wake suppressed on that guess strands the lane with a
+        // clean log. A guessed match is logged and the launch proceeds; a
+        // true double panel is visible and cheap, a stranded lane is silent.
+        const attributed = io.liveSessions()
+          .map((s) => ({ ...s, at: io.laneAttribution(s.sessionId) }))
+          .filter((s) => s.at?.lane === lane);
+        const trusted = attributed.filter((s) => s.at.grade === 'registry');
+        if (trusted.length) { // already up — stamp so we stop looking
+          io.log(`${lane} looks already awake (session ${trusted[0].sessionId.slice(0, 8)}… reads as ${lane}, registry) — stamping wokenAt, no Terminal launch`);
+          io.emit('already-awake', { lane, session: trusted[0].sessionId });
           laneState.wokenAt = now;
           laneState.wakeAttempts = 0;
           delete laneState.refreshWake;
           io.saveState(st);
           continue;
+        }
+        if (attributed.length) {
+          io.log(`session ${attributed[0].sessionId.slice(0, 8)}… reads as ${lane} by ${attributed[0].at.grade} — not trusted for wake-suppression; launching anyway`);
+          io.emit('untrusted-lane-match', { lane, session: attributed[0].sessionId, grade: attributed[0].at.grade });
         }
         // A fresh sleep receipt grants a fresh retry budget. Without this,
         // a WAKE FAILED morning leaves wakeAttempts at 3, and the NEXT
@@ -812,6 +834,12 @@ async function rehearse() {
       saveState: () => {},
       liveSessions: () => w.sessions.map(({ pid, sessionId }) => ({ pid, sessionId })),
       laneOf: (sid) => w.sessions.find((s) => s.sessionId === sid)?.lane ?? null,
+      // Scenario sessions are registry-grade unless they say otherwise: the
+      // launchWake-confirmed ones model daemon wakes, which register.
+      laneAttribution: (sid) => {
+        const s = w.sessions.find((x) => x.sessionId === sid);
+        return s ? { lane: s.lane, grade: s.grade ?? 'registry' } : null;
+      },
       ringBell: (lane, sid) => w.events.push(`bell:${lane}@${w.day}d${fmt(w.min)}`),
       quietMs: (sid) => w.sessions.find((s) => s.sessionId === sid)?.quietMs ?? 0,
       nextWakeMtime: (lane) => w.nextWake[lane] ?? 0,
@@ -904,6 +932,25 @@ async function rehearse() {
     w.sessions = [{ pid: 5, sessionId: 'manual-f', lane: 'fable', quietMs: 0 }]; // Ra opens it herself at 07:30
     w.step(60); // -> 08:30
     check('manual-wake', 'no Terminal launch when already up', count(w, 'wake:') === 0, w.events.join());
+  }
+
+  { // Scenario 20 (Ra's 10/13 find, fixed 10/16): a same-model STRAY — an
+    // unregistered, unmarked panel that the fallback attributes to the
+    // switchboard lane — must NOT suppress the lane's wake. Before the
+    // attribution grade, this stray read as fable and the guard stamped
+    // wokenAt with a clean log while the real lane stayed asleep.
+    const w = makeWorld(['fable']);
+    w.nextWake.fable = w.io.now();
+    // The stray appears at 07:59, after the sleep side's last tick: a bell
+    // reaching a stray is designed routing and would derail this night into
+    // the orphan-fold wait; the guard under test runs on the wake side.
+    w.step(12 * 60 + 59); // -> 07:59
+    w.sessions = [{ pid: 6, sessionId: 'stray-x', lane: 'fable', grade: 'fallback', quietMs: 0 }];
+    w.step(31); // -> 08:30
+    check('same-model-stray', 'a fallback-grade match does not suppress the wake', count(w, 'wake:fable') === 1, w.events.join());
+    check('same-model-stray', 'the mistrust is logged, not silent', w.logs.some((l) => l.includes('not trusted for wake-suppression')), w.logs.filter((l) => /awake|trusted/.test(l)).join(' | '));
+    check('same-model-stray', 'never stamped "already awake" on the guess', !w.logs.some((l) => l.includes('already awake')), w.logs.join(' | '));
+    check('same-model-stray', 'the launched wake is confirmed on the registry-grade session', w.logs.some((l) => l.startsWith('wake confirmed for fable')), w.logs.filter((l) => /confirm/.test(l)).join(' | '));
   }
 
   { // Scenario 6 (REWRITTEN under Ra's 10/9 ruling — was: >20h is stale):
