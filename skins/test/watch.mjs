@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'; import { mkdtempSync } from 'node:fs';
+import { spawn } from 'node:child_process'; import { mkdtempSync, rmSync } from 'node:fs';
 const PORT=9338, prof=mkdtempSync(process.env.TMPDIR+'/nwcdp-');
 const ch=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless=new','--disable-gpu',`--remote-debugging-port=${PORT}`,`--user-data-dir=${prof}`,'about:blank'],{stdio:'ignore'});
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms)); let tab;
@@ -13,4 +13,4 @@ console.log('desk:', await ev(`document.documentElement.dataset.desk`), '| url:'
 console.log('active:', await ev(`document.activeElement.tagName`), 'busy-menu', await ev(`!!document.querySelector('[data-part="view-menu"][data-open="true"]')`));
 await sleep(34000);
 console.log('fetches in 34s:', await ev('window.__f'), '| lanes swapped:', await ev(`document.querySelector('.nw-app > .nw-lanes').dataset.mark!=='old'`), '| stale:', await ev(`document.documentElement.dataset.stale`));
-ws.close(); ch.kill(); process.exit(0);
+await Promise.race([send('Browser.close'), sleep(1000)]); ws.close(); ch.kill(); await sleep(300); rmSync(prof, { recursive: true, force: true }); process.exit(0);

@@ -46,4 +46,4 @@ await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 }); awai
 const gone = await ev(`(()=>{const a=document.querySelector('.nw-timeline [data-part="activity"]'); return !a.querySelector('[data-part="cursor"]') && !a.querySelector('[data-part="cursor-label"]') && a.hasAttribute('data-tip')})()`);
 gone ? ok++ : bad++; console.log(gone ? 'PASS' : 'FAIL', 'leaving restores the tip and removes the cursor');
 console.log('errors', await ev('JSON.stringify(window.__errs ?? [])'), `${ok} pass ${bad} fail`);
-rmSync(tmp); ch.kill(); process.exit(bad ? 1 : 0);
+await Promise.race([send('Browser.close'), sleep(1000)]); rmSync(tmp); ch.kill(); await sleep(300); rmSync(prof, { recursive: true, force: true }); process.exit(bad ? 1 : 0);

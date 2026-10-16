@@ -3,7 +3,7 @@
 // dragged inside it. Needs the viewer on 7352. Run:
 //   node --experimental-websocket skins/test/hits.mjs [baseUrl]
 import { spawn } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 const BASE = process.argv[2] ?? 'http://127.0.0.1:7352/';
 const PORT = 9337;
 const prof = mkdtempSync(process.env.TMPDIR + '/nwcdp-');
@@ -136,4 +136,4 @@ await check('agents hidden: the persona card has a click region', COV('.nw-app >
 await check('...and so does the floating + (Add persona)', COV('.nw-app > .nw-lanes > .nw-add-persona'), true);
 await ev('localStorage.clear()');
 
-console.log(`\n${pass} passed, ${fail} failed`); ws.close(); ch.kill(); process.exit(fail ? 1 : 0);
+console.log(`\n${pass} passed, ${fail} failed`); await Promise.race([send('Browser.close'), sleep(1000)]); ws.close(); ch.kill(); await sleep(300); rmSync(prof, { recursive: true, force: true }); process.exit(fail ? 1 : 0);

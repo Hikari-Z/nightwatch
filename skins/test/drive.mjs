@@ -4,7 +4,7 @@
 // Drive the served Nightwatch page through CDP: click each control, read back
 // what the runtime wrote. Usage: node drive.mjs [baseUrl]
 import { spawn } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 const BASE = process.argv[2] ?? 'http://127.0.0.1:7352/';
 const PORT = 9337;
 const prof = mkdtempSync(process.env.TMPDIR + '/nwcdp-');
@@ -342,5 +342,5 @@ await check('Glass Horizontal: the + is centred under the last persona tab', `(a
 await ev('localStorage.clear()');
 
 console.log(`\n${pass} passed, ${fail} failed`);
-ws.close(); ch.kill();
+await Promise.race([send('Browser.close'), sleep(1000)]); ws.close(); ch.kill(); await sleep(300); rmSync(prof, { recursive: true, force: true });
 process.exit(fail ? 1 : 0);

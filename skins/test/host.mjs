@@ -222,4 +222,4 @@ for (const skin of ['minimal', 'glass', 'amber', 'metal']) {
   }
 }
 
-console.log(`\n${pass} passed, ${fail} failed`); ws.close(); ch.kill(); await sleep(300); rmSync(prof, { recursive: true, force: true }); process.exit(fail ? 1 : 0);
+console.log(`\n${pass} passed, ${fail} failed`); await Promise.race([send('Browser.close'), sleep(1000)]); ws.close(); ch.kill(); await sleep(300); rmSync(prof, { recursive: true, force: true }); process.exit(fail ? 1 : 0);

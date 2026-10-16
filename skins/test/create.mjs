@@ -4,7 +4,7 @@
 //   node --experimental-websocket skins/test/create.mjs
 // Written by: claude-opus-5-5, 2026-10-06
 import { spawn } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 const BASE = process.argv[2] ?? 'http://127.0.0.1:7352/';
 const PORT = 9337;
 const prof = mkdtempSync(process.env.TMPDIR + '/nwcdp-');
@@ -129,4 +129,4 @@ await ev(`document.querySelector('.nw-app > .nw-setup [data-action="close-setup"
 await check('no errors along the way', 'window.__errs', []);
 
 console.log(`\n${pass} passed, ${fail} failed`);
-ws.close(); ch.kill(); process.exit(fail ? 1 : 0);
+await Promise.race([send('Browser.close'), sleep(1000)]); ws.close(); ch.kill(); await sleep(300); rmSync(prof, { recursive: true, force: true }); process.exit(fail ? 1 : 0);
