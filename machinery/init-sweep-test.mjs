@@ -134,7 +134,39 @@ try {
     assert.ok(existsSync(join(jobsDir, 'house.nightwatch.flagged.plist'))));
   rmSync(join(jobsDir, 'house.nightwatch.flagged.plist'));
 
-  // 6. A clean second sweep has nothing to do.
+  // 6. The app's shape (opus's Doctor-panel spec): --json findings as data,
+  //    --remove-item removes exactly one, refusing stale or unreadable ids.
+  writeFileSync(join(jobsDir, 'house.nightwatch.ghost2.plist'),
+    plist('house.nightwatch.ghost2', join(scratch, 'gone-hub', 'nightwatch.config.json'), join(scratch, 'gone-wt', 'nightshift.mjs')));
+  writeFileSync(join(jobsDir, 'house.nightwatch.garbage2.plist'), 'still not a plist\n');
+  const parsedJson = JSON.parse(nw(['doctor-sweep', '--json']));
+  check('--json names each finding with a stable id', () => {
+    const ids = parsedJson.map((f) => f.id);
+    assert.ok(ids.includes('house.nightwatch.ghost2'), JSON.stringify(ids));
+    assert.ok(ids.includes('house.nightwatch.garbage2'));
+  });
+  check('--json marks unreadable findings unremovable', () => {
+    assert.equal(parsedJson.find((f) => f.id === 'house.nightwatch.garbage2').removable, false);
+    assert.equal(parsedJson.find((f) => f.id === 'house.nightwatch.ghost2').removable, true);
+  });
+  check('--remove-item refuses an unreadable id', () => {
+    assert.throws(() => nw(['doctor-sweep', '--remove-item', 'house.nightwatch.garbage2'], {}, { stdio: 'pipe' }),
+      (e) => /unreadable/.test(String(e.stderr)));
+    assert.ok(existsSync(join(jobsDir, 'house.nightwatch.garbage2.plist')));
+  });
+  check('--remove-item refuses an id that is not a finding', () => {
+    assert.throws(() => nw(['doctor-sweep', '--remove-item', 'house.nightwatch.living'], {}, { stdio: 'pipe' }),
+      (e) => /not a current finding/.test(String(e.stderr)));
+  });
+  check('--remove-item removes exactly the named finding', () => {
+    nw(['doctor-sweep', '--remove-item', 'house.nightwatch.ghost2']);
+    assert.ok(!existsSync(join(jobsDir, 'house.nightwatch.ghost2.plist')));
+    assert.ok(existsSync(join(jobsDir, 'house.nightwatch.garbage2.plist')), 'the unreadable one is untouched');
+    assert.ok(existsSync(join(jobsDir, ampJob.fileName)), 'the living one is untouched');
+  });
+  rmSync(join(jobsDir, 'house.nightwatch.garbage2.plist'));
+
+  // 7. A clean second sweep has nothing to do.
   check('a second sweep finds a clean house', () => assert.match(nw(['doctor-sweep']), /Nothing to do/));
 } finally {
   rmSync(scratch, { recursive: true, force: true });

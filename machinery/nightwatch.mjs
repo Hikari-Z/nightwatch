@@ -493,7 +493,7 @@ function listUnclaimed() {
  * Report always; remove only with --remove, confirming per item unless
  * --yes. A job whose targets exist is never touched.
  */
-function doctorSweep({ remove = false, yes = false } = {}) {
+function sweepFindings() {
   const probe = daemonJob({ slug: '_probe', hub: '/nonexistent', machineryDir: WC });
   const jobsDir = probe.installDir;
   const ext = probe.fileName.slice(probe.fileName.lastIndexOf('.'));
@@ -544,6 +544,35 @@ function doctorSweep({ remove = false, yes = false } = {}) {
   for (const h of reg?.hubs ?? []) {
     if (!exists(expand(h.path))) findings.push({ kind: 'registry', file: regPath, hub: h.path, missing: ['hub'] });
   }
+  for (const fd of findings) {
+    fd.id = fd.kind === 'job' ? fd.label : `registry:${fd.hub}`;
+    fd.removable = fd.kind === 'registry' || !fd.missing.includes('unparseable');
+    fd.volumes = !!fd.hub?.startsWith('/Volumes/');
+  }
+  return { findings, regPath, ext };
+}
+
+/** Remove one finding (no prompting here: callers own the confirm). */
+function removeFinding(fd, regPath, ext) {
+  if (fd.kind === 'job') {
+    const kindExt = ext === '.plist' ? 'darwin' : 'linux';
+    const job = daemonJob({ slug: fd.label.replace(/^house\.nightwatch\./, '').replace(/\.watch$/, ''), hub: fd.hub ?? '/nonexistent', machineryDir: WC, ...(fd.label.endsWith('.watch') ? { jobKind: 'watch' } : {}) }, kindExt);
+    for (const { bin, args } of job.unloadArgv(fd.file)) {
+      try { execFileSync(bin, args, { stdio: 'pipe' }); } catch { /* never loaded or already out — the rm is the point */ }
+    }
+    rmSync(fd.file, { force: true });
+    out(`removed ${fd.label} (${fd.file})`);
+  } else {
+    const fresh = JSON.parse(readFileSync(regPath, 'utf8'));
+    fresh.hubs = (fresh.hubs ?? []).filter((h) => h.path !== fd.hub);
+    writeFileSync(regPath + '.tmp', JSON.stringify(fresh, null, 2) + '\n');
+    renameSync(regPath + '.tmp', regPath);
+    out(`dropped ${fd.hub} from ${regPath}`);
+  }
+}
+
+function doctorSweep({ remove = false, yes = false } = {}) {
+  const { findings, regPath, ext } = sweepFindings();
   if (!findings.length) { out('doctor-sweep: every installed job and registry entry points at a living hub. Nothing to do.'); return; }
   for (const fd of findings) {
     out(`${fd.kind === 'job' ? fd.label : 'hubs.json entry'}: ${fd.hub ?? fd.file} — missing ${fd.missing.join(', ')}`);
@@ -577,22 +606,32 @@ function doctorSweep({ remove = false, yes = false } = {}) {
         if (yes && !process.stdin.isTTY) { out(`${fd.label}: hub under /Volumes (unmounted drive?) — skipped; rerun interactively to remove`); continue; }
         if (!confirmAlways(`${fd.label}: its hub is under /Volumes and may just be unmounted. Unload and delete anyway?`)) continue;
       } else if (!confirm(`Unload and delete ${fd.label}?`)) continue;
-      const kindExt = ext === '.plist' ? 'darwin' : 'linux';
-      const job = daemonJob({ slug: fd.label.replace(/^house\.nightwatch\./, '').replace(/\.watch$/, ''), hub: fd.hub ?? '/nonexistent', machineryDir: WC, ...(fd.label.endsWith('.watch') ? { jobKind: 'watch' } : {}) }, kindExt);
-      for (const { bin, args } of job.unloadArgv(fd.file)) {
-        try { execFileSync(bin, args, { stdio: 'pipe' }); } catch { /* never loaded or already out — the rm is the point */ }
-      }
-      rmSync(fd.file, { force: true });
-      out(`removed ${fd.label} (${fd.file})`);
+      removeFinding(fd, regPath, ext);
     } else {
       if (!confirm(`Drop the hubs.json entry for missing hub ${fd.hub}?`)) continue;
-      const fresh = JSON.parse(readFileSync(regPath, 'utf8'));
-      fresh.hubs = (fresh.hubs ?? []).filter((h) => h.path !== fd.hub);
-      writeFileSync(regPath + '.tmp', JSON.stringify(fresh, null, 2) + '\n');
-      renameSync(regPath + '.tmp', regPath);
-      out(`dropped ${fd.hub} from ${regPath}`);
+      removeFinding(fd, regPath, ext);
     }
   }
+}
+
+/** --json: the findings as data for the app's Doctor panel (opus, 10/16). */
+function doctorSweepJson() {
+  const { findings } = sweepFindings();
+  process.stdout.write(JSON.stringify(findings.map(({ id, kind, label, file, hub, missing, removable, volumes }) => ({ id, kind, label: label ?? null, file, hub, missing, removable, volumes })), null, 2) + '\n');
+}
+
+/**
+ * --remove-item <id>: remove exactly ONE finding, re-sweeping first and
+ * refusing unless the id is still a finding and still removable.
+ * Non-interactive by design: the app's per-item confirm IS the confirm,
+ * and there is no batch path from the UI at all.
+ */
+function doctorRemoveItem(id) {
+  const { findings, regPath, ext } = sweepFindings();
+  const fd = findings.find((f) => f.id === id);
+  if (!fd) die(`doctor-sweep --remove-item: "${id}" is not a current finding — re-sweep and try again (it may have been fixed, mounted, or already removed).`);
+  if (!fd.removable) die(`doctor-sweep --remove-item: "${id}" is unreadable — reported only, never removed automatically; inspect ${fd.file} by hand.`);
+  removeFinding(fd, regPath, ext);
 }
 // ----------------------------------------------------------------- main
 // Refuse-by-default (the porch-leak law, 10/15, design settled with opus):
@@ -645,7 +684,10 @@ try {
   } else if (cmd === 'list-unclaimed') {
     out(listUnclaimed());
   } else if (cmd === 'doctor-sweep') {
-    doctorSweep({ remove: process.argv.includes('--remove'), yes: process.argv.includes('--yes') });
+    const ri = process.argv.indexOf('--remove-item');
+    if (process.argv.includes('--json')) doctorSweepJson();
+    else if (ri !== -1) doctorRemoveItem(process.argv[ri + 1] ?? die('--remove-item needs an id.'));
+    else doctorSweep({ remove: process.argv.includes('--remove'), yes: process.argv.includes('--yes') });
   } else {
     die('Usage: nightwatch.mjs plan|apply <spec.json> [--live] | inspect-import <folder> | list-unclaimed | doctor-sweep [--remove] [--yes]');
   }
