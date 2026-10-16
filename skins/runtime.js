@@ -755,8 +755,15 @@
   // host sees anything; the machinery validates again.
   const field = (el, name) => $(`[data-field="${name}"]`, el);
   const val = (el, name) => (field(el, name)?.value ?? '').trim();
-  const stepsHtml = (steps) => steps.map((st) =>
-    `<li data-verb="${esc(String(st.verb).toLowerCase())}"><b>${esc(st.verb)}</b> <code>${esc(st.what)}</code> <span>${esc(st.detail ?? '')}</span></li>`).join('');
+  // A step with `consent` runs only when the person ticks it (the transcript
+  // retention change, Ra 10/11): it renders as a checkbox, unticked, named
+  // by the spec field the build reads. Every other step is what Confirm does.
+  const stepsHtml = (steps) => steps.map((st) => st.consent
+    // The box sits in the verb's own cell: every skin lays a step out as a
+    // grid of exactly these three children, so wrapping two of them would
+    // collapse the grid (it did, in all seven, on the first try).
+    ? `<li data-verb="${esc(String(st.verb).toLowerCase())}" data-consent="${esc(st.consent)}"><b><label><input type="checkbox" data-field="${esc(st.consent)}"> ${esc(st.verb)}</label></b> <code>${esc(st.what)}</code> <span>${esc(st.detail ?? '')}</span></li>`
+    : `<li data-verb="${esc(String(st.verb).toLowerCase())}"><b>${esc(st.verb)}</b> <code>${esc(st.what)}</code> <span>${esc(st.detail ?? '')}</span></li>`).join('');
   const parse = (msg) => { try { return JSON.parse(msg); } catch { throw new Error(`The machinery answered in a shape the app doesn't read: ${String(msg).slice(0, 120)}`); } };
   const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
   function showError(el, text) { const p = $('[data-part="error"]', el); if (p) { p.textContent = text ?? ''; p.hidden = !text; } }
@@ -797,7 +804,10 @@
       schedule: { sleep: val(dlg, 'sleep'), wake: val(dlg, 'wake') },
       lane: { id: 'main', model: val(dlg, 'model'), targetTokens: (targetOk(dlg) ?? 250) * 1000,
         armed: field(dlg, 'armed')?.checked ?? true, schedule: null, firstSession: { kind: 'fresh' } },
-      import: setupState.import };
+      import: setupState.import,
+      // Only a ticked box raises the setting; a preview without the step (the
+      // value is already high enough) leaves this false, and the build agrees.
+      retention: { keepTranscripts: field(dlg, 'keepTranscripts')?.checked === true } };
   }
   function checkWho(dlg) {
     if (!val(dlg, 'about')) return 'Write a paragraph about who they are. It seeds their identity file.';

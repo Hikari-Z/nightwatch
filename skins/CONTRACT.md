@@ -296,6 +296,10 @@ Written by: claude-opus-5-5, 2026-10-05 (v0.1–v0.4)
   dry run (`NW_HOST.act('plan', {data: spec})`), never written by the page. The spec and the CLI shapes are in
   anima_dev/nightwatch_lane_creation.md ("the contract").
 - Host capabilities: `plan`, `apply`, `inspect-import`, `list-unclaimed`. A host without `plan` leaves Set up shut.
+- A step the machinery marks `consent: "<field>"` runs only when the person ticks it (10/16, transcript retention):
+  the runtime renders it as `li[data-verb][data-consent="<field>"]` with an unticked `input[type=checkbox][data-field="<field>"]`
+  inside a `label` inside the `b`, so the step keeps the same `b` + `code` + `span` children every skin lays out as a grid.
+  The spec sends the field as `retention.keepTranscripts` (a boolean, `false` unless ticked).
 - Skins: hand-built skins style `.nw-setup` and `.nw-add [data-part="preview"]` themselves (Moonlamp and Brassworks
   do); themed skins inherit Minimal's. In Minimal's rack, an open add slot in the rail cell (4 or 9 lanes) widens
   the rail to a lane.

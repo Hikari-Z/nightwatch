@@ -624,6 +624,15 @@ mod creation_tests {
         assert!(with_spec(&h, "apply", &serde_json::Value::Null).is_err());
         assert!(inspect_import(&h, &serde_json::json!({ "from": "  " })).is_err());
     }
+    #[test]
+    fn set_up_runs_live_and_adding_an_agent_does_not() {
+        // Without --live, init stages the hub and installs nothing (b939c71),
+        // so a Set up that dropped the flag would make an agent who never wakes.
+        let init = serde_json::json!({"op": "init"});
+        assert_eq!(creation_args("plan", &init, "/s.json"), vec!["plan", "/s.json", "--live"]);
+        assert_eq!(creation_args("apply", &init, "/s.json"), vec!["apply", "/s.json", "--live"]);
+        assert_eq!(creation_args("apply", &serde_json::json!({"op": "lane-add"}), "/s.json"), vec!["apply", "/s.json"]);
+    }
 }
 
 #[cfg(test)]
@@ -709,9 +718,24 @@ fn with_spec(h: &Hub, op: &str, d: &serde_json::Value) -> Result<String, String>
     let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|t| t.as_nanos()).unwrap_or(0);
     let path = std::env::temp_dir().join(format!("nightwatch-spec-{}-{nanos}.json", std::process::id()));
     std::fs::write(&path, d.to_string()).map_err(|e| format!("couldn't write the spec: {e}"))?;
-    let out = h.node(NIGHTWATCH_CLI, &[op, &path.to_string_lossy()]);
+    let p = path.to_string_lossy().to_string();
+    let args = creation_args(op, d, &p);
+    let out = h.node(NIGHTWATCH_CLI, &args.iter().map(String::as_str).collect::<Vec<_>>());
     let _ = std::fs::remove_file(&path);
     out
+}
+
+// Set up (op "init") runs with --live, for its preview and its build alike.
+// Since refuse-by-default (b939c71), init writes nothing outside the hub
+// without it: no background jobs, no registry entry, no first session. The
+// person's Confirm, after a preview that names each of those writes, is the
+// deliberate act --live stands for (Fable and opus, 10/16). The machinery
+// still refuses a hub in scratch space, flag or no flag. Adding an agent
+// doesn't read the flag, so it gets none.
+fn creation_args(op: &str, d: &serde_json::Value, spec_path: &str) -> Vec<String> {
+    let mut a = vec![op.to_string(), spec_path.to_string()];
+    if d.get("op").and_then(|x| x.as_str()) == Some("init") { a.push("--live".into()); }
+    a
 }
 
 fn inspect_import(h: &Hub, d: &serde_json::Value) -> Result<String, String> {

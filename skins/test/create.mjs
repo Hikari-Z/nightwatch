@@ -27,7 +27,7 @@ const ev = async (expr) => {
   return r.result?.result?.value;
 };
 await send('Page.enable'); await send('Runtime.enable');
-await send('Page.addScriptToEvaluateOnNewDocument', { source: "window.__calls=[];window.__errs=[];window.NW_SHELL='tauri';\nwindow.NW_HOST={can:a=>['plan','apply','inspect-import','list-unclaimed'].includes(a),act:(a,o)=>{__calls.push([a,o.data??null]);\n if(a==='plan')return Promise.resolve(JSON.stringify({steps:[{verb:'Create',what:o.data.hub??('agent '+o.data.lane.id),detail:'the hub'},{verb:'Open',what:'a Terminal window',detail:'fresh session'}]}));\n if(a==='apply')return Promise.resolve('Created.');\n if(a==='inspect-import')return Promise.resolve(JSON.stringify(o.data.from==='/good'?{identity:true,about:'I am Lark.',name:'Lark',memory:3,rungs:0}:{identity:false}));\n if(a==='list-unclaimed')return Promise.resolve(JSON.stringify([{sessionId:'abcdef1234567890',cwd:'~/origin',model:'Opus 5.5'}]));\n return Promise.reject('unexpected '+a)}};\naddEventListener('error',e=>__errs.push(e.message+' @'+e.lineno));addEventListener('unhandledrejection',e=>__errs.push('rej '+e.reason))" });
+await send('Page.addScriptToEvaluateOnNewDocument', { source: "window.__calls=[];window.__errs=[];window.NW_SHELL='tauri';\nwindow.NW_HOST={can:a=>['plan','apply','inspect-import','list-unclaimed'].includes(a),act:(a,o)=>{__calls.push([a,o.data??null]);\n if(a==='plan')return Promise.resolve(JSON.stringify({steps:[{verb:'Create',what:o.data.hub??('agent '+o.data.lane.id),detail:'the hub'},{verb:'Open',what:'a Terminal window',detail:'fresh session'}].concat(o.data.op==='init'?[{verb:'Raise',what:'transcript retention, 30 → 3650 days',detail:'machine-wide',consent:'keepTranscripts'}]:[])}));\n if(a==='apply')return Promise.resolve('Created.');\n if(a==='inspect-import')return Promise.resolve(JSON.stringify(o.data.from==='/good'?{identity:true,about:'I am Lark.',name:'Lark',memory:3,rungs:0}:{identity:false}));\n if(a==='list-unclaimed')return Promise.resolve(JSON.stringify([{sessionId:'abcdef1234567890',cwd:'~/origin',model:'Opus 5.5'}]));\n return Promise.reject('unexpected '+a)}};\naddEventListener('error',e=>__errs.push(e.message+' @'+e.lineno));addEventListener('unhandledrejection',e=>__errs.push('rej '+e.reason))" });
 const go = async (url) => { await send('Page.navigate', { url }); await sleep(1500); };
 let pass = 0, fail = 0;
 const check = async (name, expr, want) => {
@@ -56,17 +56,35 @@ await click(`${D} [data-action="setup-next"]`); await tick();
 await check('then "their nights"', `[${step}, ${err}]`, ['nights', null]);
 await click(`${D} [data-action="setup-next"]`); await tick();
 await check('Next asks the dry run, then shows its steps', `[${step}, document.querySelectorAll('${D} [data-part="steps"] li').length, document.querySelector('${D} [data-part="steps"] li code').textContent]`,
-  ['preview', 2, '~/Nightwatch/moth']);
+  ['preview', 3, '~/Nightwatch/moth']);
 await check('the spec: unnamed persona, pinned model, global schedule, fresh main agent', lastCall('plan'),
   { op: 'init', hub: '~/Nightwatch/moth', persona: { name: null, about: 'A careful reader who likes trains.', person: 'Sam' },
     schedule: { sleep: '02:00', wake: '08:00' },
-    lane: { id: 'main', model: 'claude-fable-5-1', targetTokens: 250000, armed: true, schedule: null, firstSession: { kind: 'fresh' } }, import: null });
+    lane: { id: 'main', model: 'claude-fable-5-1', targetTokens: 250000, armed: true, schedule: null, firstSession: { kind: 'fresh' } }, import: null,
+    retention: { keepTranscripts: false } });
+// The retention change (Ra, 10/11) is the one step that waits on a box: unticked, and only it has one.
+await check('a consent step renders as an unticked box; no other step has one',
+  `[...document.querySelectorAll('${D} [data-part="steps"] li')].map(l=>[l.dataset.consent??null, l.querySelector('input[type=checkbox]')?.checked ?? null])`,
+  [[null, null], [null, null], ['keepTranscripts', false]]);
+// Every skin lays a step out as a grid of exactly b + code + span; wrapping any two collapses it (it did, 10/16).
+await check('the consent step keeps the three children every skin lays out', `[...document.querySelector('${D} [data-part="steps"] li[data-consent]').children].map(c=>c.tagName)`, ['B', 'CODE', 'SPAN']);
+await click(`${D} [data-part="steps"] li[data-consent] b label`); await tick();
+await check('clicking the verb ticks the box', `document.querySelector('${D} [data-part="steps"] li[data-consent] input').checked`, true);
+await click(`${D} [data-part="steps"] li[data-consent] b label`); await tick();
 await check('only the preview step shows Create', `[...document.querySelectorAll('${D} [data-part="buttons"] button')].filter(b=>getComputedStyle(b).display!=='none').map(b=>b.dataset.action)`, ['setup-back', 'create-persona']);
 await click(`${D} [data-action="setup-back"]`); await tick();
 await check('Back from preview → nights', step, 'nights');
 await click(`${D} [data-action="setup-next"]`); await tick();
 await click(`${D} [data-action="create-persona"]`); await tick();
 await check('Create sends the same spec to apply, closes, says so', `[JSON.stringify(${lastCall('apply')})===JSON.stringify(${lastCall('plan')}), document.querySelector('${D}').dataset.open, document.querySelector('.nw-app > .nw-toast')?.textContent]`, [true, 'false', 'Created.']);
+// Ticked, apply carries it, and that is the only difference from the preview's spec.
+await click('.nw-app > .nw-controls [data-action="setup"]'); await tick();
+await set(F('about'), 'A careful reader who likes trains.'); await set(F('person'), 'Sam'); await set(F('hub'), '~/Nightwatch/moth');
+await click(`${D} [data-action="setup-next"]`); await tick();
+await click(`${D} [data-action="setup-next"]`); await tick();
+await click(`${D} [data-part="steps"] li[data-consent] input`); await tick();
+await click(`${D} [data-action="create-persona"]`); await tick();
+await check('ticked, apply asks for it and nothing else changes', `(a=>(p=>[a.retention.keepTranscripts, JSON.stringify({...a, retention: null})===JSON.stringify({...p, retention: null})])(${lastCall('plan')}))(${lastCall('apply')})`, [true, true]);
 
 // ---- Import: a folder checked first; anything missing stays missing
 await ev('window.__calls=[]');

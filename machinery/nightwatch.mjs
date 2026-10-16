@@ -30,6 +30,7 @@ import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { daemonJob, registryDir, summonArgvFor } from './platform.mjs';
+import { applyRetention, stepFor, survey } from './retention.mjs';
 
 const WC = dirname(fileURLToPath(import.meta.url));
 const HOME = homedir();
@@ -89,6 +90,8 @@ function loadSpec(path) {
     const sched = spec.schedule ?? {};
     for (const k of ['sleep', 'wake']) if (sched[k] && !/^\d\d:\d\d$/.test(sched[k])) die(`schedule.${k} must look like 02:00.`);
     if (spec.import && !spec.import.from) die('import needs a "from" folder.');
+    if (spec.retention !== undefined && spec.retention !== null
+      && (typeof spec.retention !== 'object' || typeof spec.retention.keepTranscripts !== 'boolean')) die('retention.keepTranscripts must be true or false.');
   }
   return spec;
 }
@@ -217,7 +220,7 @@ function initSteps(spec) {
   });
   if (!noActivate) {
     steps.push({
-      verb: 'Start', what: 'the nightshift, with a test', detail: 'loads the background job and proves it can open a Terminal window (the one permission prompt)',
+      verb: 'Start', what: 'the nightshift, with a test', detail: `loads both background jobs, adds this hub to Nightwatch's list of hubs (${join(registryDir(), 'hubs.json').replace(HOME, '~')}), records both in the hub's wakecycle/installed.json, and proves it can open a Terminal window (the one permission prompt)`,
       run() {
         // Guard at the point of effect, not only at the flag: whatever the
         // argument plumbing said, nothing user-global is written for a hub
@@ -260,6 +263,24 @@ function initSteps(spec) {
         for (const { bin, args } of job.loadArgv(join(job.installDir, job.fileName))) execFileSync(bin, args);
         for (const { bin, args } of watchJob.loadArgv(join(watchJob.installDir, watchJob.fileName))) execFileSync(bin, args);
         launchLegTest(hub);
+      },
+    });
+    // Transcript retention (Ra, 10/11): previewed, runs only when the person
+    // ticks it, skipped when their value is already at or above the target.
+    // It sits after Start so the setting changes only for an install that
+    // succeeded, and it is a user-global write, so it lives under --live.
+    const ret = survey();
+    steps.push({
+      ...stepFor(ret),
+      run() {
+        // Never fatal (see applyRetention): a miss is said here, recorded in
+        // installed.json, and repeated in apply's last sentence.
+        const r = applyRetention({ s: ret, keep: spec.retention?.keepTranscripts, manifestFile: join(hub, 'wakecycle', 'installed.json'), refuse: scratchRooted });
+        if (r?.error) {
+          process.stderr.write(`The transcript-retention change wasn't made: ${r.error}\n`);
+          afterNotes.push(`the transcript-retention change wasn't made (${r.error}), so set cleanupPeriodDays in ${ret.file.replace(HOME, '~')} by hand if you want it`);
+        }
+        if (r?.manifestError) afterNotes.push(`the retention change wasn't recorded in installed.json (${r.manifestError})`);
       },
     });
   }
@@ -653,6 +674,9 @@ function doctorRemoveItem(id) {
 // wakecycle/installed.json, and `doctor-sweep` finds installed jobs whose
 // hub or machinery no longer exists, from the records, not the teardown.
 const LIVE = process.argv.includes('--live');
+// Things a step couldn't do without failing the install; apply's last
+// sentence carries them, where the person can still act on them.
+const afterNotes = [];
 function scratchRooted(p) {
   // realpath BOTH sides and compare unresolved spellings too: on macOS
   // tmpdir() says /var/folders/… while realpath says /private/var/folders/…,
@@ -670,7 +694,9 @@ try {
     const spec = loadSpec(arg);
     const { steps, hub, ctx } = spec.op === 'init' ? initSteps(spec) : laneAddSteps(spec);
     if (cmd === 'plan') {
-      out({ steps: steps.map(({ verb, what, detail }) => ({ verb, what, detail })) });
+      // `consent` names the spec field a step waits on: it runs only when the
+      // page sends that field true (the preview shows it as a checkbox).
+      out({ steps: steps.map(({ verb, what, detail, consent }) => ({ verb, what, detail, ...(consent ? { consent } : {}) })) });
     } else {
       for (const step of steps) {
         try { step.run(); }
@@ -683,7 +709,8 @@ try {
       const opened = process.env.WEFT_NW_NO_ACTIVATE ? 'prepared their first session (activation off)'
         : (spec.op === 'init' && !LIVE) ? 'staged everything — nothing user-global was written (no launchd job, no registry entry); rerun apply with --live to install'
         : 'opened their first session';
-      out(spec.op === 'init' ? `Created ${who}'s hub at ${hub} and ${opened}.` : `Added the ${spec.lane.id} agent and ${process.env.WEFT_NW_NO_ACTIVATE ? 'prepared' : 'opened'} its first session.`);
+      const said = spec.op === 'init' ? `Created ${who}'s hub at ${hub} and ${opened}.` : `Added the ${spec.lane.id} agent and ${process.env.WEFT_NW_NO_ACTIVATE ? 'prepared' : 'opened'} its first session.`;
+      out(afterNotes.length ? `${said.slice(0, -1)}; ${afterNotes.join('; ')}.` : said);
     }
   } else if (cmd === 'inspect-import') {
     if (!arg) die('inspect-import needs a folder.');
