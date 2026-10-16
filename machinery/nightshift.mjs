@@ -22,6 +22,7 @@
  *  - pid→session mapping is verified through the process's own environment
  *    (CLAUDE_CODE_SESSION_ID via `ps eww`), never guessed from timing.
  */
+import { laneWatchers, processTable, unheardBell } from './watchers.mjs';
 import { readFileSync, readdirSync, statSync, existsSync, appendFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { summonWindow } from './platform.mjs';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
@@ -280,7 +281,10 @@ function ritualNote(lane, sessionId) {
     `(fold receipt first: a crash between rung and fold costs the night; a crash ` +
     `after the fold costs only a stale lane section, and the wake reads the live ` +
     `checkpoint later). Close any background shells or watchers you left running — ` +
-    `the nightshift can't close a panel that still has work under it. The nightshift ` +
+    `the nightshift can't close a panel that still has work under it. If one of them ` +
+    `watches ANOTHER lane's spool (cover while that lane is out), look in that spool once ` +
+    `more before closing it: that lane's bell rings in the same minute, and a note left ` +
+    `behind waits unheard until someone arms a watcher there. The nightshift ` +
     `will close the panel once next-wake.${lane}.json is fresh and the session has gone quiet, and ` +
     `wake the lane at ${WAKE_HOUR}. The doorbell and heartbeat hold the night watch.`
   );
@@ -303,6 +307,16 @@ function ringBell(lane, sessionId, source, midday) {
     writeFileSync(join(spool, `${Date.now()}-bell-${lane}.txt`), ritual + '\n');
     log(`rang the sleep-bell for ${lane} (session ${sessionId.slice(0, 8)}…) — spool note written`);
     emitEvent('bell-rung', { lane, session: sessionId, ...(source ? { source } : {}), ...(midday ? { midday: midday.tier } : {}) });
+    // Is anyone listening (10/16)? Checked here, at the bell, and nowhere else:
+    // a lane with no watcher between bells is ordinary. With none tracked the
+    // note waits for the next arm or the spool hook, and the orphan fold is
+    // the floor; the record should say so rather than leave a silent night.
+    const table = processTable();
+    const unheard = table === null ? null : unheardBell(table, lane);
+    if (unheard) {
+      log(unheard);
+      emitEvent('bell-unwatched', { lane, detached: laneWatchers(table, lane).length });
+    }
   } catch (e) {
     log(`bell spool write FAILED for ${lane}: ${e.message}`);
     emitEvent('bell-failed', { lane, error: e.message, alarm: true });
