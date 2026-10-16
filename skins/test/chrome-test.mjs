@@ -105,6 +105,15 @@ try {
     p.kill('SIGTERM'); await exited;
     check('...and is cleaned up when that test ends', !!info && await until(() => !alive(info.chrome)) && await until(() => !existsSync(info.prof)));
   }
+  // 8: Chrome dies mid-test (its pid may be reused by exit time, so it isn't
+  // killed again); the test still removes the profile on its way out.
+  {
+    const { info, child: p, exited } = await run('wait', 9378);
+    if (info) { process.kill(info.chrome, 'SIGKILL'); await until(() => !alive(info.chrome)); }
+    p.kill('SIGTERM'); const e = await exited;
+    check('a Chrome that died mid-test still leaves no profile', !!info && await until(() => !existsSync(info.prof)) && e.code === 143,
+      `exit ${e.code}/${e.sig}, profile present ${info && existsSync(info.prof)}`);
+  }
 } finally {
   sweepOrphans();
   rmSync(work, { recursive: true, force: true });

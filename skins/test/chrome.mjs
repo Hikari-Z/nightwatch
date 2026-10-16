@@ -62,7 +62,7 @@ function holders(prof) {
  * after SIGTERM). Waits at most 3 s, then kills any helper still there.
  */
 function killAndRemove(pid, prof) {
-  try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+  if (pid) { try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ } }
   for (let t = 0; t < 3000 && holders(prof).length; t += 100) pause(100);
   for (const h of holders(prof)) { try { process.kill(h, 'SIGKILL'); } catch { /* gone */ } }
   pause(100);
@@ -129,6 +129,8 @@ export function launchChrome({ port, prefix = 'nwcdp-', size = '1100,1000' }) {
   const args = ['--headless=new', '--disable-gpu', `--remote-debugging-port=${port}`, `--user-data-dir=${prof}`];
   if (size) args.push(`--window-size=${size}`);
   const ch = spawn(CHROME, [...args, 'about:blank'], { stdio: 'ignore' });
-  onExit(() => killAndRemove(ch.pid, prof));
+  // A Chrome that already exited may have had its pid reused by now: kill only
+  // a Chrome the child handle says is still running (Fable's read, 10/16).
+  onExit(() => killAndRemove(ch.exitCode === null && ch.signalCode === null ? ch.pid : null, prof));
   return { ch, prof };
 }
