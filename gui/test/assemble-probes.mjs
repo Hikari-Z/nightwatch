@@ -325,6 +325,19 @@ const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
   check('log: a fold within its target says nothing extra', tips.filter((t) => /its target/.test(t)).length === 1, JSON.stringify(tips));
 }
 
+// ---- probe: a wake launched beside a panel that only guesses its lane (10/16).
+// nightshift emits untrusted-lane-match when a marker- or fallback-grade
+// session reads as the lane and the wake launches anyway; an unlisted kind
+// renders hidden, so without its row the log would never show the stray.
+{
+  const LC = { ...cfg, lanes: { fable: {} } };
+  const ev = [{ at: iso(1800e3), kind: 'untrusted-lane-match', lane: 'fable', session: 'stray-x', grade: 'fallback' }];
+  const s = assemble(LC, { readText: (p) => p === '/ev' ? ev.map((e) => JSON.stringify(e)).join('\n') : null, readDir: () => [], readTail: () => null, stat: () => null, livePids: () => [], psCommand: () => null, now: () => NOW }, '8h');
+  const rows = s.LOG.flatMap(([, r]) => r).filter((r) => r[1] === 'fable');
+  check('log: an untrusted lane match shows, as a launch, naming its grade',
+    rows.some((r) => r[2] === 'launch' && /unregistered panel/.test(r[4]) && /by fallback/.test(r[4])), JSON.stringify(rows));
+}
+
 // ---- the fold-cycle stage on a live lane (opus, 10/9). The card's state
 // comes from lifecycle events only; a fold leaves 'folding' until the close.
 {
