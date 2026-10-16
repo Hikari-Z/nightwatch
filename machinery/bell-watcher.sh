@@ -21,6 +21,35 @@ SPOOL_BASE="$(node "$MACHINERY_DIR/config.mjs" get paths.spool)" || {
   echo "bell-watcher: hub config unreadable (set WEFT_CONFIG to the hub's config file)"; exit 3; }
 SPOOL="$SPOOL_BASE/$LANE"
 mkdir -p "$SPOOL"
+
+# One watcher per lane, judged by parentage (10/16). A watcher whose parent
+# is pid 1 was detached (a trailing `&`, or its session ended): its exit
+# reaches no one, so a bell it catches is printed to nowhere. It is stopped
+# here, and this arm takes its place. A watcher with a live parent is a
+# tracked one; then this arm stands down rather than run a second. Twice a
+# detached watcher looked like coverage (10/14, then again under load on
+# 10/16), and a guard that only counted processes declined to arm the
+# tracked one that would have been heard. Only the shell running this script
+# matches: the harness's wrapper carries the same text in its command line,
+# and so does this script's own subshell below (a fork, whose parent is us).
+WATCHERS="$(ps -axo pid=,ppid=,command= | awk -v me="$$" -v tail="bell-watcher.sh $LANE" '
+  $1 != me && $2 != me && ($3 == "sh" || $3 == "/bin/sh" || $3 == "bash" || $3 == "/bin/bash") &&
+  length($0) >= length(tail) && substr($0, length($0) - length(tail) + 1) == tail { print $1, $2 }')"
+if [ -n "$WATCHERS" ]; then
+  LIVE=""
+  for pair in $(echo "$WATCHERS" | tr ' ' ':'); do
+    pid="${pair%%:*}"; ppid="${pair##*:}"
+    if [ "$ppid" = "1" ]; then
+      kill "$pid" 2>/dev/null && echo "bell-watcher: stopped pid $pid, a detached watcher for $LANE (its exit would reach no one)"
+    else
+      LIVE="$LIVE $pid"
+    fi
+  done
+  if [ -n "$LIVE" ]; then
+    echo "bell-watcher: $LANE is already watched by pid$LIVE (a tracked watcher); not arming a second. Nothing to re-arm."
+    exit 0
+  fi
+fi
 echo "bell-watcher up: lane=$LANE spool=$SPOOL poll=5s (exits on first note)"
 while :; do
   NOTE="$(ls "$SPOOL" 2>/dev/null | head -1)"
