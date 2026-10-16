@@ -240,13 +240,14 @@ function initSteps(spec) {
           writeFileSync(regPath + '.tmp', JSON.stringify(reg, null, 2) + '\n');
           renameSync(regPath + '.tmp', regPath);
         }
-        for (const { bin, args } of job.loadArgv(join(job.installDir, job.fileName))) execFileSync(bin, args);
         const watchJob = daemonJob({ slug, hub, jobKind: 'watch', machineryDir: WC });
         writeFileSync(join(watchJob.installDir, watchJob.fileName), watchJob.content);
-        for (const { bin, args } of watchJob.loadArgv(join(watchJob.installDir, watchJob.fileName))) execFileSync(bin, args);
-        // The install manifest: every user-global thing this init wrote,
-        // recorded in the hub it serves. doctor-sweep reads these shapes
-        // back; a crash or a deleted hub leaves the records, not a mystery.
+        // The install manifest: every user-global thing this init writes,
+        // recorded in the hub BEFORE anything loads — a record written
+        // after the act can be lost to a crash between them. It is the
+        // hub's own receipt of what was installed on its behalf;
+        // doctor-sweep scans the live system (LaunchAgents, hubs.json)
+        // rather than trusting it, and the two should agree.
         writeFileSync(join(hub, 'wakecycle', 'installed.json'), JSON.stringify({
           version: 1,
           installedAt: new Date().toISOString(),
@@ -256,6 +257,8 @@ function initSteps(spec) {
           ],
           registry: { file: join(regDir, 'hubs.json'), entry: hub },
         }, null, 2) + '\n');
+        for (const { bin, args } of job.loadArgv(join(job.installDir, job.fileName))) execFileSync(bin, args);
+        for (const { bin, args } of watchJob.loadArgv(join(watchJob.installDir, watchJob.fileName))) execFileSync(bin, args);
         launchLegTest(hub);
       },
     });
@@ -498,19 +501,36 @@ function doctorSweep({ remove = false, yes = false } = {}) {
   const findings = [];
   let files = [];
   try { files = readdirSync(jobsDir).filter((f) => f.startsWith('house.nightwatch.') && f.endsWith(ext)); } catch { /* no jobs dir */ }
+  // Read each job the way its loader does (opus's demonstrated blocker:
+  // a regex over the XML read &amp; literally and called a LIVING hub
+  // missing, and a binary1 plist — same job, legal format — read as
+  // unparseable; both would have been removed). On darwin, plutil extracts
+  // the keys as launchd sees them, entities and binary alike. Anything that
+  // can't be parsed is REPORTED and never removable: removal is only for a
+  // parsed path that is provably missing.
+  const plutilRaw = (file, key) => {
+    try { return execFileSync('plutil', ['-extract', key, 'raw', '-o', '-', file], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim() || null; } catch { return null; }
+  };
   for (const f of files) {
     const file = join(jobsDir, f);
-    let text = '';
-    try { text = readFileSync(file, 'utf8'); } catch { continue; }
-    const cfg = text.match(/WEFT_CONFIG<\/key>\s*<string>([^<]+)<\/string>/)?.[1]
-      ?? text.match(/Environment="WEFT_CONFIG=([^"]+)"/)?.[1] ?? null;
-    const script = text.match(/<string>([^<]+\.mjs)<\/string>/)?.[1]
-      ?? text.match(/ExecStart="[^"]+" "([^"]+\.mjs)"/)?.[1] ?? null;
+    let cfg = null, script = null, parsed = false;
+    if (ext === '.plist') {
+      cfg = plutilRaw(file, 'EnvironmentVariables.WEFT_CONFIG');
+      script = plutilRaw(file, 'ProgramArguments.1');
+      parsed = cfg !== null || script !== null;
+    } else {
+      let text = '';
+      try { text = readFileSync(file, 'utf8'); } catch { continue; }
+      const unq = (x) => (x == null ? null : x.replace(/%%/g, '%'));
+      cfg = unq(text.match(/Environment="WEFT_CONFIG=([^"]+)"/)?.[1] ?? null);
+      script = unq(text.match(/ExecStart="[^"]+" "([^"]+\.mjs)"/)?.[1] ?? null);
+      parsed = cfg !== null || script !== null;
+    }
     const missing = [];
     if (cfg && !exists(cfg) && !exists(dirname(cfg))) missing.push('hub');
     else if (cfg && !exists(cfg)) missing.push('config');
     if (script && !exists(script)) missing.push('machinery');
-    if (!cfg && !script) missing.push('unparseable');
+    if (!parsed) missing.push('unparseable');
     if (missing.length) findings.push({ kind: 'job', label: f.slice(0, -ext.length), file, hub: cfg ? dirname(cfg) : null, missing });
   }
   const regPath = join(registryDir(), 'hubs.json');
@@ -524,18 +544,34 @@ function doctorSweep({ remove = false, yes = false } = {}) {
     out(`${fd.kind === 'job' ? fd.label : 'hubs.json entry'}: ${fd.hub ?? fd.file} — missing ${fd.missing.join(', ')}`);
   }
   if (!remove) { out(`${findings.length} orphan(s). Rerun with --remove to take them out (confirms each; --yes skips the confirms).`); return; }
-  const confirm = (q) => {
-    if (yes) return true;
-    if (!process.stdin.isTTY) die('doctor-sweep --remove needs a terminal to confirm, or --yes to skip the confirms.');
+  const ask = (q) => {
     process.stdout.write(q + ' [y/N] ');
     try {
       const ans = execFileSync('sh', ['-c', 'read -r ans </dev/tty && printf %s "$ans"'], { encoding: 'utf8' });
       return /^y/i.test(ans.trim());
     } catch { return false; }
   };
+  const confirmAlways = (q) => {
+    if (!process.stdin.isTTY) return false;
+    return ask(q);
+  };
+  const confirm = (q) => {
+    if (yes) return true;
+    if (!process.stdin.isTTY) die('doctor-sweep --remove needs a terminal to confirm, or --yes to skip the confirms.');
+    return ask(q);
+  };
   for (const fd of findings) {
     if (fd.kind === 'job') {
-      if (!confirm(`Unload and delete ${fd.label}?`)) continue;
+      if (fd.missing.includes('unparseable')) {
+        out(`${fd.label}: unreadable — reported only, never removed automatically; inspect ${fd.file} by hand`);
+        continue;
+      }
+      // A hub under /Volumes may be an unmounted drive, not a dead hub:
+      // "not found" is not "gone". --yes never skips this confirm.
+      if (fd.hub?.startsWith('/Volumes/')) {
+        if (yes && !process.stdin.isTTY) { out(`${fd.label}: hub under /Volumes (unmounted drive?) — skipped; rerun interactively to remove`); continue; }
+        if (!confirmAlways(`${fd.label}: its hub is under /Volumes and may just be unmounted. Unload and delete anyway?`)) continue;
+      } else if (!confirm(`Unload and delete ${fd.label}?`)) continue;
       const kindExt = ext === '.plist' ? 'darwin' : 'linux';
       const job = daemonJob({ slug: fd.label.replace(/^house\.nightwatch\./, '').replace(/\.watch$/, ''), hub: fd.hub ?? '/nonexistent', machineryDir: WC, ...(fd.label.endsWith('.watch') ? { jobKind: 'watch' } : {}) }, kindExt);
       for (const { bin, args } of job.unloadArgv(fd.file)) {

@@ -94,7 +94,34 @@ try {
   });
   check('the removal says what it did', () => assert.match(removal, /removed house\.nightwatch\.ghost/));
 
-  // 5. A clean second sweep has nothing to do.
+  // 5. Opus's demonstrated blocker shapes (10/16): entities, binary1, and
+  //    garbage. A healthy job must never be offered for removal, however
+  //    its plist is spelled; garbage is reported and never removed.
+  const ampHub = join(scratch, 'R&D hub');
+  mkdirSync(ampHub, { recursive: true });
+  writeFileSync(join(ampHub, 'nightwatch.config.json'), '{}\n');
+  const { daemonJob } = await import('./platform.mjs');
+  const ampJob = daemonJob({ slug: 'ampersand', hub: ampHub, machineryDir: HERE }, 'darwin');
+  writeFileSync(join(jobsDir, ampJob.fileName), ampJob.content);
+  check('the writer produces a valid plist for an & path', () => {
+    execFileSync('plutil', ['-lint', join(jobsDir, ampJob.fileName)], { stdio: 'pipe' });
+  });
+  check('an entity-escaped living hub is never flagged', () =>
+    assert.doesNotMatch(nw(['doctor-sweep']), /ampersand/));
+  execFileSync('plutil', ['-convert', 'binary1', join(jobsDir, ampJob.fileName)]);
+  check('the same living job as binary1 is never flagged', () =>
+    assert.doesNotMatch(nw(['doctor-sweep']), /ampersand/));
+  writeFileSync(join(jobsDir, 'house.nightwatch.garbage.plist'), 'not a plist at all\n');
+  check('garbage is reported as unreadable', () =>
+    assert.match(nw(['doctor-sweep']), /house\.nightwatch\.garbage.*unparseable/));
+  nw(['doctor-sweep', '--remove', '--yes']);
+  check('garbage is never removed automatically', () =>
+    assert.ok(existsSync(join(jobsDir, 'house.nightwatch.garbage.plist'))));
+  check('the living binary job survives --remove --yes', () =>
+    assert.ok(existsSync(join(jobsDir, ampJob.fileName))));
+  rmSync(join(jobsDir, 'house.nightwatch.garbage.plist'));
+
+  // 6. A clean second sweep has nothing to do.
   check('a second sweep finds a clean house', () => assert.match(nw(['doctor-sweep']), /Nothing to do/));
 } finally {
   rmSync(scratch, { recursive: true, force: true });

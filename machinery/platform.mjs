@@ -120,16 +120,20 @@ export function daemonJob({ slug, hub, jobKind = 'nightshift', node = process.ex
   const cfg = configPath ?? join(hub, 'nightwatch.config.json');
   const label = jobKind === 'watch' ? `house.nightwatch.${slug}.watch` : `house.nightwatch.${slug}`;
   if (kind === 'darwin') {
+    // XML-escaped like any real plist writer: a hub named "R&D" must not
+    // write an invalid plist (launchctl refused it), and the sweep reads
+    // files back with plutil, which sees entities as launchd does.
+    const xml = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const content = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>${label}</string>
-  <key>ProgramArguments</key><array><string>${node}</string><string>${join(machineryDir, script)}</string></array>
-  <key>EnvironmentVariables</key><dict><key>WEFT_CONFIG</key><string>${cfg}</string></dict>
+  <key>Label</key><string>${xml(label)}</string>
+  <key>ProgramArguments</key><array><string>${xml(node)}</string><string>${xml(join(machineryDir, script))}</string></array>
+  <key>EnvironmentVariables</key><dict><key>WEFT_CONFIG</key><string>${xml(cfg)}</string></dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>300</integer>
-  <key>StandardErrorPath</key><string>${errFile}</string>
+  <key>StandardErrorPath</key><string>${xml(errFile)}</string>
 </dict></plist>\n`;
     return {
       label,
