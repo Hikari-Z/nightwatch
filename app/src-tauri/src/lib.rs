@@ -601,6 +601,24 @@ mod creation_tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
     #[test]
+    fn the_sweep_is_offered_only_once_the_cli_can_remove_one_item() {
+        let dir = std::env::temp_dir().join(format!("nw-sweep-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(NIGHTWATCH_CLI), "doctor-sweep [--remove] [--yes]").unwrap();
+        assert!(!host_can(&dir).contains(&"sweep"), "an older CLI has no per-item removal");
+        std::fs::write(dir.join(NIGHTWATCH_CLI), "doctor-sweep --json | --remove-item <id>").unwrap();
+        let can = host_can(&dir);
+        for a in SWEEP { assert!(can.contains(a), "{a}"); }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+    #[test]
+    fn a_removal_must_name_its_item() {
+        let h = Hub { root: "/nowhere".into(), config_file: "/nowhere/x.json".into(), cfg: serde_json::Value::Null, machinery: "/nowhere".into(), state: "/nowhere".into() };
+        for d in [serde_json::Value::Null, serde_json::json!({}), serde_json::json!({ "id": "  " }), serde_json::json!({ "id": 7 })] {
+            assert!(remove_orphan(&h, &d).unwrap_err().contains("nothing was done"), "{d}");
+        }
+    }
+    #[test]
     fn an_empty_spec_never_reaches_the_cli() {
         let h = Hub { root: "/nowhere".into(), config_file: "/nowhere/x.json".into(), cfg: serde_json::Value::Null, machinery: "/nowhere".into(), state: "/nowhere".into() };
         assert!(with_spec(&h, "apply", &serde_json::Value::Null).is_err());
@@ -698,6 +716,27 @@ fn inspect_import(h: &Hub, d: &serde_json::Value) -> Result<String, String> {
 
 // The hub that runs a creation step: Set up (op "init") runs the app's own
 // machinery; everything else runs in the hub the action names.
+// The orphan sweep (doctor-sweep): launchd jobs and registry entries whose
+// hub or machinery is gone. It is user-global, not one hub's, so it runs the
+// app's own machinery, the same file host_can probed. The page reads the
+// findings as data and asks before each removal; the CLI re-sweeps and
+// removes exactly the one item named, and refuses anything no longer an
+// orphan or never removable (a job it couldn't read).
+const SWEEP: &[&str] = &["sweep", "remove-orphan"];
+fn sweep_ready(machinery: &std::path::Path) -> bool {
+    std::fs::read_to_string(machinery.join(NIGHTWATCH_CLI)).map(|s| s.contains("--remove-item")).unwrap_or(false)
+}
+fn sweep_hub(sel: Option<&str>) -> Result<Hub, String> {
+    let mut h = hub(sel)?;
+    h.machinery = app_machinery();
+    Ok(h)
+}
+fn remove_orphan(h: &Hub, d: &serde_json::Value) -> Result<String, String> {
+    let id = d.get("id").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty())
+        .ok_or("The app didn't name which leftover to remove; nothing was done.")?;
+    h.node(NIGHTWATCH_CLI, &["doctor-sweep", "--remove-item", id])
+}
+
 fn creation_hub(sel: Option<&str>, d: &serde_json::Value) -> Result<Hub, String> {
     let mut h = hub(sel)?;
     if d.get("op").and_then(|v| v.as_str()) == Some("init") { h.machinery = app_machinery(); }
@@ -740,6 +779,8 @@ fn act(app: AppHandle, action: String, lane: Option<String>, hub: Option<String>
         "apply" => with_spec(&creation_hub(sel, &d)?, "apply", &d),
         "inspect-import" => inspect_import(&h()?, &d),
         "list-unclaimed" => h()?.node(NIGHTWATCH_CLI, &["list-unclaimed"]),
+        "sweep" => sweep_hub(sel)?.node(NIGHTWATCH_CLI, &["doctor-sweep", "--json"]),
+        "remove-orphan" => remove_orphan(&sweep_hub(sel)?, &d),
         other => Err(format!("{other} isn't wired in the app yet")),
     }
 }
@@ -761,6 +802,7 @@ addEventListener('DOMContentLoaded', () => window.NW_HOST.act('ping').catch((e) 
 fn host_can(machinery: &std::path::Path) -> Vec<&'static str> {
     let mut v = HOST_CAN.to_vec();
     if creation_ready(machinery) { v.extend_from_slice(CREATION); }
+    if sweep_ready(machinery) { v.extend_from_slice(SWEEP); }
     v
 }
 
