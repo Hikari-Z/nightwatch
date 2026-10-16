@@ -641,11 +641,16 @@ mod batch3_tests {
 #[cfg(test)]
 mod hub_tests {
     use super::*;
-    fn scratch(name: &str) -> PathBuf {
+    // A scratch hub that removes itself when the test ends, pass or panic
+    // (10/16: every run had left its four nw-hub-* dirs in the temp dir).
+    struct Scratch(PathBuf);
+    impl std::ops::Deref for Scratch { type Target = PathBuf; fn deref(&self) -> &PathBuf { &self.0 } }
+    impl Drop for Scratch { fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.0); } }
+    fn scratch(name: &str) -> Scratch {
         let d = std::env::temp_dir().join(format!("nw-hub-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
-        d
+        Scratch(d)
     }
     #[test]
     fn a_hub_reads_its_own_config_machinery_and_state() {
