@@ -298,29 +298,34 @@ check("midday: a stale request from an ended session doesn't silence the next on
   tick(dueCfg);
   check('segment-due: a band crossing rings once', dueEvents().filter((e) => e.kind === 'segment-due').length, 1);
   check('segment-due: one spool note, named for the watch', spool('fable').filter((f) => f.includes('watch-segment-due')).length, 1);
-  check('segment-due: the note\'s growth figure is the band, not the total', (() => {
+  check('segment-due: the growth figure is the real tokens since the last ring, not the band', (() => {
     const f = spool('fable').find((n) => n.includes('watch-segment-due'));
     const text = readFileSync(join(due, 'doorbell', 'spool', 'fable', f), 'utf8');
-    return [/grown another ~50k/.test(text), /to ~180k/.test(text), /another ~180k/.test(text)];
+    return [/grown another ~60k/.test(text), /to ~180k/.test(text), /another ~180k/.test(text)];
   })(), [true, true, false]);
   tick(dueCfg);
   check('segment-due: no growth, no re-ring', dueEvents().filter((e) => e.kind === 'segment-due').length, 1);
   append('s-due', usage(238_000));
   tick(dueCfg);
-  check('segment-due: the next band rings again', dueEvents().filter((e) => e.kind === 'segment-due').length, 2);
-  append('s-due', usage(345_000)); // two bands in one poll (a big tool result)
+  check('segment-due: the next full helping of growth rings again', dueEvents().filter((e) => e.kind === 'segment-due').length, 2);
+  // The live specimen (892k→901k): a band boundary crossed with under-knob
+  // growth since the last ring must NOT re-ring.
+  append('s-due', usage(252_000)); // +14k since the 238k ring, over the 250k line
   tick(dueCfg);
-  check('segment-due: a two-band jump rings once and states the exact growth', (() => {
+  check('segment-due: a boundary crossed with under-knob growth stays quiet (the 892k→901k specimen)', dueEvents().filter((e) => e.kind === 'segment-due').length, 2);
+  append('s-due', usage(345_000)); // a big jump in one poll (a huge tool result)
+  tick(dueCfg);
+  check('segment-due: a big jump rings once and states the exact growth since the last ring', (() => {
     const notes = spool('fable').filter((n) => n.includes('watch-segment-due')).sort();
     const text = readFileSync(join(due, 'doorbell', 'spool', 'fable', notes[notes.length - 1]), 'utf8');
-    return [dueEvents().filter((e) => e.kind === 'segment-due').length, /grown another ~100k/.test(text), /to ~345k/.test(text)];
+    return [dueEvents().filter((e) => e.kind === 'segment-due').length, /grown another ~107k/.test(text), /to ~345k/.test(text)];
   })(), [3, true, true]);
 
   // Restart keeps the band: every tick here is a FRESH process reading the
   // persisted state, so the baseline/band logic surviving between ticks IS
   // the watch-restarted-mid-session case, pinned as law (opus's knife).
   const wstate = () => JSON.parse(readFileSync(join(due, 'wakecycle', 'watch-state.json'), 'utf8'));
-  check('segment-due: a fresh process keeps the band (restart-safe by state)', typeof wstate().due.seg['s-due'], 'number');
+  check('segment-due: a fresh process keeps the last ring\'s tokens (restart-safe by state)', typeof wstate().due.seg['s-due'].tokens, 'number');
 
   // l3-due: per LANE, due at 2x the horizon. alpha's unfolded rungs span 8
   // days (due at horizon 4); beta's span 2 (quiet); a rung with no lane
