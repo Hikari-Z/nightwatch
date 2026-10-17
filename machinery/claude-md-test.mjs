@@ -18,7 +18,7 @@ const scratch = mkdtempSync(join(tmpdir(), 'nw-claudemd-'));
 const spec = (o) => { const p = join(scratch, `${Math.random().toString(36).slice(2)}.json`); writeFileSync(p, JSON.stringify(o)); return p; };
 const run = (cmd, specPath) => {
   const env = { ...process.env, WEFT_NW_NO_ACTIVATE: '1' };
-  delete env.WEFT_CONFIG;
+  delete env.WEFT_CONFIG; delete env.NIGHTWATCH_CONFIG;
   return execFileSync(process.execPath, [join(HERE, 'nightwatch.mjs'), cmd, specPath], { encoding: 'utf8', env });
 };
 

@@ -390,4 +390,4 @@ if (trimOut.overshoot) {
   console.log(`\nNOTE: this fold kept ~${trimOut.estTokens} tokens against a ${trimOut.targetTokens ?? target} target (${trimOut.overshoot.ratio}x): the tail has to start at a human prompt, and the nearest one was ${trimOut.overshoot.extendedEntries} entries before the target. The wake will be larger than usual.`);
 }
 // The hub's own machinery and config (pointer model, 10/7), never weft's path.
-console.log(`\nwake with:  ${CFG.__configFile ? `WEFT_CONFIG="${CFG.__configFile}" ` : ''}sh "${join(MACHINERY_DIR, 'wake.sh')}" ${lane}`);
+console.log(`\nwake with:  ${CFG.__configFile ? `NIGHTWATCH_CONFIG="${CFG.__configFile}" ` : ''}sh "${join(MACHINERY_DIR, 'wake.sh')}" ${lane}`);

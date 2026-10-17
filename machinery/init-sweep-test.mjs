@@ -29,7 +29,7 @@ const spec = (o) => { const p = join(scratch, `${Math.random().toString(36).slic
 const nw = (args, env2 = {}, opts = {}) => {
   const env = { ...process.env, NW_INSTALL_DIR: jobsDir, NW_REGISTRY_DIR: regDir, ...env2 };
   for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
-  delete env.WEFT_CONFIG;
+  delete env.WEFT_CONFIG; delete env.NIGHTWATCH_CONFIG;
   delete env.WEFT_NW_NO_ACTIVATE;
   return execFileSync(process.execPath, [join(HERE, 'nightwatch.mjs'), ...args], { encoding: 'utf8', env, ...opts });
 };

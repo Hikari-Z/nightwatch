@@ -161,7 +161,7 @@ export function daemonJob({ slug, hub, jobKind = 'nightshift', node = process.ex
 <plist version="1.0"><dict>
   <key>Label</key><string>${xml(label)}</string>
   <key>ProgramArguments</key><array><string>${xml(node)}</string><string>${xml(join(machineryDir, script))}</string></array>
-  <key>EnvironmentVariables</key><dict><key>WEFT_CONFIG</key><string>${xml(cfg)}</string></dict>
+  <key>EnvironmentVariables</key><dict><key>NIGHTWATCH_CONFIG</key><string>${xml(cfg)}</string></dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>300</integer>
@@ -194,7 +194,7 @@ Description=Nightwatch ${jobKind} for ${slug}
 
 [Service]
 ExecStart="${sysd(node)}" "${sysd(join(machineryDir, script))}"
-Environment="WEFT_CONFIG=${sysd(cfg)}"
+Environment="NIGHTWATCH_CONFIG=${sysd(cfg)}"
 ${pathLine}Restart=always
 RestartSec=300
 StandardError=append:${sysd(errFile)}

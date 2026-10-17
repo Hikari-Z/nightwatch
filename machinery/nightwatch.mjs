@@ -30,6 +30,7 @@ import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { daemonJob, registryFile, summonArgvFor, withToolPath } from './platform.mjs';
+import { configEnv } from './config.mjs';
 import { applyRetention, stepFor, survey } from './retention.mjs';
 
 const WC = dirname(fileURLToPath(import.meta.url));
@@ -219,10 +220,10 @@ function initSteps(spec) {
     verb: 'Install', what: 'the nightshift, the watch and the session hook', detail: `a background job (house.nightwatch.${slug}) that rings the bell and wakes them, a second (house.nightwatch.${slug}.watch) that says when an agent is stuck, and the hook that tells it which session is theirs`,
     run() {
       // The hook runs the APP's register-lane.sh (pointer model) and must
-      // carry the hub's config explicitly: a hook without WEFT_CONFIG
+      // carry the hub's config explicitly: a hook without NIGHTWATCH_CONFIG
       // would resolve some other hub on this machine (rehearsal, 10/7).
       writeFileSync(join(part, '.claude-settings-fragment.json'), JSON.stringify({
-        hooks: { SessionStart: [{ hooks: [{ type: 'command', command: `WEFT_CONFIG="${join(hub, 'nightwatch.config.json')}" sh "${join(WC, 'register-lane.sh')}"` }] }] },
+        hooks: { SessionStart: [{ hooks: [{ type: 'command', command: `NIGHTWATCH_CONFIG="${join(hub, 'nightwatch.config.json')}" sh "${join(WC, 'register-lane.sh')}"` }] }] },
       }, null, 2) + '\n');
       mkdirSync(join(part, '.claude'), { recursive: true });
       renameSync(join(part, '.claude-settings-fragment.json'), join(part, '.claude', 'settings.json'));
@@ -314,7 +315,7 @@ function initSteps(spec) {
 }
 
 function laneAddSteps(spec) {
-  const cfgPath = process.env.WEFT_CONFIG ?? join(HOME, 'origin', 'weft', 'weft.config.json');
+  const cfgPath = configEnv() ?? join(HOME, 'origin', 'weft', 'weft.config.json');
   if (!existsSync(cfgPath)) die('No hub config found — is this machine set up?');
   const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
   const hub = cfg.weftRoot ?? dirname(cfgPath);
@@ -399,9 +400,9 @@ function firstSessionStep(spec, hub, ctx, noActivate, cpPath, laneWc) {
       if (noActivate) return;
       // Quoted for paths with spaces (opus's read, 6d); platform.mjs owns
       // each platform's escaping of the raw command.
-      const cfgPathForWake = spec.op === 'init' ? join(hub, 'nightwatch.config.json') : (process.env.WEFT_CONFIG ?? '');
+      const cfgPathForWake = spec.op === 'init' ? join(hub, 'nightwatch.config.json') : (configEnv() ?? '');
       // withToolPath: the window's login shell may not see this node (nvm).
-      const sh = withToolPath(`WEFT_CONFIG="${cfgPathForWake}" sh "${join(WC, 'wake.sh')}" ${spec.lane.id}`);
+      const sh = withToolPath(`NIGHTWATCH_CONFIG="${cfgPathForWake}" sh "${join(WC, 'wake.sh')}" ${spec.lane.id}`);
       // platform.mjs owns the write-if-wsl decision. The summons dir rides
       // wcDir, not join(hub, 'wakecycle'): a custom paths.wakecycle must
       // keep the first wake's script beside the daemon's (second read, 10/13).
@@ -561,7 +562,8 @@ function sweepFindings() {
     const file = join(jobsDir, f);
     let cfg = null, script = null, parsed = false;
     if (ext === '.plist') {
-      cfg = plutilRaw(file, 'EnvironmentVariables.WEFT_CONFIG');
+      // Either name: jobs installed before issue #7 carry WEFT_CONFIG.
+      cfg = plutilRaw(file, 'EnvironmentVariables.NIGHTWATCH_CONFIG') ?? plutilRaw(file, 'EnvironmentVariables.WEFT_CONFIG');
       script = plutilRaw(file, 'ProgramArguments.1');
       // ProgramArguments.1 assumes [node, script]; a hand-added node flag
       // shifts the script and index 1 reads as '--inspect', whose exists()
@@ -573,7 +575,7 @@ function sweepFindings() {
       let text = '';
       try { text = readFileSync(file, 'utf8'); } catch { continue; }
       const unq = (x) => (x == null ? null : x.replace(/%%/g, '%'));
-      cfg = unq(text.match(/Environment="WEFT_CONFIG=([^"]+)"/)?.[1] ?? null);
+      cfg = unq(text.match(/Environment="(?:NIGHTWATCH|WEFT)_CONFIG=([^"]+)"/)?.[1] ?? null);
       script = unq(text.match(/ExecStart="[^"]+" "([^"]+\.mjs)"/)?.[1] ?? null);
       parsed = cfg !== null || script !== null;
     }

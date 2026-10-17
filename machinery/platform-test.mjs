@@ -173,7 +173,7 @@ check('darwin nightshift job is the live plist, byte-identical', () => {
 <plist version="1.0"><dict>
   <key>Label</key><string>house.nightwatch.weft</string>
   <key>ProgramArguments</key><array><string>/usr/local/bin/node</string><string>/m/nightshift.mjs</string></array>
-  <key>EnvironmentVariables</key><dict><key>WEFT_CONFIG</key><string>/h/nightwatch.config.json</string></dict>
+  <key>EnvironmentVariables</key><dict><key>NIGHTWATCH_CONFIG</key><string>/h/nightwatch.config.json</string></dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>300</integer>
@@ -193,9 +193,9 @@ check('wsl job is a systemd user unit, enabled now, quoted against spaces and %'
   assert.equal(job.fileName, 'house.nightwatch.weft.service');
   assert.equal(job.installDir, join(homedir(), '.config', 'systemd', 'user'));
   assert.ok(job.content.includes('ExecStart="/usr/local/bin/node" "/m/nightshift.mjs"'));
-  assert.ok(job.content.includes('Environment="WEFT_CONFIG=/h/nightwatch.config.json"'));
+  assert.ok(job.content.includes('Environment="NIGHTWATCH_CONFIG=/h/nightwatch.config.json"'));
   const spaced = daemonJob({ ...J, hub: '/h/My Agent 100%' }, 'wsl');
-  assert.ok(spaced.content.includes('Environment="WEFT_CONFIG=/h/My Agent 100%%/nightwatch.config.json"'));
+  assert.ok(spaced.content.includes('Environment="NIGHTWATCH_CONFIG=/h/My Agent 100%%/nightwatch.config.json"'));
   assert.ok(job.content.includes('Restart=always'));
   assert.deepEqual(job.loadArgv(), [
     { bin: 'systemctl', args: ['--user', 'daemon-reload'] },
@@ -230,7 +230,7 @@ check('the registry file is hubs.json in the registry dir, per platform (issue #
   try { assert.equal(registryFile('linux'), join('/x', 'nightwatch', 'hubs.json')); }
   finally { if (prev === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = prev; }
 });
-check('outside any hub, with no WEFT_CONFIG, config is the defaults even when the registry lists a hub (issue #5)', () => {
+check('outside any hub, with no config named, config is the defaults even when the registry lists a hub (issue #5)', () => {
   // A scratch HOME whose registry names a hub with a config: a script run
   // outside every hub must not pick that hub up by omission.
   const home = mkdtempSync(join(tmpdir(), 'nw-cfg-registry-'));
@@ -242,13 +242,40 @@ check('outside any hub, with no WEFT_CONFIG, config is the defaults even when th
     execFileSync('mkdir', ['-p', join(home, 'Library', 'Application Support', 'Nightwatch')]);
     writeFileSync(join(home, 'Library', 'Application Support', 'Nightwatch', 'hubs.json'), JSON.stringify({ version: 1, hubs: [{ path: hub }] }));
     const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, '.config') };
-    delete env.WEFT_CONFIG;
+    delete env.WEFT_CONFIG; delete env.NIGHTWATCH_CONFIG;
     const out = execFileSync(process.execPath, ['--input-type=module', '-e',
       `const { loadConfig } = await import(${JSON.stringify(new URL('./config.mjs', import.meta.url).href)}); console.log(JSON.stringify(loadConfig().__configFile ?? null));`],
     { encoding: 'utf8', env, cwd: home });
     assert.equal(out.trim(), 'null');
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
+
+// ── the config's env names (issue #7) ──
+{
+  const { configEnv, envWithConfig } = await import('./config.mjs');
+  check('NIGHTWATCH_CONFIG is read, and WEFT_CONFIG from older installs too', () => {
+    assert.equal(configEnv({ NIGHTWATCH_CONFIG: '/a.json' }), '/a.json');
+    assert.equal(configEnv({ WEFT_CONFIG: '/b.json' }), '/b.json');
+    assert.equal(configEnv({}), undefined);
+    assert.equal(configEnv({ NIGHTWATCH_CONFIG: '', WEFT_CONFIG: '' }), undefined, "'' counts as unset");
+  });
+  check('both names set to the same file pass, as every migration does', () =>
+    assert.equal(configEnv({ NIGHTWATCH_CONFIG: '/a.json', WEFT_CONFIG: '/a.json' }), '/a.json'));
+  check('both names set to different files is refused, naming both', () =>
+    assert.throws(() => configEnv({ NIGHTWATCH_CONFIG: '/a.json', WEFT_CONFIG: '/b.json' }), /\/a\.json.*\/b\.json/));
+  check('two spellings of one file (a symlink) are the same file', () => {
+    const d = mkdtempSync(join(tmpdir(), 'nw-cfgenv-'));
+    try {
+      writeFileSync(join(d, 'real.json'), '{}');
+      execFileSync('ln', ['-s', join(d, 'real.json'), join(d, 'link.json')]);
+      assert.equal(configEnv({ NIGHTWATCH_CONFIG: join(d, 'link.json'), WEFT_CONFIG: join(d, 'real.json') }), join(d, 'link.json'));
+    } finally { rmSync(d, { recursive: true, force: true }); }
+  });
+  check("a child's environment names the config once, by the new name", () => {
+    const env = envWithConfig('/h/c.json', { WEFT_CONFIG: '/h/c.json', PATH: '/bin' });
+    assert.deepEqual(env, { PATH: '/bin', NIGHTWATCH_CONFIG: '/h/c.json' });
+  });
+}
 
 // ── banners ──
 check('darwin banner is the live osascript line with escaping', () => {

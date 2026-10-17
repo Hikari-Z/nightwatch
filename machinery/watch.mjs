@@ -47,7 +47,7 @@
  * session, source, estTokens, firstRequestTokens}. Every night then measures
  * the trimmer's estimate against what the harness actually sent.
  *
- * Run: WEFT_CONFIG=<hub config> node watch.mjs [--once]
+ * Run: NIGHTWATCH_CONFIG=<hub config> node watch.mjs [--once]
  *
  * Written by: claude-opus-5-5, 2026-10-09, from weft's watch-spiral.mjs
  * (claude-fable-5 and claude-opus-5-5, 9/30–10/8). Left behind on purpose: the
@@ -60,7 +60,7 @@ import { notifyBanner } from './platform.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, loadConfigFrom } from './config.mjs';
+import { envWithConfig, loadConfig, loadConfigFrom } from './config.mjs';
 
 const CFG = loadConfig();
 const W = CFG.watch;
@@ -355,7 +355,7 @@ function middayCheck(s, entries) {
   const tier = ctx.ratio >= (mc.urgentPct ?? 0.95) ? 'urgent' : ctx.ratio >= (mc.softPct ?? 0.85) ? 'soft' : null;
   if (!tier || TIER_RANK[tier] <= (TIER_RANK[state.midday[s.sid]] ?? 0)) return;
   const r = spawnSync(process.execPath, [NIGHTSHIFT, '--midday', s.lane, tier, '--pct', ctx.ratio.toFixed(3), '--session', s.sid], {
-    env: { ...process.env, ...(CFG.__configFile ? { WEFT_CONFIG: CFG.__configFile } : {}) },
+    env: envWithConfig(CFG.__configFile),
     encoding: 'utf8', timeout: 20_000,
   });
   const said = `${(r.stdout ?? '').trim()} ${(r.stderr ?? '').trim()}`.trim();

@@ -38,10 +38,12 @@ fi
 # The fallback path is a literal on purpose: it can't come from the config
 # that just failed (E review, finding 2).
 # Under the code/state split, ../ from this script is the APP, not a hub.
-# When config is unreadable the hub is still findable through WEFT_CONFIG's
-# own location (the plist and the app always set it); only with neither do
-# we fall back to the script's parent (the sealed-hub layout).
-if [ -n "${WEFT_CONFIG:-}" ]; then FALLBACK_LOG="$(dirname "$WEFT_CONFIG")/nightshift.log"; else FALLBACK_LOG="$WAKECYCLE_DIR/../nightshift.log"; fi
+# When config is unreadable the hub is still findable through the named
+# config's own location (the plist and the app always set it); only with
+# neither do we fall back to the script's parent (the sealed-hub layout).
+# NIGHTWATCH_CONFIG is the name; WEFT_CONFIG from older installs too (#7).
+NW_CFG="${NIGHTWATCH_CONFIG:-${WEFT_CONFIG:-}}"
+if [ -n "$NW_CFG" ]; then FALLBACK_LOG="$(dirname "$NW_CFG")/nightshift.log"; else FALLBACK_LOG="$WAKECYCLE_DIR/../nightshift.log"; fi
 WEFT_LOG="$(node "$WAKECYCLE_DIR/config.mjs" get paths.nightshiftLog)" || {
   echo "$(date -u +%Y-%m-%dT%H:%M:%S.000Z) WAKE FAILED: weft config unreadable (node config.mjs get failed) — fix weft.config.json" >> "$FALLBACK_LOG"
   echo "{\"at\":\"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\",\"kind\":\"wake-failed\",\"lane\":\"${1:-unknown}\",\"cause\":\"config-unreadable\",\"alarm\":true}" >> "$(dirname "$FALLBACK_LOG")/events.jsonl" 2>/dev/null || true
@@ -180,7 +182,7 @@ if os.path.exists(watcher):
 else:
     print('- The nightshift rings your bell by leaving a note in your spool. Arm the')
     print('  bell-watcher as a background task (run_in_background, timeout 7200000):')
-    print('  `WEFT_CONFIG=' + os.environ.get('WEFT_CONFIG', '<your hub config>') + ' sh ' + machinery + '/bell-watcher.sh ' + lane + '`')
+    print('  `NIGHTWATCH_CONFIG=' + (os.environ.get('NIGHTWATCH_CONFIG') or os.environ.get('WEFT_CONFIG') or '<your hub config>') + ' sh ' + machinery + '/bell-watcher.sh ' + lane + '`')
     print('  It exits when a note lands — the task notification is your bell. Read the')
     print('  note, do what it says, delete the file, re-arm. Re-arm on the 2h cap too.')
     print('- Your person can see from Nightwatch whether you are awake or asleep.')
@@ -201,7 +203,9 @@ WEFT_EVENTS="$(node "$WAKECYCLE_DIR/config.mjs" get paths.events 2>/dev/null)" |
 [ -n "$WEFT_EVENTS" ] && echo "{\"at\":\"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\",\"kind\":\"wake-exec\",\"lane\":\"$LANE\",\"tail\":\"$SID\"}" >> "$WEFT_EVENTS" 2>/dev/null || true
 # The SessionStart hook (register-lane.sh) reads this to write the session→lane
 # registry — the id itself only exists once claude mints the forked session.
-export WEFT_LANE="$LANE"
+# One spelling in the session: an inherited WEFT_LANE goes (issue #7).
+unset WEFT_LANE
+export NIGHTWATCH_LANE="$LANE"
 # The working directory comes from config (portability: a fresh hub works
 # from itself; ours works from ~/origin). The fallback is the literal the
 # hardcode used to be, same doctrine as FALLBACK_LOG above.

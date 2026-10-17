@@ -20,7 +20,7 @@ const hub = join(scratch, 'hub');
 const spec = (o) => { const p = join(scratch, `${Math.random().toString(36).slice(2)}.json`); writeFileSync(p, JSON.stringify(o)); return p; };
 const run = (specPath, cfg) => {
   const env = { ...process.env, WEFT_NW_NO_ACTIVATE: '1' };
-  delete env.WEFT_CONFIG;               // empty string is not unset (learned here)
+  delete env.WEFT_CONFIG; delete env.NIGHTWATCH_CONFIG;               // empty string is not unset (learned here)
   if (cfg) env.WEFT_CONFIG = cfg;       // lane-add resolves its hub by config
   return execFileSync(process.execPath, [join(HERE, 'nightwatch.mjs'), 'apply', specPath], { encoding: 'utf8', env });
 };

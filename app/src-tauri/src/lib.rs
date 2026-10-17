@@ -243,7 +243,7 @@ fn wake(h: &Hub, lane: Option<&str>) -> Result<String, String> {
     let script = plain_path(&h.machinery.join("wake.sh"))?;
     let cfg = plain_path(&h.config_file)?;
     let run = |src: String| Command::new("/usr/bin/osascript").args(["-e", &src]).output();
-    let out = run(format!("tell application \"Terminal\" to do script \"WEFT_CONFIG=\\\"{cfg}\\\" \\\"{script}\\\" {lane}\"")).map_err(|e| e.to_string())?;
+    let out = run(format!("tell application \"Terminal\" to do script \"NIGHTWATCH_CONFIG=\\\"{cfg}\\\" \\\"{script}\\\" {lane}\"")).map_err(|e| e.to_string())?;
     if !out.status.success() {
         return Err(format!("Terminal didn't open: {}", String::from_utf8_lossy(&out.stderr).trim()));
     }
