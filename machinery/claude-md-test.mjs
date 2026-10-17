@@ -46,16 +46,20 @@ try {
     assert.ok(cm().includes(`${hub}/checkpoint.md`), 'checkpoint path');
     assert.ok(!cm().includes('<hub>'), 'unfilled <hub>');
   });
-  check('the seed ladder says plainly that no folds exist yet', () =>
-    assert.match(readFileSync(join(hub, 'ladder', 'ladder.md'), 'utf8'), /No folds yet/));
+  check('the seed ladder is honest for a fresh persona AND an import with rungs', () =>
+    assert.match(readFileSync(join(hub, 'ladder', 'ladder.md'), 'utf8'), /Not yet assembled: the fold machinery builds this file from the rungs/));
 
   // An imported hub: the imported ladder.md outranks the seed.
   const from = join(scratch, 'old-home');
   mkdirSync(join(from, 'ladder'), { recursive: true });
   writeFileSync(join(from, 'identity.md'), 'An imported identity.\n');
   writeFileSync(join(from, 'ladder', 'ladder.md'), '# ladder — carried from the old home\n');
+  writeFileSync(join(from, 'CLAUDE.md'), '# the old home’s own instructions\n');
   const hub2 = join(scratch, 'hub2');
-  run('apply', spec({ op: 'init', hub: hub2, lane: { id: 'alpha', model: 'claude-fable-5', firstSession: { kind: 'fresh' } }, persona: { person: 'Tester', about: 'unused when importing' }, import: { from }, schedule: { sleep: '02:00', wake: '08:00' } }));
+  const importSpec = { op: 'init', hub: hub2, lane: { id: 'alpha', model: 'claude-fable-5', firstSession: { kind: 'fresh' } }, persona: { person: 'Tester', about: 'unused when importing' }, import: { from }, schedule: { sleep: '02:00', wake: '08:00' } };
+  check('the preview says an imported CLAUDE.md is not carried (the preview is the build)', () =>
+    assert.match(run('plan', spec(importSpec)), /the import folder's own CLAUDE\.md is not carried; merge what you want/));
+  run('apply', spec(importSpec));
   check('an imported ladder.md wins over the seed (the past outranks the placeholder)', () =>
     assert.match(readFileSync(join(hub2, 'ladder', 'ladder.md'), 'utf8'), /carried from the old home/));
   check('the imported hub still gets CLAUDE.md', () => assert.ok(existsSync(join(hub2, 'CLAUDE.md'))));
