@@ -16,7 +16,7 @@ import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, loadConfigFrom } from '../machinery/config.mjs';
+import { hublessConfig, loadConfigFrom, loadConfigOrNone } from '../machinery/config.mjs';
 import { stateKey, assemble } from './assemble.mjs';
 import { readRegistry, configFileFor, mergeSnapshots, viewerRegistryFile } from './hubs.mjs';
 import { homedir } from 'node:os';
@@ -25,7 +25,10 @@ import { FIXTURE } from './fixture-data.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SKINS = join(HERE, '..', 'skins');
-const CFG = loadConfig();
+// The viewer is the one reader that runs without a hub: with none named it
+// pages the registry's hubs, and with no registry either it shows Set up
+// (hublessConfig: no hub's paths, so nothing of any hub is read).
+const CFG = loadConfigOrNone() ?? hublessConfig();
 // Port resolution: env override → viewer.port from the hub config → 7352.
 // The knowledge lives in config (opus's call, 10/7), not shell history.
 let cfgPort;

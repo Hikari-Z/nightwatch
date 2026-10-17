@@ -22,11 +22,6 @@ fn home() -> PathBuf {
     PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".into()))
 }
 
-// WEFT_ROOT overrides; the house's own default otherwise.
-fn weft_root() -> PathBuf {
-    std::env::var("WEFT_ROOT").map(PathBuf::from).unwrap_or_else(|_| home().join("origin/weft"))
-}
-
 // An app launched from Finder gets launchd's bare PATH, so a plain `node`
 // fails to spawn (the orphan fold could never start for exactly this reason,
 // 10/3–10/5). Look in the usual places, then ask a login shell.
@@ -140,9 +135,11 @@ fn registered_hubs() -> Vec<PathBuf> {
         .filter(|p| p.starts_with('/')).map(PathBuf::from).collect()).unwrap_or_default()
 }
 
+// The hubs the app shows: the registry's, and only those. An empty registry
+// is a machine with nothing set up yet (Set up), never a guess at one
+// house's folder (issue #7).
 fn all_hub_roots() -> Vec<PathBuf> {
-    let r = registered_hubs();
-    if r.is_empty() { vec![weft_root()] } else { r }
+    registered_hubs()
 }
 
 fn canon(p: &Path) -> PathBuf { std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()) }
@@ -196,7 +193,7 @@ impl Hub {
     fn node(&self, script: &str, args: &[&str]) -> Result<String, String> {
         let node = find_node().ok_or("node not found")?;
         let out = Command::new(node).arg(self.machinery.join(script)).args(args)
-            .env("WEFT_CONFIG", &self.config_file).current_dir(&self.root)
+            .env("NIGHTWATCH_CONFIG", &self.config_file).env_remove("WEFT_CONFIG").current_dir(&self.root)
             .output().map_err(|e| e.to_string())?;
         if out.status.success() { Ok(String::from_utf8_lossy(&out.stdout).trim().to_string()) }
         else { Err(String::from_utf8_lossy(&out.stderr).trim().replace("refused: ", "").to_string()) }

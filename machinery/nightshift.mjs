@@ -54,9 +54,12 @@ try {
   // fallback path is a literal because the config that would supply it is
   // the thing that failed (E review, finding 2).
   try {
-    // Beside the named config when one is set (every installed job sets it — the
-    // same doctrine as wake.sh's FALLBACK_LOG); the legacy hub otherwise.
-    const fbDir = configEnv() ? dirname(configEnv()) : join(HOME, 'origin', 'weft');
+    // Beside the named config (every installed job names one; the same
+    // doctrine as wake.sh's FALLBACK_LOG). With none named there is no hub
+    // to write into, and the stderr line below is the record (issue #7).
+    const named = configEnv();
+    if (!named) throw new Error('no hub config named');
+    const fbDir = dirname(named);
     const fb = join(fbDir, 'nightshift.log');
     // Dedupe against the log's last line: under KeepAlive this import runs
     // every ~30s while the config stays torn, and one loud line beats
@@ -386,7 +389,7 @@ const io = {
   now: () => Date.now(),
   nowMin,
   armedLanes,
-  configMtime: () => { try { return statSync(configEnv() ?? join(CFG.weftRoot, 'weft.config.json')).mtimeMs; } catch { return 0; } },
+  configMtime: () => { try { return statSync(CFG.__configFile).mtimeMs; } catch { return 0; } },
   reloadConfig: () => { try { return reloadConfig(); } catch (e) { log(`config reload FAILED (keeping the running schedule): ${e.message}`); return null; } },
   state,
   saveState,
