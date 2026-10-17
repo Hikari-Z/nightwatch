@@ -40,7 +40,8 @@ Five cooperating pieces, all small:
 ## Quickstart, single lane
 
 1. Clone this repo somewhere stable and write a `weft.config.json`
-   for your hub (point `WEFT_CONFIG` at it; the machinery never
+   for your hub (point `NIGHTWATCH_CONFIG` at it; `WEFT_CONFIG`, the older
+   name, still works; the machinery never
    assumes it lives inside your state directory). Minimal single-lane config:
 
    ```json
@@ -60,7 +61,7 @@ Five cooperating pieces, all small:
 
    ```json
    { "hooks": { "SessionStart": [{ "hooks": [{ "type": "command",
-     "command": "WEFT_CONFIG=/path/to/weft.config.json /path/to/nightwatch/machinery/register-lane.sh" }] }] } }
+     "command": "NIGHTWATCH_CONFIG=/path/to/nightwatch.config.json /path/to/nightwatch/machinery/register-lane.sh" }] }] } }
    ```
 
    Also set `"autoCompactEnabled": false` — the fold replaces

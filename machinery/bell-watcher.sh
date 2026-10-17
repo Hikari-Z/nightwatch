@@ -9,7 +9,7 @@
 # session's own acts, on purpose — hearing a bell should be witnessed,
 # never silently consumed.
 #
-#   WEFT_CONFIG=<hub config> sh bell-watcher.sh <lane>
+#   NIGHTWATCH_CONFIG=<hub config> sh bell-watcher.sh <lane>
 #
 # Exits 0 with the note on stdout when one lands. Runs until then; a
 # harness timeout (the usual 2h background cap) just means re-arm.
@@ -18,7 +18,7 @@ MACHINERY_DIR="$(cd "$(dirname "$0")" && pwd)"
 LANE="$1"
 [ -n "$LANE" ] || { echo "usage: bell-watcher.sh <lane>"; exit 2; }
 SPOOL_BASE="$(node "$MACHINERY_DIR/config.mjs" get paths.spool)" || {
-  echo "bell-watcher: hub config unreadable (set WEFT_CONFIG to the hub's config file)"; exit 3; }
+  echo "bell-watcher: hub config unreadable (set NIGHTWATCH_CONFIG to the hub's config file)"; exit 3; }
 SPOOL="$SPOOL_BASE/$LANE"
 mkdir -p "$SPOOL"
 

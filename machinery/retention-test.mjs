@@ -170,7 +170,7 @@ try {
   const plan = (live, cfg = cfgDir) => {
     writeFileSync(spec, JSON.stringify({ op: 'init', hub: probeHub, lane: { id: 'main', model: 'claude-opus-5-5', firstSession: { kind: 'fresh' } }, persona: { about: 'a plan probe', person: 'Sam' } }));
     const env = { ...process.env, CLAUDE_CONFIG_DIR: cfg };
-    for (const k of ['NW_INSTALL_DIR', 'NW_REGISTRY_DIR', 'WEFT_NW_NO_ACTIVATE', 'WEFT_CONFIG']) delete env[k];
+    for (const k of ['NW_INSTALL_DIR', 'NW_REGISTRY_DIR', 'WEFT_NW_NO_ACTIVATE', 'WEFT_CONFIG', 'NIGHTWATCH_CONFIG']) delete env[k];
     return JSON.parse(execFileSync(process.execPath, [join(HERE, 'nightwatch.mjs'), 'plan', spec, ...(live ? ['--live'] : [])], { encoding: 'utf8', env })).steps;
   };
   const live = plan(true);

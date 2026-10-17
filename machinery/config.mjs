@@ -12,7 +12,7 @@
  *
  * Resolution order, least to most specific:
  *   1. DEFAULTS below (a fresh single-lane install; works with no file),
- *   2. the config file — $WEFT_CONFIG, or <weftRoot>/weft.config.json,
+ *   2. the config file — $NIGHTWATCH_CONFIG (or $WEFT_CONFIG), or <weftRoot>/weft.config.json,
  *   3. environment variables (the pre-E spellings keep working),
  *   4. explicit CLI flags on the individual tools (--lane, --target-tokens).
  *
@@ -164,22 +164,50 @@ export function reloadConfig() {
   cached = null;
   return loadConfig();
 }
+/**
+ * The hub config the environment names. NIGHTWATCH_CONFIG is the name;
+ * WEFT_CONFIG is read too, permanently: installed jobs, hooks, units and the
+ * ritual lines in checkpoints and bell notes carry it, and nothing rewrites
+ * them (issue #7). Both set to the same file (compared by real path) is
+ * fine, as every migration passes through it. Both set to different files
+ * is refused, naming both: a precedence rule would hide a split. '' counts
+ * as unset. Returns the path, or undefined.
+ */
+export function configEnv(env = process.env) {
+  const a = env.NIGHTWATCH_CONFIG || undefined;
+  const b = env.WEFT_CONFIG || undefined;
+  if (a && b && a !== b) {
+    const real = (p) => { try { return realpathSync(p); } catch { return p; } };
+    if (real(a) !== real(b)) {
+      throw new Error(`NIGHTWATCH_CONFIG (${a}) and WEFT_CONFIG (${b}) name different files; set one, or both to the same file`);
+    }
+  }
+  return a ?? b;
+}
+
+/** An environment for a child that names this config: the new name set, the
+ *  old one dropped, so the child never sees two spellings of one file. */
+export function envWithConfig(file, env = process.env) {
+  const { WEFT_CONFIG, ...rest } = env;
+  return file ? { ...rest, NIGHTWATCH_CONFIG: file } : rest;
+}
+
 export function loadConfig() {
   if (cached) return cached;
   let cfg = structuredClone(DEFAULTS);
-  // WEFT_CONFIG set but unusable is an ERROR, never a fallback: the silent
+  // A config named but unusable is an ERROR, never a fallback: the silent
   // DEFAULTS fallback meant a typo'd path quietly acted on OUR hub, and on a
   // fresh machine pointed at nothing (opus's lane-creation read, 10/7).
   // '' counts as unset (an empty env assignment is how "no config" looks in
   // shell), but a non-empty path must exist.
-  const envFile = process.env.WEFT_CONFIG;
-  if (envFile !== undefined && envFile !== '' && !existsSync(envFile)) {
-    throw new Error(`WEFT_CONFIG points at a missing file: ${envFile}`);
+  const envFile = configEnv();
+  if (envFile !== undefined && !existsSync(envFile)) {
+    throw new Error(`${process.env.NIGHTWATCH_CONFIG ? 'NIGHTWATCH_CONFIG' : 'WEFT_CONFIG'} points at a missing file: ${envFile}`);
   }
-  // Resolution order: WEFT_CONFIG → the hub's own file beside weftRoot
+  // Resolution order: NIGHTWATCH_CONFIG (or WEFT_CONFIG) → the hub's own file beside weftRoot
   // (either spelling: weft.config.json is ours, nightwatch.config.json is
   // what Set up writes) → DEFAULTS alone. There is no machine-wide
-  // fallback: a script run outside any hub without WEFT_CONFIG gets the
+  // fallback: a script run outside any hub without a config named gets the
   // defaults, never whichever hub the machine registered, so a bench can't
   // land on a real hub by omission. (An earlier fallback read a single-hub
   // pointer file that nothing ever wrote; the registry replaced it, issue #5.)
@@ -329,7 +357,7 @@ function assertConsistent(raw) {
 }
 
 export function configEdit(op, keyPath, value) {
-  const file = process.env.WEFT_CONFIG ?? join(DEFAULTS.weftRoot, 'weft.config.json');
+  const file = configEnv() ?? join(DEFAULTS.weftRoot, 'weft.config.json');
   const raw = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
   const parts = keyPath.split('.');
   if (op === 'set') {

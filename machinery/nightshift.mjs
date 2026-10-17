@@ -30,7 +30,7 @@ import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { loadConfig, reloadConfig, switchboardLane } from './config.mjs';
+import { configEnv, loadConfig, reloadConfig, switchboardLane } from './config.mjs';
 import { cannotAnswer } from './deadwake.mjs';
 
 const HOME = homedir();
@@ -54,9 +54,9 @@ try {
   // fallback path is a literal because the config that would supply it is
   // the thing that failed (E review, finding 2).
   try {
-    // Beside WEFT_CONFIG when it's set (every installed job sets it — the
+    // Beside the named config when one is set (every installed job sets it — the
     // same doctrine as wake.sh's FALLBACK_LOG); the legacy hub otherwise.
-    const fbDir = process.env.WEFT_CONFIG ? dirname(process.env.WEFT_CONFIG) : join(HOME, 'origin', 'weft');
+    const fbDir = configEnv() ? dirname(configEnv()) : join(HOME, 'origin', 'weft');
     const fb = join(fbDir, 'nightshift.log');
     // Dedupe against the log's last line: under KeepAlive this import runs
     // every ~30s while the config stays torn, and one loud line beats
@@ -213,7 +213,7 @@ function liveSessions() {
   return out;
 }
 // Lane attribution with its GRADE, because not every answer is evidence
-// (Ra's 10/13 find): 'registry' is ground truth (wake.sh exports WEFT_LANE,
+// (Ra's 10/13 find): 'registry' is ground truth (wake.sh exports NIGHTWATCH_LANE,
 // the SessionStart hook writes wakecycle/lane.<sessionId> from inside the
 // new session); 'marker' is a real signal (the session's tail shows a cwd a
 // lane claims via lanes[].cwdMarker); 'fallback' is a GUESS — any
@@ -284,7 +284,7 @@ function transcriptQuietMs(sessionId) {
 // framing: why it rang (the context level), that the lane reopens at once
 // instead of at the wake hour, and for the urgent tier, the deadline.
 function middayNote(lane, sessionId, midday) {
-  const cmd = `${CFG_FILE ? `WEFT_CONFIG="${CFG_FILE}" ` : ''}node "${join(MACHINERY_DIR, 'sleep.mjs')}" --lane ${lane} --session ${sessionId}`;
+  const cmd = `${CFG_FILE ? `NIGHTWATCH_CONFIG="${CFG_FILE}" ` : ''}node "${join(MACHINERY_DIR, 'sleep.mjs')}" --lane ${lane} --session ${sessionId}`;
   const level = `the ${lane} lane's context is at ${Math.round(midday.pct * 100)}% of its window`;
   const urgent = midday.tier === 'urgent';
   return (
@@ -302,7 +302,7 @@ function ritualNote(lane, sessionId) {
   return (
     `[nightshift] Sleep-bell for the ${lane} lane: it's the end of the day. When the current work ` +
     `reaches its seam, run the ritual, IN THIS ORDER — write today's rung into the ladder (format and laws: templates/rung.md beside this machinery), run \`` +
-    `${CFG_FILE ? `WEFT_CONFIG="${CFG_FILE}" ` : ''}node "${join(MACHINERY_DIR, 'sleep.mjs')}" --lane ${lane} --session ${sessionId}\`, THEN rewrite the checkpoint ` +
+    `${CFG_FILE ? `NIGHTWATCH_CONFIG="${CFG_FILE}" ` : ''}node "${join(MACHINERY_DIR, 'sleep.mjs')}" --lane ${lane} --session ${sessionId}\`, THEN rewrite the checkpoint ` +
     `(fold receipt first: a crash between rung and fold costs the night; a crash ` +
     `after the fold costs only a stale lane section, and the wake reads the live ` +
     `checkpoint later). Close any background shells or watchers you left running — ` +
@@ -386,7 +386,7 @@ const io = {
   now: () => Date.now(),
   nowMin,
   armedLanes,
-  configMtime: () => { try { return statSync(process.env.WEFT_CONFIG ?? join(CFG.weftRoot, 'weft.config.json')).mtimeMs; } catch { return 0; } },
+  configMtime: () => { try { return statSync(configEnv() ?? join(CFG.weftRoot, 'weft.config.json')).mtimeMs; } catch { return 0; } },
   reloadConfig: () => { try { return reloadConfig(); } catch (e) { log(`config reload FAILED (keeping the running schedule): ${e.message}`); return null; } },
   state,
   saveState,
@@ -483,7 +483,7 @@ const io = {
     // withToolPath: the window's login shell may not see this daemon's node
     // or claude (nvm on Linux/WSL); wake.sh needs both.
     summonWindow({ title: lane, scriptDir: join(WAKECYCLE, 'summons'), shellCommand: withToolPath(
-      `${CFG_FILE ? `WEFT_CONFIG="${CFG_FILE}" ` : ''}sh "${join(MACHINERY_DIR, 'wake.sh')}" ${lane}`,
+      `${CFG_FILE ? `NIGHTWATCH_CONFIG="${CFG_FILE}" ` : ''}sh "${join(MACHINERY_DIR, 'wake.sh')}" ${lane}`,
       { claudeBin: CFG.paths?.claudeBin }) });
   },
   log,
@@ -1330,7 +1330,7 @@ async function rehearse() {
     check('infra-filter', 'a hand-started daemon is real work', !INFRA_PROCESS.test('node /Users/x/nightwatch/machinery/nightshift.mjs'));
     check('bell-note', 'names the belled session explicitly', note.includes('--session sid-12345678-abcd'), note.slice(0, 200));
     check('bell-note', 'quotes the machinery sleep.mjs path', note.includes(`node "${join(MACHINERY_DIR, 'sleep.mjs')}"`));
-    check('bell-note', 'carries this hub\'s config when one exists', !CFG_FILE || note.includes(`WEFT_CONFIG="${CFG_FILE}"`));
+    check('bell-note', 'carries this hub\'s config when one exists', !CFG_FILE || note.includes(`NIGHTWATCH_CONFIG="${CFG_FILE}"`));
     // (A 'never names another house' negative was dropped: under Weft's
     // sealed layout MACHINERY_DIR legitimately IS weft/wakecycle, so the
     // positive exact-path check above is the honest form of the claim.)
