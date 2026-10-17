@@ -337,6 +337,51 @@ check("midday: a stale request from an ended session doesn't silence the next on
   rmSync(due, { recursive: true, force: true });
 }
 
+// ── the l3 horizon hot-reloads in a RUNNING watch (opus's enable nit) ──────
+// Every tick() above is a fresh process, so it cannot see a stale module
+// constant; only a long-running watch can. Same pattern as the midday
+// switch test: start the daemon, flip the config, expect the ring.
+{
+  const hot = mkdtempSync(join(process.env.TMPDIR ?? '/tmp', 'watch-hot-'));
+  for (const d of ['wakecycle', 'ladder', 'doorbell']) mkdirSync(join(hot, d), { recursive: true });
+  const hotCfg = join(hot, 'nightwatch.config.json');
+  const hotWrite = (horizon) => writeFileSync(hotCfg, JSON.stringify({
+    weftRoot: hot, timezone: 'UTC', defaultLane: 'fable',
+    watch: { pollMs: 300, ...(horizon ? { l3HorizonDays: horizon } : {}) },
+    lanes: { fable: { targetTokens: 250000 } },
+    notify: { macos: false, command: recorder }, paths: { transcripts: dirs.projects, sessions: dirs.sessions },
+  }));
+  hotWrite(0);
+  writeFileSync(join(hot, 'ladder', 'index.json'), JSON.stringify({ entries: [
+    { id: 'lark-L2-2026-10-01', file: 'L2/a.md', level: 'L2' },
+    { id: 'lark-L2-2026-10-09', file: 'L2/b.md', level: 'L2' },
+  ] }));
+  const nap = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  const hw = spawn(process.execPath, [join(HERE, 'watch.mjs')], { env: { ...process.env, WEFT_CONFIG: hotCfg }, stdio: 'ignore' });
+  try {
+    nap(1200);
+    const evs = () => lines(join(hot, 'events.jsonl')).filter((e) => e.kind === 'l3-due');
+    check('hot: with no horizon the running watch stays quiet', evs().length, 0);
+    hotWrite(4); // the enable, mid-run: 8-day span ≥ 2×4
+    nap(2000);
+    check('hot: setting l3HorizonDays mid-run rings without a restart', evs().length, 1);
+    // Ra's transitional amber knob (10/12), the switch most likely to be
+    // flipped while the daemon runs: a context crossing AFTER the mid-run
+    // flip must notify, through the same hot path.
+    session('s-hotamber', null); writeFileSync(join(hot, 'wakecycle', 'lane.s-hotamber'), JSON.stringify({ lane: 'fable' }));
+    write('s-hotamber', [usageAt(100_000)]);
+    nap(800);
+    const sent = () => lines(SENT).filter((e) => e.session === 's-hotamber');
+    check('hot: under the threshold, knob off, nothing notifies', sent().length, 0);
+    writeFileSync(hotCfg, JSON.stringify({ ...JSON.parse(readFileSync(hotCfg, 'utf8')), watch: { pollMs: 300, l3HorizonDays: 4, notifyAmberUncycled: true } }));
+    nap(800);
+    append('s-hotamber', usageAt(880_000));
+    nap(1500);
+    check('hot: notifyAmberUncycled flipped mid-run notifies the next crossing, no restart', sent().map((e) => e.kind), ['context-high']);
+  } finally { hw.kill(); }
+  rmSync(hot, { recursive: true, force: true });
+}
+
 // A passing run leaves nothing behind; a failing one keeps its scratch hub
 // to look at (Ra, 10/11: tests clean up after themselves).
 if (fail) console.log(`${pass} passed, ${fail} failed  (scratch kept: ${root})`);
