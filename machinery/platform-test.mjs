@@ -6,11 +6,11 @@ import assert from 'node:assert/strict';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
-  platformKind, summonWindowArgv, summonWindow, writeSummonScript, summonArgvFor, daemonJob, registryDir,
+  platformKind, summonWindowArgv, summonWindow, writeSummonScript, summonArgvFor, daemonJob, registryDir, registryFile,
   bannerArgv, notifyBanner, closeTtyArgv, withToolPath, TMUX_SUMMON,
 } from './platform.mjs';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 let pass = 0, fail = 0;
@@ -222,6 +222,32 @@ check('linux registry honors XDG_CONFIG_HOME', () => {
   process.env.XDG_CONFIG_HOME = '/x';
   try { assert.equal(registryDir('linux'), join('/x', 'nightwatch')); }
   finally { if (prev === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = prev; }
+});
+check('the registry file is hubs.json in the registry dir, per platform (issue #6)', () => {
+  assert.equal(registryFile('darwin'), join(homedir(), 'Library', 'Application Support', 'Nightwatch', 'hubs.json'));
+  const prev = process.env.XDG_CONFIG_HOME;
+  process.env.XDG_CONFIG_HOME = '/x';
+  try { assert.equal(registryFile('linux'), join('/x', 'nightwatch', 'hubs.json')); }
+  finally { if (prev === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = prev; }
+});
+check('outside any hub, with no WEFT_CONFIG, config is the defaults even when the registry lists a hub (issue #5)', () => {
+  // A scratch HOME whose registry names a hub with a config: a script run
+  // outside every hub must not pick that hub up by omission.
+  const home = mkdtempSync(join(tmpdir(), 'nw-cfg-registry-'));
+  try {
+    const hub = join(home, 'Nightwatch', 'lark');
+    execFileSync('mkdir', ['-p', hub, join(home, '.config', 'nightwatch')]);
+    writeFileSync(join(hub, 'nightwatch.config.json'), JSON.stringify({ persona: { name: 'Lark' } }));
+    writeFileSync(join(home, '.config', 'nightwatch', 'hubs.json'), JSON.stringify({ version: 1, hubs: [{ path: hub }] }));
+    execFileSync('mkdir', ['-p', join(home, 'Library', 'Application Support', 'Nightwatch')]);
+    writeFileSync(join(home, 'Library', 'Application Support', 'Nightwatch', 'hubs.json'), JSON.stringify({ version: 1, hubs: [{ path: hub }] }));
+    const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, '.config') };
+    delete env.WEFT_CONFIG;
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e',
+      `const { loadConfig } = await import(${JSON.stringify(new URL('./config.mjs', import.meta.url).href)}); console.log(JSON.stringify(loadConfig().__configFile ?? null));`],
+    { encoding: 'utf8', env, cwd: home });
+    assert.equal(out.trim(), 'null');
+  } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
 // ── banners ──

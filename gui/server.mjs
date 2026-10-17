@@ -18,7 +18,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, loadConfigFrom } from '../machinery/config.mjs';
 import { stateKey, assemble } from './assemble.mjs';
-import { readRegistry, configFileFor, mergeSnapshots, REGISTRY_REL } from './hubs.mjs';
+import { readRegistry, configFileFor, mergeSnapshots, viewerRegistryFile } from './hubs.mjs';
 import { homedir } from 'node:os';
 import { renderPage, mergeSnapshot } from './emitter.mjs';
 import { FIXTURE } from './fixture-data.mjs';
@@ -96,7 +96,7 @@ function skinsFromDisk() {
 // (assemble stays single-hub) and merged by gui/hubs.mjs. No registry yet, or
 // an empty one: the one hub this process's config names, exactly as before.
 // NIGHTWATCH_REGISTRY overrides the registry's path (scratch benches).
-const REGISTRY = process.env.NIGHTWATCH_REGISTRY ?? join(homedir(), ...REGISTRY_REL);
+const REGISTRY = viewerRegistryFile();
 // The poll key across every hub (see stateKey): any persona's change refreshes.
 function keyAll() {
   const roots = readRegistry(io.readText(REGISTRY) ?? '');

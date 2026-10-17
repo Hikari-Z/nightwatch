@@ -5,7 +5,7 @@
 //   node gui/test/hubs-probes.mjs
 //
 // Written by: claude-opus-5-5, 2026-10-07
-import { readRegistry, configFileFor, mergeSnapshots } from '../hubs.mjs';
+import { readRegistry, configFileFor, mergeSnapshots, viewerRegistryFile } from '../hubs.mjs';
 import { renderPage, mergeSnapshot } from '../emitter.mjs';
 import { FIXTURE } from '../fixture-data.mjs';
 
@@ -33,6 +33,15 @@ function snap({ persona, lanes, phase = 'day', activity = [1, 2, 3], alarms = []
 // ---- the registry reader: hub paths in order; anything malformed reads as no hubs
 check('registry: hub paths in order', J(readRegistry('{"version":1,"hubs":[{"path":"/a"},{"path":"/b"}]}')) === J(['/a', '/b']), '');
 check('registry: junk, a missing file, relative paths read as nothing', J([readRegistry('nope'), readRegistry(''), readRegistry('{"hubs":[{"path":"rel"}]}')]) === J([[], [], []]), '');
+{
+  const prev = process.env.XDG_CONFIG_HOME;
+  process.env.XDG_CONFIG_HOME = '/x';
+  try {
+    check('registry: the viewer reads the platform\'s registry, not a macOS path everywhere (issue #6)',
+      viewerRegistryFile({}, 'linux') === '/x/nightwatch/hubs.json', viewerRegistryFile({}, 'linux'));
+  } finally { if (prev === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = prev; }
+}
+check('registry: NIGHTWATCH_REGISTRY still overrides it for benches', viewerRegistryFile({ NIGHTWATCH_REGISTRY: '/bench/hubs.json' }, 'linux') === '/bench/hubs.json', '');
 check("config file: Set up's name first, else our legacy hub's",
   J([configFileFor('/h/', (p) => p === '/h/nightwatch.config.json'), configFileFor('/h', () => false)]) === J(['/h/nightwatch.config.json', '/h/weft.config.json']), '');
 

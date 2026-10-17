@@ -14,6 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert';
 import { applyRetention, decide, readDays, raise, RETENTION_DAYS, stepFor, survey, userSettingsPath } from './retention.mjs';
+import { registryFile } from './platform.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 let pass = 0, fail = 0;
@@ -160,7 +161,7 @@ try {
   execFileSync('mkdir', ['-p', cfgDir]);
   writeFileSync(join(cfgDir, 'settings.json'), '{"cleanupPeriodDays": 30}');
   const watched = [join(homedir(), '.claude', 'settings.json'),
-    join(homedir(), 'Library', 'Application Support', 'Nightwatch', 'hubs.json'),
+    registryFile(),   // the platform's real registry, not the macOS spelling on every platform (issue #6)
     join(cfgDir, 'settings.json')];
   const agentsDir = join(homedir(), 'Library', 'LaunchAgents');
   const agents = () => existsSync(agentsDir) ? readdirSync(agentsDir).sort().join(',') : '';

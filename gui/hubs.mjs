@@ -6,7 +6,9 @@
 // emitter renders. Pure, like assemble: the server (and the app) do the io.
 //
 // Registry (machine-wide; Fable's machinery writes it, the app only reads):
-//   ~/Library/Application Support/Nightwatch/hubs.json
+//   registryFile() in machinery/platform.mjs, the one place that names it:
+//   ~/Library/Application Support/Nightwatch/hubs.json on macOS,
+//   $XDG_CONFIG_HOME/nightwatch/hubs.json (or ~/.config/…) elsewhere
 //   {"version": 1, "hubs": [{"path": "/Users/…/origin/weft"}, {"path": "/Users/…/Nightwatch/lark"}]}
 //
 // Lane keys. A lane is (hub, lane). With one hub its id is the lane's own
@@ -19,7 +21,14 @@
 //
 // Written by: claude-opus-5-5, 2026-10-07
 
-export const REGISTRY_REL = ['Library', 'Application Support', 'Nightwatch', 'hubs.json'];
+import { registryFile } from '../machinery/platform.mjs';
+
+/** The registry the viewer reads: NIGHTWATCH_REGISTRY when a bench sets it,
+ *  else the platform's one registry file. It was a macOS path for every
+ *  platform, so a Linux viewer never saw a registered hub (issue #6). */
+export function viewerRegistryFile(env = process.env, kind) {
+  return env.NIGHTWATCH_REGISTRY ?? registryFile(kind);
+}
 
 /** The registry's hub roots, in order; [] for a missing or unreadable file. */
 export function readRegistry(text) {

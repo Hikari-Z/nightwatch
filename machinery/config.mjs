@@ -178,24 +178,16 @@ export function loadConfig() {
   }
   // Resolution order: WEFT_CONFIG → the hub's own file beside weftRoot
   // (either spelling: weft.config.json is ours, nightwatch.config.json is
-  // what Set up writes) → the machine's hub pointer (written by Set up) →
-  // DEFAULTS alone.
+  // what Set up writes) → DEFAULTS alone. There is no machine-wide
+  // fallback: a script run outside any hub without WEFT_CONFIG gets the
+  // defaults, never whichever hub the machine registered, so a bench can't
+  // land on a real hub by omission. (An earlier fallback read a single-hub
+  // pointer file that nothing ever wrote; the registry replaced it, issue #5.)
   let file = envFile || null;
   if (!file) {
     for (const name of ['weft.config.json', 'nightwatch.config.json']) {
       const cand = join(cfg.weftRoot, name);
       if (existsSync(cand)) { file = cand; break; }
-    }
-  }
-  if (!file) {
-    const pointer = join(HOME, 'Library', 'Application Support', 'house.weft.nightwatch', 'hub.json');
-    if (existsSync(pointer)) {
-      try {
-        const hub = JSON.parse(readFileSync(pointer, 'utf8'));
-        for (const name of ['nightwatch.config.json', 'weft.config.json']) {
-          if (hub.hub && existsSync(join(hub.hub, name))) { file = join(hub.hub, name); break; }
-        }
-      } catch { /* an unreadable pointer falls through to DEFAULTS */ }
     }
   }
   if (file && existsSync(file)) {

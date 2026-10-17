@@ -227,6 +227,12 @@ export function registryDir(kind = platformKind()) {
   return join(xdg && xdg.length ? xdg : join(homedir(), '.config'), 'nightwatch');
 }
 
+/** The registry file itself: every reader and writer names it through here
+ *  (Set up, Doctor, the viewer), so there is one place, per platform. */
+export function registryFile(kind = platformKind()) {
+  return join(registryDir(kind), 'hubs.json');
+}
+
 /**
  * A native notification banner. Darwin is today's osascript line
  * byte-identically; WSL raises a Windows toast through PowerShell interop;
