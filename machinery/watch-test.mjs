@@ -308,6 +308,13 @@ check("midday: a stale request from an ended session doesn't silence the next on
   append('s-due', usage(238_000));
   tick(dueCfg);
   check('segment-due: the next band rings again', dueEvents().filter((e) => e.kind === 'segment-due').length, 2);
+  append('s-due', usage(345_000)); // two bands in one poll (a big tool result)
+  tick(dueCfg);
+  check('segment-due: a two-band jump rings once and states the exact growth', (() => {
+    const notes = spool('fable').filter((n) => n.includes('watch-segment-due')).sort();
+    const text = readFileSync(join(due, 'doorbell', 'spool', 'fable', notes[notes.length - 1]), 'utf8');
+    return [dueEvents().filter((e) => e.kind === 'segment-due').length, /grown another ~100k/.test(text), /to ~345k/.test(text)];
+  })(), [3, true, true]);
 
   // Restart keeps the band: every tick here is a FRESH process reading the
   // persisted state, so the baseline/band logic surviving between ticks IS

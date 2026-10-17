@@ -409,6 +409,9 @@ function segmentDueCheck(now, s, entries) {
   const prev = state.due.seg[s.sid];
   if (prev === undefined || band < prev) { state.due.seg[s.sid] = band; return; }
   if (band === prev) return;
+  // A big tool result can jump more than one band inside a poll; the ring
+  // stays single but the figure stays exact: (band - prev) bands of growth.
+  const grewK = Math.round(((band - prev) * every) / 1000);
   state.due.seg[s.sid] = band;
   const kTok = Math.round(ctx.tokens / 1000);
   log(`SEGMENT DUE: ${s.lane} (${s.sid.slice(0, 8)}…) at ~${kTok}k (band ${band})`);
@@ -416,7 +419,7 @@ function segmentDueCheck(now, s, entries) {
   // The growth since the last ring is one band — kTok is the TOTAL context
   // and must not wear the growth's clause (the first live note said "grown
   // another ~826k" at band 11 of a 75k knob; opus, 10/17).
-  dueNote(s.lane, 'segment-due', `[watch] Segment seam for the ${s.lane} lane: this session has grown another ~${Math.round(every / 1000)}k tokens since this watch last rang (to ~${kTok}k; it can't see whether you've banked since). At the next clean stopping point, bank a segment (${join(CFG.weftRoot, 'segments', s.lane)}/) so the day's detail survives whatever ends the session early — then delete this note. The next ${Math.round(every / 1000)}k of growth rings once, the same way.`);
+  dueNote(s.lane, 'segment-due', `[watch] Segment seam for the ${s.lane} lane: this session has grown another ~${grewK}k tokens since this watch last rang (to ~${kTok}k; it can't see whether you've banked since). At the next clean stopping point, bank a segment (${join(CFG.weftRoot, 'segments', s.lane)}/) so the day's detail survives whatever ends the session early — then delete this note. The next ${Math.round(every / 1000)}k of growth rings once, the same way.`);
 }
 
 // Opt-in for the hub: watch.l3HorizonDays. L2 rungs whose INDEX rows carry
