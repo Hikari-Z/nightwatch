@@ -406,13 +406,19 @@ function segmentDueCheck(now, s, entries) {
   const ctx = contextOf(s, entries);
   if (!ctx) return;
   const band = Math.floor(ctx.tokens / every);
-  const prev = state.due.seg[s.sid];
-  if (prev === undefined || band < prev) { state.due.seg[s.sid] = band; return; }
-  if (band === prev) return;
-  // A big tool result can jump more than one band inside a poll; the ring
-  // stays single but the figure stays exact: (band - prev) bands of growth.
-  const grewK = Math.round(((band - prev) * every) / 1000);
-  state.due.seg[s.sid] = band;
+  // State per session: { band, tokens } — the tokens at the last ring (or
+  // baseline), because rings fire MID-band and "(band - prev) × every" is
+  // exact only at band boundaries. The second live ring proved it: 892k →
+  // 901k crossed the 900k boundary, 9k of real growth, and #20's figure
+  // said "another ~75k" (found by this lane on its own note, 10/17 eve).
+  // A pre-fix bare-number entry reads as its band with its boundary as the
+  // tokens, converging in one ring.
+  const prevEntry = state.due.seg[s.sid];
+  const prev = typeof prevEntry === 'number' ? { band: prevEntry, tokens: prevEntry * every } : prevEntry;
+  if (prev === undefined || band < prev.band) { state.due.seg[s.sid] = { band, tokens: ctx.tokens }; return; }
+  if (band === prev.band) return;
+  const grewK = Math.round((ctx.tokens - prev.tokens) / 1000);
+  state.due.seg[s.sid] = { band, tokens: ctx.tokens };
   const kTok = Math.round(ctx.tokens / 1000);
   log(`SEGMENT DUE: ${s.lane} (${s.sid.slice(0, 8)}…) at ~${kTok}k (band ${band})`);
   emit({ at: new Date(now).toISOString(), kind: 'segment-due', lane: s.lane, session: s.sid, tokens: ctx.tokens, band });
