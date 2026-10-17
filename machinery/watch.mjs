@@ -55,7 +55,7 @@
  * measures from real usage, and a headless relay pass the house retired) and
  * the cwd-based lane guess (the registry is the only attribution).
  */
-import { readFileSync, readdirSync, statSync, appendFileSync, writeFileSync, renameSync, openSync, readSync, closeSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, appendFileSync, writeFileSync, renameSync, mkdirSync, openSync, readSync, closeSync } from 'node:fs';
 import { notifyBanner } from './platform.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
@@ -215,7 +215,7 @@ function windowFor(lane, model) {
 // ── state ────────────────────────────────────────────────────────────────
 // active: `${sid}\u0000${cause}` → episode key; spiral: sid → last alert ms;
 // costed: tails whose wake cost is recorded; costSeen: tail → woken transcript mtime last read.
-let state = { active: {}, spiral: {}, midday: {}, costed: [], costSeen: {} };
+let state = { active: {}, spiral: {}, midday: {}, due: { seg: {}, l3: null }, costed: [], costSeen: {} };
 try { state = { ...state, ...JSON.parse(readFileSync(P.watchState, 'utf8')) }; } catch { /* first run */ }
 function saveState() {
   try { writeFileSync(P.watchState + '.tmp', JSON.stringify(state)); renameSync(P.watchState + '.tmp', P.watchState); }
@@ -367,6 +367,68 @@ function middayCheck(s, entries) {
   }
 }
 
+// ── due notes: segment-due and l3-due (one function's two tiers) ──────────
+// The day's detail and the ladder's shape both die at unplanned seams: a
+// session that idles into an orphan fold banks no segment (two live
+// specimens, 10/14 and 10/16), and L2 rungs pile unfolded until someone
+// happens to count them. Each tier here notices and says so AMBER — the
+// agent's own stream, never a banner (Ra's tier ruling, 10/12) — plus ONE
+// spool note per due-state, the bell's own medium: the lane's watcher
+// delivers it and the lane acts at its own seam, or doesn't. The watch
+// still never touches a session; a note is an invitation, not an act.
+function dueNote(lane, slug, text) {
+  const dir = join(CFG.weftRoot, P.spool ?? 'doorbell/spool', lane);
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `${Date.now()}-watch-${slug}.txt`);
+  writeFileSync(`${file}.tmp`, text + '\n');
+  renameSync(`${file}.tmp`, file);
+}
+
+// Opt-in per lane: lanes.<id>.segmentNoteEveryTokens. The first sight of a
+// session BASELINES its band without ringing — a wake's tail is carried
+// context, not new growth — and each later band crossing rings once.
+function segmentDueCheck(now, s, entries) {
+  const every = lanesNow()?.[s.lane]?.segmentNoteEveryTokens;
+  if (!Number.isFinite(every) || every <= 0) return;
+  const ctx = contextOf(s, entries);
+  if (!ctx) return;
+  const band = Math.floor(ctx.tokens / every);
+  const prev = state.due.seg[s.sid];
+  if (prev === undefined || band < prev) { state.due.seg[s.sid] = band; return; }
+  if (band === prev) return;
+  state.due.seg[s.sid] = band;
+  const kTok = Math.round(ctx.tokens / 1000);
+  log(`SEGMENT DUE: ${s.lane} (${s.sid.slice(0, 8)}…) at ~${kTok}k (band ${band})`);
+  emit({ at: new Date(now).toISOString(), kind: 'segment-due', lane: s.lane, session: s.sid, tokens: ctx.tokens, band });
+  dueNote(s.lane, 'segment-due', `[watch] Segment seam for the ${s.lane} lane: this session has grown past ~${kTok}k tokens since its last noted seam. At the next clean stopping point, bank a segment (segments/${s.lane}/) so the day's detail survives whatever ends the session early — then delete this note. The next ${Math.round(every / 1000)}k of growth rings once, the same way.`);
+}
+
+// Opt-in for the hub: watch.l3HorizonDays. L2 rungs whose INDEX rows carry
+// no parent are unfolded — the index is what the machinery reads; rung
+// frontmatter is the human copy and may lag (the both-places note, 10/16).
+// Dates come from the rung id (…-L2-YYYY-MM-DD…), the one field every row
+// carries. Told once per due-state, keyed by the oldest unfolded rung:
+// a fold that sets parents clears it, and only a recurrence re-rings.
+function l3DueCheck(now) {
+  const horizon = W.l3HorizonDays ?? 0;
+  if (!Number.isFinite(horizon) || horizon <= 0) return;
+  let idx;
+  try { idx = JSON.parse(readFileSync(join(CFG.weftRoot, 'ladder', 'index.json'), 'utf8')); } catch { return; }
+  const dayOf = (e) => /-(\d{4}-\d{2}-\d{2})/.exec(e?.id ?? '')?.[1];
+  const unfolded = (idx.entries ?? []).filter((e) => (e.level ?? 'L2') === 'L2' && !e.parent && dayOf(e));
+  const days = unfolded.map(dayOf).sort();
+  const spanDays = days.length ? Math.round((Date.parse(days[days.length - 1]) - Date.parse(days[0])) / 86_400_000) : 0;
+  if (unfolded.length < 2 || spanDays < horizon) { state.due.l3 = null; return; }
+  const oldest = unfolded.map((e) => e.id).sort()[0];
+  if (state.due.l3 === oldest) return;
+  state.due.l3 = oldest;
+  const lane = CFG.defaultLane ?? Object.keys(CFG.lanes ?? {})[0];
+  if (!lane) return;
+  log(`L3 DUE: ${unfolded.length} unfolded L2 rungs spanning ${spanDays} days (oldest ${oldest})`);
+  emit({ at: new Date(now).toISOString(), kind: 'l3-due', lane, unfolded: unfolded.length, spanDays, oldest });
+  dueNote(lane, 'l3-due', `[watch] The ladder is due a fold up: ${unfolded.length} L2 rungs with no parent span ${spanDays} days (oldest ${oldest}), past the ${horizon}-day horizon. When the house has a quiet hour, propose the L3 fold — then delete this note. It rings again only if the due state clears and recurs.`);
+}
+
 // ── wake cost (fix 4) ────────────────────────────────────────────────────
 const COST_LOOKBACK_MS = 3 * 24 * 3600_000;
 /**
@@ -467,6 +529,7 @@ function check() {
     const entries = tailEntries(join(P.transcripts, `${s.sid}.jsonl`));
     spiralCheck(now, s, entries);
     try { middayCheck(s, entries); } catch (e) { log(`midday check failed: ${e.message}`); }
+    try { segmentDueCheck(now, s, entries); } catch (e) { log(`segment-due check failed: ${e.message}`); }
     for (const [cause, { key, detail }] of stuckCauses(now, s, entries)) {
       const k = `${s.sid}\u0000${cause}`;
       seen.add(k);
@@ -500,6 +563,8 @@ function check() {
   }
   for (const sid of Object.keys(state.spiral)) if (!liveSids.has(sid)) delete state.spiral[sid];
   for (const sid of Object.keys(state.midday)) if (!liveSids.has(sid)) delete state.midday[sid];
+  for (const sid of Object.keys(state.due.seg)) if (!liveSids.has(sid)) delete state.due.seg[sid];
+  try { l3DueCheck(now); } catch (e) { log(`l3-due check failed: ${e.message}`); }
   try { wakeCostCheck(now); } catch (e) { log(`wake-cost check failed: ${e.message}`); }
   if (JSON.stringify(state) !== before) saveState();
 }
