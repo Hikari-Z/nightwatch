@@ -230,35 +230,35 @@ const STUCK = {
   'usage-limit': (a) => ['Usage limit reached', `${cap(a)} hit the account's usage limit and is stopped until the limit resets or the model is switched (/model).`],
   offline: (a) => ['Can\'t reach the API', `${cap(a)} can't reach the API (connection or DNS). The session retries when the network is back; worth a look if this machine is offline.`],
   slept: (a) => ['Cut off by sleep', `${cap(a)} was cut off mid-reply when this machine went to sleep. A short message in the agent's window resumes the session.`],
-  classifier: (a, d) => ['Classifier denials', `${cap(a)} has had ${d.count} tool calls denied by the auto mode classifier in ${mins(W.classifierWindowMs)} minutes${d.reason ? ` (latest: ${d.reason})` : ''}. The session may be circling something; worth a look.`],
+  classifier: (a, d) => ['Classifier denials', `${cap(a)} has had ${d.count} tool calls denied by the auto mode classifier in ${mins(Wn().classifierWindowMs)} minutes${d.reason ? ` (latest: ${d.reason})` : ''}. The session may be circling something; worth a look.`],
   context: (a, d) => [d.cycleStalled ? 'Midday fold stalled' : 'Context filling up', `${cap(a)} is at ${Math.round(d.ratio * 100)}% of the context window (${Math.round(d.tokens / 1000)}k of ${Math.round(d.window / 1000)}k). ${d.cycleStalled ? 'The midday cycle hasn\'t folded them: its bell was refused or its deadline passed. Force fold folds them now.' : 'Worth a fold at the next good stopping point.'}`],
   waiting: (a, d) => ['Waiting on you', `${cap(a)} has been waiting for ${mins(d.forMs)} minutes (a permission prompt or a question in the agent's window).`],
 };
 
 // ── checks ───────────────────────────────────────────────────────────────
 function spiralCheck(now, s, entries) {
-  const errors = entries.filter((e) => e.isApiErrorMessage && e.timestamp && now - Date.parse(e.timestamp) < W.spiralWindowMs);
-  if (errors.length < W.spiralThreshold) return;
+  const errors = entries.filter((e) => e.isApiErrorMessage && e.timestamp && now - Date.parse(e.timestamp) < Wn().spiralWindowMs);
+  if (errors.length < Wn().spiralThreshold) return;
   // Still spiraling? A session that answered since the errors is left alone.
   const newest = [...entries].reverse().find((e) => e.type === 'assistant' || e.type === 'user');
   if (!newest?.isApiErrorMessage) return;
   // A named stuck state is the stuck check's: its advice is the one that helps
   // (a too-full session can't take the short message a spiral wants).
   if (errorCause(newest)) return;
-  if (now - (state.spiral[s.sid] ?? 0) < W.spiralCooldownMs) return;
+  if (now - (state.spiral[s.sid] ?? 0) < Wn().spiralCooldownMs) return;
   state.spiral[s.sid] = now;
   const a = agentLabel(s.lane);
-  log(`SPIRAL: ${s.lane} (${s.sid.slice(0, 8)}…) — ${errors.length} API errors in ${mins(W.spiralWindowMs)}m, newest still an error`);
-  emit({ at: new Date(now).toISOString(), kind: 'spiral-alarm', lane: s.lane, session: s.sid, errors: errors.length, windowMin: mins(W.spiralWindowMs), alarm: true });
+  log(`SPIRAL: ${s.lane} (${s.sid.slice(0, 8)}…) — ${errors.length} API errors in ${mins(Wn().spiralWindowMs)}m, newest still an error`);
+  emit({ at: new Date(now).toISOString(), kind: 'spiral-alarm', lane: s.lane, session: s.sid, errors: errors.length, windowMin: mins(Wn().spiralWindowMs), alarm: true });
   notify({
     kind: 'spiral-alarm', lane: s.lane, session: s.sid, title: 'API errors',
-    text: `${cap(a)} has hit ${errors.length} API errors in ${mins(W.spiralWindowMs)} minutes and is still erroring. Usually this is a cold cache after a quiet gap, and one short message in the agent's window gets the session going again. If that doesn't, Force fold on the agent's card closes the window, folds, and opens a fresh one, which writes the rung for the day.`,
+    text: `${cap(a)} has hit ${errors.length} API errors in ${mins(Wn().spiralWindowMs)} minutes and is still erroring. Usually this is a cold cache after a quiet gap, and one short message in the agent's window gets the session going again. If that doesn't, Force fold on the agent's card closes the window, folds, and opens a fresh one, which writes the rung for the day.`,
   });
 }
 
 function stuckCauses(now, s, entries) {
   const causes = new Map();
-  if (s.status === 'waiting' && s.statusAt && now - s.statusAt >= W.waitingMs) {
+  if (s.status === 'waiting' && s.statusAt && now - s.statusAt >= Wn().waitingMs) {
     causes.set('waiting', { key: String(s.statusAt), detail: { forMs: now - s.statusAt } });
   }
   const newest = [...entries].reverse().find((e) => e.type === 'assistant' || e.type === 'user');
@@ -268,14 +268,14 @@ function stuckCauses(now, s, entries) {
   }
   const denials = [];
   for (const e of entries) {
-    if (e.type !== 'user' || !e.timestamp || now - Date.parse(e.timestamp) > W.classifierWindowMs) continue;
+    if (e.type !== 'user' || !e.timestamp || now - Date.parse(e.timestamp) > Wn().classifierWindowMs) continue;
     for (const b of Array.isArray(e.message?.content) ? e.message.content : []) {
       if (b?.type !== 'tool_result' || !b.is_error) continue;
       const t = typeof b.content === 'string' ? b.content : JSON.stringify(b.content ?? '');
       if (/denied by the Claude Code auto mode classifier/i.test(t)) denials.push({ at: e.timestamp, reason: (t.match(/Reason:\s*([^\n.]{0,80})/) ?? [])[1] });
     }
   }
-  if (denials.length >= W.classifierThreshold) {
+  if (denials.length >= Wn().classifierThreshold) {
     causes.set('classifier', { key: denials[0].at, detail: { count: denials.length, reason: denials[denials.length - 1].reason } });
   }
   const ctx = contextOf(s, entries);
@@ -284,7 +284,7 @@ function stuckCauses(now, s, entries) {
     const k = `${s.sid}\u0000context`;
     const was = k in state.active;
     const cycling = !!lanesNow()?.[s.lane]?.middayCycle;
-    if ((ratio >= W.contextWarn || (was && ratio >= W.contextRearm)) && !(cycling && cycleCovers(now, s, ratio))) {
+    if ((ratio >= Wn().contextWarn || (was && ratio >= Wn().contextRearm)) && !(cycling && cycleCovers(now, s, ratio))) {
       causes.set('context', { key: was ? state.active[k] : String(now), detail: { ratio, tokens, window, ...(cycling ? { cycleStalled: true } : {}) } });
     }
   }
@@ -352,6 +352,9 @@ function cfgNow() {
 // segmentNoteEveryTokens hot-reloaded — an asymmetry the --once bench can't
 // see, since every bench tick is a fresh process).
 function lanesNow() { return cfgNow().lanes; }
+// Every watch threshold reads hot, except pollMs: setInterval's period
+// really is fixed at start, and the boot line says so.
+const Wn = () => cfgNow().watch ?? W;
 const TIER_RANK = { soft: 1, urgent: 2 };
 function middayCheck(s, entries) {
   const mc = lanesNow()?.[s.lane]?.middayCycle;
@@ -572,7 +575,7 @@ function check() {
       // Red interrupts; amber doesn't (Ra, 10/12). The one amber that still
       // notifies is watch.notifyAmberUncycled's, transitional by name.
       const amber = kind === 'context-high' && !detail.cycleStalled;
-      if (!amber || (W.notifyAmberUncycled && !lanesNow()?.[s.lane]?.middayCycle)) notify({ kind, cause, lane: s.lane, session: s.sid, title, text });
+      if (!amber || (Wn().notifyAmberUncycled && !lanesNow()?.[s.lane]?.middayCycle)) notify({ kind, cause, lane: s.lane, session: s.sid, title, text });
     }
   }
   // An episode that ended while its session lives gets a clear; a gone

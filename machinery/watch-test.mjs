@@ -365,6 +365,19 @@ check("midday: a stale request from an ended session doesn't silence the next on
     hotWrite(4); // the enable, mid-run: 8-day span ≥ 2×4
     nap(2000);
     check('hot: setting l3HorizonDays mid-run rings without a restart', evs().length, 1);
+    // Ra's transitional amber knob (10/12), the switch most likely to be
+    // flipped while the daemon runs: a context crossing AFTER the mid-run
+    // flip must notify, through the same hot path.
+    session('s-hotamber', null); writeFileSync(join(hot, 'wakecycle', 'lane.s-hotamber'), JSON.stringify({ lane: 'fable' }));
+    write('s-hotamber', [usageAt(100_000)]);
+    nap(800);
+    const sent = () => lines(SENT).filter((e) => e.session === 's-hotamber');
+    check('hot: under the threshold, knob off, nothing notifies', sent().length, 0);
+    writeFileSync(hotCfg, JSON.stringify({ ...JSON.parse(readFileSync(hotCfg, 'utf8')), watch: { pollMs: 300, l3HorizonDays: 4, notifyAmberUncycled: true } }));
+    nap(800);
+    append('s-hotamber', usageAt(880_000));
+    nap(1500);
+    check('hot: notifyAmberUncycled flipped mid-run notifies the next crossing, no restart', sent().map((e) => e.kind), ['context-high']);
   } finally { hw.kill(); }
   rmSync(hot, { recursive: true, force: true });
 }
