@@ -24,7 +24,7 @@
  */
 import { laneWatchers, processTable, unheardBell } from './watchers.mjs';
 import { readFileSync, readdirSync, statSync, existsSync, appendFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { summonWindow } from './platform.mjs';
+import { platformKind, summonWindow, withToolPath } from './platform.mjs';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -54,7 +54,10 @@ try {
   // fallback path is a literal because the config that would supply it is
   // the thing that failed (E review, finding 2).
   try {
-    const fb = join(HOME, 'origin', 'weft', 'nightshift.log');
+    // Beside WEFT_CONFIG when it's set (every installed job sets it — the
+    // same doctrine as wake.sh's FALLBACK_LOG); the legacy hub otherwise.
+    const fbDir = process.env.WEFT_CONFIG ? dirname(process.env.WEFT_CONFIG) : join(HOME, 'origin', 'weft');
+    const fb = join(fbDir, 'nightshift.log');
     // Dedupe against the log's last line: under KeepAlive this import runs
     // every ~30s while the config stays torn, and one loud line beats
     // 2,880 identical ones (E second read, follow-up b).
@@ -68,7 +71,7 @@ try {
       // Event twin to the same literal fallback dir (config is unreadable,
       // so paths.events is too) — the viewer renders "the watch is down."
       try {
-        appendFileSync(join(HOME, 'origin', 'weft', 'events.jsonl'),
+        appendFileSync(join(fbDir, 'events.jsonl'),
           JSON.stringify({ at: new Date().toISOString(), kind: 'daemon-down', error: e.message, alarm: true }) + '\n');
       } catch {}
     }
@@ -166,7 +169,7 @@ function liveSessions() {
   const out = [];
   const seenPids = new Set();
   let socks = [];
-  try { socks = readdirSync(BRIDGE_SOCK_DIR).filter((f) => /^sock-[0-9a-f-]{36}\.sock$/.test(f)); } catch { return out; }
+  try { socks = readdirSync(BRIDGE_SOCK_DIR).filter((f) => /^sock-[0-9a-f-]{36}\.sock$/.test(f)); } catch { /* no bridge here: status files below */ }
   for (const f of socks) {
     const sessionId = f.slice(5, -5);
     try {
@@ -184,6 +187,28 @@ function liveSessions() {
         pid = ppid;
       }
     } catch { /* stale sock, dead chain */ }
+  }
+  // Without the bridge (every install but the one it came from: the first
+  // WSL hub, 10/16, read "live sessions: (none)" with its lane plainly up,
+  // so the bell could never ring), Claude Code's own status files name each
+  // live session: ~/.claude/sessions/<pid>.json. Those cover every claude on
+  // the machine, a person's unrelated tabs included, so one counts only
+  // when this hub registered its session (wakecycle/lane.<sessionId>) —
+  // never by the cwd heuristic, which would bell or close a stranger.
+  let files = [];
+  try { files = readdirSync(HARNESS_SESSIONS_DIR).filter((f) => /^\d+\.json$/.test(f)); } catch {}
+  for (const f of files) {
+    const pid = Number(f.slice(0, -5));
+    if (seenPids.has(pid)) continue;
+    try {
+      process.kill(pid, 0);
+      const comm = execFileSync('ps', ['-o', 'comm=', '-p', String(pid)], { encoding: 'utf8' }).trim();
+      if (comm !== 'claude' && !comm.endsWith('/claude')) continue;
+      const sessionId = currentSessionOf(pid);
+      if (!sessionId || !existsSync(join(WAKECYCLE, `lane.${sessionId}`))) continue;
+      seenPids.add(pid);
+      out.push({ pid, sessionId });
+    } catch { /* gone, or not ours */ }
   }
   return out;
 }
@@ -455,8 +480,11 @@ const io = {
   launchWake: (lane) => {
     // scriptDir: on WSL the summons travels as one file path (per-lane name,
     // platform.mjs); on darwin/linux it's unused. Hub-owned, beside receipts.
-    summonWindow({ title: lane, scriptDir: join(WAKECYCLE, 'summons'), shellCommand:
-      `${CFG_FILE ? `WEFT_CONFIG="${CFG_FILE}" ` : ''}sh "${join(MACHINERY_DIR, 'wake.sh')}" ${lane}` });
+    // withToolPath: the window's login shell may not see this daemon's node
+    // or claude (nvm on Linux/WSL); wake.sh needs both.
+    summonWindow({ title: lane, scriptDir: join(WAKECYCLE, 'summons'), shellCommand: withToolPath(
+      `${CFG_FILE ? `WEFT_CONFIG="${CFG_FILE}" ` : ''}sh "${join(MACHINERY_DIR, 'wake.sh')}" ${lane}`,
+      { claudeBin: CFG.paths?.claudeBin }) });
   },
   log,
 };
@@ -500,9 +528,14 @@ function tickWith(io) {
       // The test takes the real wake's path, scriptDir included, so on WSL it
       // proves the file-based summons and not just the window.
       summonWindow({ title: 'nightwatch test', scriptDir: join(WAKECYCLE, 'summons'), shellCommand: 'echo nightwatch launch-leg test: TCC grant OK' });
-      log('launch-leg test: Terminal launch SUCCEEDED — the 08:00 wake can open windows');
+      log(`launch-leg test: Terminal launch SUCCEEDED — the ${CFG.schedule?.wake ?? 'morning'} wake can open windows`);
     } catch (e) {
-      log(`launch-leg test FAILED: ${e.message} — the 08:00 wake would fail the same way; grant Automation (System Settings > Privacy > Automation) and re-touch the trigger`);
+      // The fix differs by platform: darwin's is the Automation grant; on
+      // WSL/Linux it's the terminal binary being on the job's PATH.
+      const hint = platformKind() === 'darwin'
+        ? 'grant Automation (System Settings > Privacy > Automation)'
+        : "check that the terminal binary is on the background job's PATH (wt.exe on WSL, tmux or x-terminal-emulator on Linux)";
+      log(`launch-leg test FAILED: ${e.message} — the ${CFG.schedule?.wake ?? 'morning'} wake would fail the same way; ${hint}, and re-touch the trigger`);
     }
   }
 

@@ -123,7 +123,12 @@ export const DEFAULTS = {
     // new hubs at the installed app's machinery/ (absolute), one version
     // for every hub (multi-persona plan, 10/7).
     machinery: 'wakecycle',
-    sockDir: '/tmp/cc-socks',
+    // Claude Code's per-session sockets: /tmp on macOS, the user's runtime
+    // dir on Linux/WSL (seen 10/16: /run/user/1000/cc-socks). The viewer's
+    // liveness reads it; pointed at /tmp on Linux every lane read "waking".
+    sockDir: process.platform === 'linux'
+      ? join(process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid()}`, 'cc-socks')
+      : '/tmp/cc-socks',
     bridgeSockDir: join(HOME, '.claude', 'mcpl-bridge'),
   },
 };

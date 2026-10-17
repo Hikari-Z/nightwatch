@@ -22,7 +22,7 @@
 import { execFileSync as realExecFileSync, spawn as realSpawn } from 'node:child_process';
 import { release, homedir } from 'node:os';
 import { writeFileSync as realWriteFileSync, mkdirSync as realMkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 /** 'darwin' | 'wsl' | 'linux'. WSL is Linux wearing a Windows coat: the
  *  kernel release says microsoft. */
@@ -45,9 +45,10 @@ const asAppleScriptText = (s) => String(s).replace(/\\/g, '\\\\').replace(/"/g, 
  * AppleScript escaping happens here, so no caller ever pre-escapes). Pure:
  * returns [{ bin, args }...] in order. Darwin yields today's two osascript
  * calls byte-identically for the same wire command; WSL asks Windows
- * Terminal through interop; Linux asks the Debian alternatives name.
+ * Terminal through interop; Linux asks the Debian alternatives name when a
+ * desktop session exists, and tmux when it doesn't (`env` is injectable).
  */
-export function summonWindowArgv({ title, shellCommand, activate = true, scriptFile }, kind = platformKind()) {
+export function summonWindowArgv({ title, shellCommand, activate = true, scriptFile }, kind = platformKind(), env = process.env) {
   if (kind === 'darwin') {
     return [
       { bin: 'osascript', args: ['-e', `tell application "Terminal" to do script "${asAppleScriptText(shellCommand)}"`] },
@@ -69,7 +70,38 @@ export function summonWindowArgv({ title, shellCommand, activate = true, scriptF
       args: ['nt', '--title', String(title ?? 'nightwatch'), 'wsl.exe', '--cd', '~', '--', 'sh', '-lc', run],
     }];
   }
-  return [{ bin: 'x-terminal-emulator', args: ['-e', 'sh', '-lc', String(shellCommand)] }];
+  // Linux with a desktop session asks the Debian alternatives terminal. A
+  // headless Linux (a server, a VM, no DISPLAY/WAYLAND_DISPLAY) has no window
+  // to open, so the wake runs in tmux instead: one "nightwatch" session, a
+  // window per lane, attachable with `tmux attach -t nightwatch`. Title and
+  // command ride as positional args so no shell re-parses them; new-window
+  // fails when the session doesn't exist yet, and new-session makes it.
+  if (env.DISPLAY || env.WAYLAND_DISPLAY) {
+    return [{ bin: 'x-terminal-emulator', args: ['-e', 'sh', '-lc', String(shellCommand)] }];
+  }
+  return [{
+    bin: 'sh',
+    args: ['-c', TMUX_SUMMON, 'nightwatch-summon', String(title ?? 'nightwatch'), String(shellCommand)],
+  }];
+}
+
+/** The tmux leg of a headless Linux summons ($1 = window title, $2 = the raw
+ *  command). Exported for the test that runs it against a real tmux. */
+export const TMUX_SUMMON =
+  'tmux new-window -d -t nightwatch -n "$1" "$2" 2>/dev/null || tmux new-session -d -s nightwatch -n "$1" "$2"';
+
+/** A wake window starts from a login shell, not the daemon's environment, and
+ *  on Linux that shell often can't see node: nvm (and an npm-installed
+ *  claude beside it) lives on a PATH only an interactive bash adds, while the
+ *  window runs `sh -lc`. wake.sh needs node from its first line, so callers
+ *  prefix the daemon's own node dir, plus the configured claude's dir. Pure.
+ *  Not on darwin: Terminal's login shell already finds both there, and the
+ *  prefix only reorders PATH (review on #1: it put /opt/homebrew/bin, with a
+ *  stale cask claude, ahead of the live one), so the command passes through. */
+export function withToolPath(shellCommand, { nodePath = process.execPath, claudeBin, kind = platformKind() } = {}) {
+  if (kind === 'darwin') return shellCommand;
+  const dirs = [...new Set([dirname(nodePath), ...(claudeBin ? [dirname(claudeBin)] : [])])];
+  return `PATH="${dirs.join(':')}:$PATH" ${shellCommand}`;
 }
 
 /** On WSL, the summons crosses the interop chain as one file path instead of
@@ -96,7 +128,7 @@ export function summonArgvFor({ title, shellCommand, activate, scriptDir }, kind
   const scriptFile = (kind === 'wsl' && scriptDir)
     ? writeSummonScript({ title, shellCommand, scriptDir }, io)
     : undefined;
-  return summonWindowArgv({ title, shellCommand, activate, scriptFile }, kind);
+  return summonWindowArgv({ title, shellCommand, activate, scriptFile }, kind, io.env ?? process.env);
 }
 
 /** Open the window now. Throws when the platform's terminal refuses — the
@@ -114,7 +146,7 @@ export function summonWindow({ title, shellCommand, activate, scriptDir }, io = 
  * WSL/Linux: a systemd user unit (SETUP.md's shape; WSL2 needs
  * [boot] systemd=true, which the install recipe checks).
  */
-export function daemonJob({ slug, hub, jobKind = 'nightshift', node = process.execPath, machineryDir, configPath }, kind = platformKind()) {
+export function daemonJob({ slug, hub, jobKind = 'nightshift', node = process.execPath, machineryDir, configPath, path = process.env.PATH }, kind = platformKind()) {
   const script = jobKind === 'watch' ? 'watch.mjs' : 'nightshift.mjs';
   const errFile = join(hub, jobKind === 'watch' ? 'watch.err' : 'nightshift.err');
   const cfg = configPath ?? join(hub, 'nightwatch.config.json');
@@ -150,13 +182,20 @@ export function daemonJob({ slug, hub, jobKind = 'nightshift', node = process.ex
   // every path is quoted and % doubled (the second read's finding: a hub
   // named "My Agent" must not break its own unit).
   const sysd = (p) => String(p).replace(/%/g, '%%');
+  // The installer's PATH rides into the unit. A systemd user service starts
+  // with a bare PATH: on WSL that drops the Windows directories interop
+  // appends to an interactive shell, so wt.exe (every wake), wsl.exe and
+  // msg.exe (alerts) are ENOENT — found by the launch-leg test on the first
+  // WSL install, 2026-10-16 — and on any Linux it drops nvm's node and claude.
+  // Set up runs from a person's shell, whose PATH is the one that works.
+  const pathLine = path ? `Environment="PATH=${sysd(path).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"\n` : '';
   const content = `[Unit]
 Description=Nightwatch ${jobKind} for ${slug}
 
 [Service]
 ExecStart="${sysd(node)}" "${sysd(join(machineryDir, script))}"
 Environment="WEFT_CONFIG=${sysd(cfg)}"
-Restart=always
+${pathLine}Restart=always
 RestartSec=300
 StandardError=append:${sysd(errFile)}
 

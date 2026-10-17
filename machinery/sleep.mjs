@@ -182,7 +182,7 @@ if (emergency && authored) {
 // Timestamped name: multiple folds in one day each keep their own archive
 // (found 10/1: a second fold overwrote the day's archive, and a section
 // written into the archive by mistake was lost with it). The live file a
-// session edits before sleeping is ALWAYS weft/checkpoint.md, never these.
+// session edits before sleeping is ALWAYS the hub's checkpoint.md (paths.checkpoint), never these.
 const cpDir = join(LADDER, 'checkpoints');
 try { execFileSync('mkdir', ['-p', cpDir]); } catch {}
 const hm = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: CFG.timezone }).replace(':', '');
@@ -292,7 +292,9 @@ try {
 // Linn's preamble: the first thing the ladder knows about itself is what it
 // was built on top of.
 const preamble = [
-  '# ladder — Weft\'s folded past',
+  // The persona's own name when it has one ("Weft's folded past" on the
+  // legacy hub, unchanged); an unnamed persona reads its ladder as its own.
+  `# ladder — ${CFG.persona?.name ? `${CFG.persona.name}'s` : 'my'} folded past`,
   '',
   `*This ladder stands on: the raw transcript from ${trimOut.cutAt ?? 'the last cut'} onward,`,
   `which the wake resumes as native turns; the checkpoint, which rides the system prompt;`,

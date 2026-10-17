@@ -29,7 +29,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { daemonJob, registryDir, summonArgvFor } from './platform.mjs';
+import { daemonJob, registryDir, summonArgvFor, withToolPath } from './platform.mjs';
 import { applyRetention, stepFor, survey } from './retention.mjs';
 
 const WC = dirname(fileURLToPath(import.meta.url));
@@ -377,7 +377,8 @@ function firstSessionStep(spec, hub, ctx, noActivate, cpPath, laneWc) {
       // Quoted for paths with spaces (opus's read, 6d); platform.mjs owns
       // each platform's escaping of the raw command.
       const cfgPathForWake = spec.op === 'init' ? join(hub, 'nightwatch.config.json') : (process.env.WEFT_CONFIG ?? '');
-      const sh = `WEFT_CONFIG="${cfgPathForWake}" sh "${join(WC, 'wake.sh')}" ${spec.lane.id}`;
+      // withToolPath: the window's login shell may not see this node (nvm).
+      const sh = withToolPath(`WEFT_CONFIG="${cfgPathForWake}" sh "${join(WC, 'wake.sh')}" ${spec.lane.id}`);
       // platform.mjs owns the write-if-wsl decision. The summons dir rides
       // wcDir, not join(hub, 'wakecycle'): a custom paths.wakecycle must
       // keep the first wake's script beside the daemon's (second read, 10/13).

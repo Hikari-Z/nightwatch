@@ -1,6 +1,7 @@
 #!/bin/sh
 # Wake — resume the trimmed tail as native turns, with the checkpoint in the
-# system prompt and the ladder riding CLAUDE.md's import. Run from ~/origin.
+# system prompt and the ladder riding CLAUDE.md's import. Runs from the
+# config's paths.workdir (~/origin on the legacy hub).
 #
 # --system-prompt-snapshot off is load-bearing: a resumed session reuses the
 # system prompt recorded at its first request (docs: cli-reference, "System
@@ -57,6 +58,12 @@ DEFAULT_LANE="$(node "$WAKECYCLE_DIR/config.mjs" get defaultLane)" || {
 LANE="${1:-$DEFAULT_LANE}"
 NEXT="$STATE_DIR/next-wake.$LANE.json"
 [ -f "$NEXT" ] || { echo "no next-wake.$LANE.json — did that lane sleep?"; exit 1; }
+# A first-wake receipt (lane-add/init writes it) has no tail to resume:
+# a brand-new lane starts a FRESH session — same head, same registry
+# confirmation, no --resume (design: nightwatch_lane_creation.md).
+# Read before the stale guard below, whose first-wake exemption needs it
+# (it was read after, so the exemption tested an unset variable).
+FIRSTWAKE=$(python3 -c "import json;print('1' if json.load(open('$NEXT')).get('firstWake') else '')")
 # A sleep receipt older than the lane's latest bell is STALE: the lane was
 # belled but never folded (10/3: opus's fold died on ECONNRESET post-bell,
 # and the morning's manual wake silently resumed an 8.5h-stale tail). Waking
@@ -82,10 +89,6 @@ if belled > slept_ms:
     sys.exit(1)
 STALEEOF
 fi
-# A first-wake receipt (lane-add/init writes it) has no tail to resume:
-# a brand-new lane starts a FRESH session — same head, same registry
-# confirmation, no --resume (design: nightwatch_lane_creation.md).
-FIRSTWAKE=$(python3 -c "import json;print('1' if json.load(open('$NEXT')).get('firstWake') else '')")
 SID=$(python3 -c "import json;print(json.load(open('$NEXT')).get('sessionId',''))")
 # .get, not [], so a malformed receipt reaches the LOUD checkpoint-missing
 # guard below instead of set -e eating the python KeyError before any log
@@ -136,7 +139,9 @@ fi
 # the checkpoint plus the unauthored-span note, so the woken session knows
 # what happened and what its first duty is without anyone carrying it by
 # hand (gap found on the first real emergency wake, 9/30).
-HEAD=$(mktemp -t weft-wake-head)
+# A full template: GNU mktemp refuses -t without XXXs ("too few X's"),
+# which on Linux left HEAD empty and killed the wake under set -e.
+HEAD=$(mktemp "${TMPDIR:-/tmp}/nightwatch-wake-head.XXXXXX")
 # A missing checkpoint must fail LOUDLY in the log the daemon and heartbeat
 # read — under set -e a bare cp dies before the wake-receipt line, which
 # reads as three silent no-shows (10/5: the canonical checkpoint was
@@ -154,7 +159,8 @@ SWITCHBOARD_LANE="$(node -e "import('file://$WAKECYCLE_DIR/config.mjs').then(m=>
 # The doorbell is hub infrastructure, never app machinery: look beside the
 # hub (weftRoot), not beside this script.
 WATCHER="${WEFTROOT:-$WAKECYCLE_DIR/..}/doorbell/inbox-watcher.sh"
-python3 - "$NEXT" "$SWITCHBOARD_LANE" "$WATCHER" "$WAKECYCLE_DIR" >> "$HEAD" << 'PYEOF'
+FOLDS="$(node "$WAKECYCLE_DIR/config.mjs" get paths.folds 2>/dev/null)" || FOLDS="ladder/folds.jsonl"
+python3 - "$NEXT" "$SWITCHBOARD_LANE" "$WATCHER" "$WAKECYCLE_DIR" "$FOLDS" >> "$HEAD" << 'PYEOF'
 import json, os, sys
 nw = json.load(open(sys.argv[1]))
 switchboard, watcher, machinery = sys.argv[2], sys.argv[3], sys.argv[4]
@@ -182,7 +188,7 @@ if nw.get('emergency'):
     print('\n---\n\n## Emergency wake — read this first\n')
     print(f"This is an emergency wake of the {nw.get('lane','?')} lane, slept at {nw.get('sleptAt','?')} from session {nw.get('from','?')}.")
     print(nw.get('unauthoredSpan', {}).get('note', ''))
-    print('Receipts: ~/origin/weft/wakecycle/next-wake.%s.json and the newest row of ~/origin/weft/ladder/folds.jsonl.' % nw.get('lane','?'))
+    print('Receipts: %s and the newest row of %s.' % (sys.argv[1], sys.argv[5]))
 PYEOF
 if [ -n "$FIRSTWAKE" ]; then echo "first wake for $LANE: fresh session with checkpoint $CP"; else echo "waking into tail $SID with checkpoint $CP$( python3 -c "import json,sys;print(' (EMERGENCY)' if json.load(open('$NEXT')).get('emergency') else '')" )"; fi
 # Wake receipt: the daemon logs that it LAUNCHED us; this line proves wake.sh
@@ -222,8 +228,12 @@ set -- --append-system-prompt-file "$HEAD" --system-prompt-snapshot off
 # Insurance hatch until the waited child is proven against REAL interactive
 # claude (the bench's claude is a stub): WEFT_WAKE_EXEC=1 restores the old
 # exec launch — no stderr capture, no model-death discrimination.
-if [ -n "${WEFT_WAKE_EXEC:-}" ]; then exec claude "$@"; fi
-claude "$@" 2>"$STDERR_CAP"
+# The configured claude when it's there (paths.claudeBin), PATH's otherwise:
+# an npm/nvm install lives somewhere the default ~/.local/bin guess isn't.
+CLAUDE_BIN="$(node "$WAKECYCLE_DIR/config.mjs" get paths.claudeBin 2>/dev/null)" || CLAUDE_BIN=""
+[ -n "$CLAUDE_BIN" ] && [ -x "$CLAUDE_BIN" ] || CLAUDE_BIN=claude
+if [ -n "${WEFT_WAKE_EXEC:-}" ]; then exec "$CLAUDE_BIN" "$@"; fi
+"$CLAUDE_BIN" "$@" 2>"$STDERR_CAP"
 RC=$?
 set -e
 LIVED=$(( $(date +%s) - LAUNCHED_AT ))
