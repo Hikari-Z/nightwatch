@@ -332,20 +332,26 @@ const NIGHTSHIFT = join(dirname(fileURLToPath(import.meta.url)), 'nightshift.mjs
 // The card's midday switch (Ra, 10/12) edits the config while this watch
 // runs, so the lanes' settings are re-read whenever the file changes, as the
 // nightshift reloads its own; nothing needs a restart to take a switch.
-let lanesSeen = { mtime: null, lanes: CFG.lanes };
-function lanesNow() {
+let cfgSeen = { mtime: null, lanes: CFG.lanes, watch: CFG.watch };
+function cfgNow() {
   const file = CFG.__configFile;
-  if (!file) return CFG.lanes;
+  if (!file) return cfgSeen;
   try {
     const mtime = statSync(file).mtimeMs;
-    if (mtime !== lanesSeen.mtime) {
-      const fresh = loadConfigFrom(file).lanes; // loadConfig() caches: it would hand back the old lanes
-      if (lanesSeen.mtime !== null) log(`config reloaded — midday cycle on: [${Object.entries(fresh ?? {}).filter(([, l]) => l?.middayCycle).map(([k]) => k).join(', ')}]`);
-      lanesSeen = { mtime, lanes: fresh };
+    if (mtime !== cfgSeen.mtime) {
+      const fresh = loadConfigFrom(file); // loadConfig() caches: it would hand back the old config
+      if (cfgSeen.mtime !== null) log(`config reloaded — midday cycle on: [${Object.entries(fresh.lanes ?? {}).filter(([, l]) => l?.middayCycle).map(([k]) => k).join(', ')}], l3HorizonDays: ${fresh.watch?.l3HorizonDays ?? 'off'}`);
+      cfgSeen = { mtime, lanes: fresh.lanes, watch: fresh.watch };
     }
-  } catch (e) { log(`config reload failed, keeping the last good lanes: ${e.message}`); }
-  return lanesSeen.lanes;
+  } catch (e) { log(`config reload failed, keeping the last good config: ${e.message}`); }
+  return cfgSeen;
 }
+// The due knobs and the midday cycle are both switches a person flips while
+// the daemon runs; both read through cfgNow so neither needs a restart
+// (opus's nit on the enable, 10/17: l3HorizonDays read once at boot while
+// segmentNoteEveryTokens hot-reloaded — an asymmetry the --once bench can't
+// see, since every bench tick is a fresh process).
+function lanesNow() { return cfgNow().lanes; }
 const TIER_RANK = { soft: 1, urgent: 2 };
 function middayCheck(s, entries) {
   const mc = lanesNow()?.[s.lane]?.middayCycle;
@@ -419,7 +425,7 @@ function segmentDueCheck(now, s, entries) {
 // horizon unfolded) goes quiet instead of re-ringing at once (opus's
 // knife on #11). Told once per (lane, oldest unfolded rung).
 function l3DueCheck(now) {
-  const horizon = W.l3HorizonDays ?? 0;
+  const horizon = cfgNow().watch?.l3HorizonDays ?? 0;
   if (!Number.isFinite(horizon) || horizon <= 0) return;
   let idx;
   try { idx = JSON.parse(readFileSync(join(CFG.weftRoot, 'ladder', 'index.json'), 'utf8')); } catch { return; }
