@@ -50,6 +50,13 @@ function fillWelcome(ctx) {
     .replaceAll('<sleep time>', ctx.sleep).replaceAll('<hub>', ctx.hub);
 }
 
+function fillHubClaude(ctx) {
+  let t;
+  try { t = readFileSync(join(WC, 'templates', 'hub-claude.md'), 'utf8'); }
+  catch { die('The hub CLAUDE.md template is missing (templates/hub-claude.md).'); }
+  return t.replaceAll('<hub>', ctx.hub);
+}
+
 function firstWakeNote(ctx) {
   const fold = `Tonight at ${ctx.sleep} you'll get a note that it's time to sleep: write your first rung, then the fold runs, then update your checkpoint section. ${ctx.person} can see from Nightwatch whether you're awake.`;
   if (ctx.siblings.length) {
@@ -148,6 +155,23 @@ function initSteps(spec) {
     run() {
       const about = imp?.identity ? readFileSync(join(expand(spec.import.from), 'identity.md'), 'utf8').trim() : spec.persona.about.trim();
       writeFileSync(join(part, 'identity.md'), about + '\n\n---\n\n' + fillWelcome(ctx));
+    },
+  });
+  steps.push({
+    verb: 'Write', what: 'CLAUDE.md and a seed ladder/ladder.md', detail: 'so every session in the hub loads identity.md and the ladder (issue #3: without this file, neither ever reaches a session)'
+      // The preview is the build: an import folder's own CLAUDE.md is NOT
+      // carried (the hub gets the template), and the person deciding from
+      // the plan deserves that line before anything runs.
+      + (imp?.claudeMd ? ` — the import folder's own CLAUDE.md is not carried; merge what you want from ${spec.import.from}/CLAUDE.md into the hub's afterwards` : ''),
+    run() {
+      writeFileSync(join(part, 'CLAUDE.md'), fillHubClaude(ctx));
+      // The seed makes CLAUDE.md's @ladder/ladder.md import resolve from the
+      // first session; the fold machinery rebuilds the whole file at each
+      // sleep, so nothing here survives the first night — deliberately. The
+      // wording must hold for a fresh persona AND an import arriving with
+      // rungs but no assembled ladder.md (opus's knife, nightwatch#8).
+      writeFileSync(join(part, 'ladder', 'ladder.md'),
+        '# ladder — the folded past\n\n*Not yet assembled: the fold machinery builds this file from the rungs in ladder/ at each sleep, starting tonight.*\n');
     },
   });
   if (imp) {
@@ -417,7 +441,8 @@ function inspectImport(dir, internal = false) {
   const name = existsSync(join(d, 'name.txt')) ? readFileSync(join(d, 'name.txt'), 'utf8').trim() || null : null;
   const memory = existsSync(join(d, 'memory')) ? readdirSync(join(d, 'memory')).filter((f) => !f.startsWith('.')).length : 0;
   const rungs = existsSync(join(d, 'ladder')) ? readdirSync(join(d, 'ladder')).filter((f) => f.endsWith('.md')).length : 0;
-  const result = { identity, about, name, memory, rungs };
+  const claudeMd = existsSync(join(d, 'CLAUDE.md'));
+  const result = { identity, about, name, memory, rungs, claudeMd };
   if (internal) { if (!identity) die('The import folder has no identity.md, which is the one required file.'); return result; }
   return result;
 }
