@@ -230,25 +230,57 @@ check('the registry file is hubs.json in the registry dir, per platform (issue #
   try { assert.equal(registryFile('linux'), join('/x', 'nightwatch', 'hubs.json')); }
   finally { if (prev === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = prev; }
 });
-check('outside any hub, with no config named, config is the defaults even when the registry lists a hub (issue #5)', () => {
-  // A scratch HOME whose registry names a hub with a config: a script run
-  // outside every hub must not pick that hub up by omission.
-  const home = mkdtempSync(join(tmpdir(), 'nw-cfg-registry-'));
+// A script run outside every hub, with no config named, on a scratch HOME
+// that holds a registered hub AND a config where the old default looked
+// (~/origin/weft/weft.config.json, the way this house's machine does): it
+// must find no hub at all (issues #5 and #7).
+const noHubProbe = (expr) => {
+  const home = mkdtempSync(join(tmpdir(), 'nw-cfg-nohub-'));
   try {
     const hub = join(home, 'Nightwatch', 'lark');
-    execFileSync('mkdir', ['-p', hub, join(home, '.config', 'nightwatch')]);
+    for (const d of [hub, join(home, '.config', 'nightwatch'), join(home, 'Library', 'Application Support', 'Nightwatch'), join(home, 'origin', 'weft')]) execFileSync('mkdir', ['-p', d]);
     writeFileSync(join(hub, 'nightwatch.config.json'), JSON.stringify({ persona: { name: 'Lark' } }));
-    writeFileSync(join(home, '.config', 'nightwatch', 'hubs.json'), JSON.stringify({ version: 1, hubs: [{ path: hub }] }));
-    execFileSync('mkdir', ['-p', join(home, 'Library', 'Application Support', 'Nightwatch')]);
-    writeFileSync(join(home, 'Library', 'Application Support', 'Nightwatch', 'hubs.json'), JSON.stringify({ version: 1, hubs: [{ path: hub }] }));
+    const reg = JSON.stringify({ version: 1, hubs: [{ path: hub }] });
+    writeFileSync(join(home, '.config', 'nightwatch', 'hubs.json'), reg);
+    writeFileSync(join(home, 'Library', 'Application Support', 'Nightwatch', 'hubs.json'), reg);
+    writeFileSync(join(home, 'origin', 'weft', 'weft.config.json'), JSON.stringify({ persona: { name: 'Weft' } }));
     const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, '.config') };
     delete env.WEFT_CONFIG; delete env.NIGHTWATCH_CONFIG;
-    const out = execFileSync(process.execPath, ['--input-type=module', '-e',
-      `const { loadConfig } = await import(${JSON.stringify(new URL('./config.mjs', import.meta.url).href)}); console.log(JSON.stringify(loadConfig().__configFile ?? null));`],
-    { encoding: 'utf8', env, cwd: home });
-    assert.equal(out.trim(), 'null');
+    return execFileSync(process.execPath, ['--input-type=module', '-e',
+      `const m = await import(${JSON.stringify(new URL('./config.mjs', import.meta.url).href)}); ${expr}`],
+    { encoding: 'utf8', env, cwd: home }).trim();
   } finally { rmSync(home, { recursive: true, force: true }); }
-});
+};
+check('outside any hub, with no config named, there is no hub: not the registry\'s, not ~/origin/weft (issues #5, #7)', () =>
+  assert.equal(noHubProbe(`console.log(JSON.stringify(m.loadConfigOrNone()))`), 'null'));
+check('…and loadConfig refuses, naming NIGHTWATCH_CONFIG', () =>
+  assert.equal(noHubProbe(`try { m.loadConfig(); console.log('loaded'); } catch (e) { console.log(/NIGHTWATCH_CONFIG/.test(e.message) ? 'refused' : e.message); }`), 'refused'));
+
+// ── a hub's own defaults (issue #7) ──
+{
+  const { loadConfigFrom, transcriptsFor, hublessConfig } = await import('./config.mjs');
+  const hub = mkdtempSync(join(tmpdir(), 'nw-cfg-hub-'));
+  try {
+    writeFileSync(join(hub, 'nightwatch.config.json'), JSON.stringify({ lanes: { main: {} }, defaultLane: 'main' }));
+    const real = execFileSync('realpath', [hub], { encoding: 'utf8' }).trim();
+    const cfg = loadConfigFrom(join(hub, 'nightwatch.config.json'));
+    check('a hub works from itself unless its config says otherwise', () => assert.equal(cfg.paths.workdir, real));
+    check('its transcripts are where Claude Code keeps that workdir\'s', () => assert.equal(cfg.paths.transcripts, transcriptsFor(real)));
+    writeFileSync(join(hub, 'nightwatch.config.json'), JSON.stringify({ lanes: { main: {} }, defaultLane: 'main', paths: { workdir: '/elsewhere/work' } }));
+    const cfg2 = loadConfigFrom(join(hub, 'nightwatch.config.json'));
+    check('a workdir the config names stands, and transcripts follow it', () => {
+      assert.equal(cfg2.paths.workdir, '/elsewhere/work');
+      assert.equal(cfg2.paths.transcripts, transcriptsFor('/elsewhere/work'));
+    });
+  } finally { rmSync(hub, { recursive: true, force: true }); }
+  check('the hubless config names no hub path and no house\'s folder', () => {
+    const h = hublessConfig();
+    assert.equal(h.weftRoot, null);
+    assert.equal(h.paths.checkpoint, null);
+    assert.equal(h.paths.workdir, null);
+    assert.ok(!JSON.stringify(h).includes('origin/weft'));
+  });
+}
 
 // ── the config's env names (issue #7) ──
 {

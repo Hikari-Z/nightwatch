@@ -11,8 +11,10 @@
  * belongs in one place with one name.
  *
  * Resolution order, least to most specific:
- *   1. DEFAULTS below (a fresh single-lane install; works with no file),
- *   2. the config file — $NIGHTWATCH_CONFIG (or $WEFT_CONFIG), or <weftRoot>/weft.config.json,
+ *   1. DEFAULTS below (what every hub starts from; they name no hub),
+ *   2. the config file $NIGHTWATCH_CONFIG (or $WEFT_CONFIG) names. With none
+ *      named there is no hub: loadConfig() refuses, and only the viewer runs
+ *      on hublessConfig(),
  *   3. environment variables (the pre-E spellings keep working),
  *   4. explicit CLI flags on the individual tools (--lane, --target-tokens).
  *
@@ -29,10 +31,13 @@ import { fileURLToPath } from 'node:url';
 
 const HOME = homedir();
 
-/** A fresh install: one lane, everything under ~/origin/weft, the same
- *  schedule this house proved across its first clean cycles. */
+/** What every hub starts from: one lane and the schedule this house proved
+ *  across its first clean cycles. No hub root: a config's own folder is its
+ *  hub (loadConfigFrom), and with no config named there is no hub at all
+ *  (loadConfig refuses; the viewer asks for hublessConfig). Nothing here
+ *  names any one house's folders (issue #7). */
 export const DEFAULTS = {
-  weftRoot: join(HOME, 'origin', 'weft'),
+  weftRoot: null,
   timezone: 'America/Los_Angeles',
   schedule: {
     sleep: '02:00',
@@ -107,17 +112,17 @@ export const DEFAULTS = {
     stateFile: 'wakecycle/nightshift.state.json',
     spool: 'doorbell/spool',
     // Claude Code keeps a project's transcripts in a folder named after the
-    // folder it runs in, with every character but letters, digits and '-'
-    // made a '-' (/Users/you/origin → -Users-you-origin). Derived from the
-    // workdir default below, so the two can't drift apart.
-    transcripts: join(HOME, '.claude', 'projects', join(HOME, 'origin').replace(/[^A-Za-z0-9-]/g, '-')),
+    // folder it runs in (transcriptsFor). Unset, it's derived from workdir
+    // when a config loads, so the two can't drift apart.
+    transcripts: null,
     // The hub's own copy of every folded session (archive.mjs): the ladder's
     // jsonl: sources, kept where Claude Code's cleanup can't reach them.
     transcriptArchive: 'archive/transcripts',
     claudeBin: join(HOME, '.local', 'bin', 'claude'),
-    // The directory sessions launch in (their project dir). Our hub works
-    // from ~/origin; a fresh Nightwatch hub works from the hub itself.
-    workdir: join(HOME, 'origin'),
+    // The directory sessions launch in (their project dir). A hub works from
+    // itself unless its config says otherwise (ours says ~/origin).
+    // Unset, it's the hub's own folder (loadConfigFrom), as Set up writes it.
+    workdir: null,
     // Where the machinery CODE lives. 'wakecycle' (relative to weftRoot) is
     // the sealed layout — code beside state, our legacy hub. Set up points
     // new hubs at the installed app's machinery/ (absolute), one version
@@ -192,9 +197,11 @@ export function envWithConfig(file, env = process.env) {
   return file ? { ...rest, NIGHTWATCH_CONFIG: file } : rest;
 }
 
-export function loadConfig() {
+/** The hub config, or null when none is named. The one reader that may
+ *  run without a hub (the viewer, before anything is set up) asks this; every
+ *  other caller asks loadConfig(), which refuses. */
+export function loadConfigOrNone() {
   if (cached) return cached;
-  let cfg = structuredClone(DEFAULTS);
   // A config named but unusable is an ERROR, never a fallback: the silent
   // DEFAULTS fallback meant a typo'd path quietly acted on OUR hub, and on a
   // fresh machine pointed at nothing (opus's lane-creation read, 10/7).
@@ -204,30 +211,21 @@ export function loadConfig() {
   if (envFile !== undefined && !existsSync(envFile)) {
     throw new Error(`${process.env.NIGHTWATCH_CONFIG ? 'NIGHTWATCH_CONFIG' : 'WEFT_CONFIG'} points at a missing file: ${envFile}`);
   }
-  // Resolution order: NIGHTWATCH_CONFIG (or WEFT_CONFIG) → the hub's own file beside weftRoot
-  // (either spelling: weft.config.json is ours, nightwatch.config.json is
-  // what Set up writes) → DEFAULTS alone. There is no machine-wide
-  // fallback: a script run outside any hub without a config named gets the
-  // defaults, never whichever hub the machine registered, so a bench can't
-  // land on a real hub by omission. (An earlier fallback read a single-hub
-  // pointer file that nothing ever wrote; the registry replaced it, issue #5.)
-  let file = envFile || null;
-  if (!file) {
-    for (const name of ['weft.config.json', 'nightwatch.config.json']) {
-      const cand = join(cfg.weftRoot, name);
-      if (existsSync(cand)) { file = cand; break; }
-    }
+  // NIGHTWATCH_CONFIG (or WEFT_CONFIG) names the hub; nothing else does.
+  // There is no lookup in a default folder and no machine-wide fallback: a
+  // script run outside every hub without a config named gets no hub, never
+  // whichever hub this machine happens to hold, so a bench can't land on a
+  // real hub by omission (issues #5 and #7). The registry lists hubs for the
+  // viewer; it never chooses one for a script.
+  if (envFile === undefined) return null;
+  cached = loadConfigFrom(envFile);
+  return cached;
+}
+export function loadConfig() {
+  const cfg = loadConfigOrNone();
+  if (!cfg) {
+    throw new Error("no hub config named: set NIGHTWATCH_CONFIG to your hub's nightwatch.config.json (Set up writes one into every hub)");
   }
-  if (file && existsSync(file)) {
-    cfg = loadConfigFrom(file);
-  } else {
-    cfg.__configFile = null; // running on single-lane defaults
-    applyEnv(cfg);
-    for (const [k, v] of Object.entries(cfg.paths)) {
-      if (typeof v === 'string' && !isAbsolute(v)) cfg.paths[k] = join(cfg.weftRoot, v);
-    }
-  }
-  cached = cfg;
   return cfg;
 }
 
@@ -256,10 +254,34 @@ export function loadConfigFrom(file) {
   if (!parsed.weftRoot) cfg.weftRoot = dirname(realpathSync(file));
   cfg.__configFile = file;
   applyEnv(cfg);
+  // A hub works from itself unless its config says otherwise.
+  if (!cfg.paths.workdir) cfg.paths.workdir = cfg.weftRoot;
   // Resolve relative paths against weftRoot, exactly once, here.
   for (const [k, v] of Object.entries(cfg.paths)) {
     if (typeof v === 'string' && !isAbsolute(v)) cfg.paths[k] = join(cfg.weftRoot, v);
   }
+  if (!cfg.paths.transcripts) cfg.paths.transcripts = transcriptsFor(cfg.paths.workdir);
+  return cfg;
+}
+
+/** Where Claude Code keeps the transcripts of sessions run in `workdir`: a
+ *  folder named after it, every character but letters, digits and '-' made
+ *  a '-' (/Users/you/origin → -Users-you-origin). */
+export function transcriptsFor(workdir) {
+  return join(HOME, '.claude', 'projects', String(workdir).replace(/[^A-Za-z0-9-]/g, '-'));
+}
+
+/** A config naming no hub, for the one reader that must run without one:
+ *  the viewer on a machine with nothing set up yet, which shows Set up.
+ *  Hub-relative paths are null, so nothing reads or writes a hub; the
+ *  machine-wide ones (Claude Code's sockets, its binary) stand. */
+export function hublessConfig() {
+  // The default lane shape stays, as the viewer has always rendered a fresh
+  // machine (its activity series are built per lane): with no hub's files
+  // behind it, the page shows Set up.
+  const cfg = structuredClone(DEFAULTS);
+  cfg.__configFile = null;
+  for (const [k, v] of Object.entries(cfg.paths)) if (typeof v === 'string' && !isAbsolute(v)) cfg.paths[k] = null;
   return cfg;
 }
 
@@ -357,7 +379,8 @@ function assertConsistent(raw) {
 }
 
 export function configEdit(op, keyPath, value) {
-  const file = configEnv() ?? join(DEFAULTS.weftRoot, 'weft.config.json');
+  const file = configEnv();
+  if (!file) throw new Error("no hub config named: set NIGHTWATCH_CONFIG to the hub's config file to edit it");
   const raw = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
   const parts = keyPath.split('.');
   if (op === 'set') {

@@ -315,7 +315,10 @@ function initSteps(spec) {
 }
 
 function laneAddSteps(spec) {
-  const cfgPath = configEnv() ?? join(HOME, 'origin', 'weft', 'weft.config.json');
+  // Adding an agent adds it to a hub, so the hub must be named: no default
+  // folder stands in for one (issue #7).
+  const cfgPath = configEnv();
+  if (!cfgPath) die("No hub named: set NIGHTWATCH_CONFIG to the hub's nightwatch.config.json.");
   if (!existsSync(cfgPath)) die('No hub config found — is this machine set up?');
   const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
   const hub = cfg.weftRoot ?? dirname(cfgPath);
