@@ -115,7 +115,8 @@ struct Hub {
 // The machine's hub registry, where machinery/platform.mjs registryFile() puts
 // it: Application Support on macOS, $XDG_CONFIG_HOME/nightwatch (or
 // ~/.config/nightwatch) elsewhere. It was the macOS path on every platform
-// (issue #6). NIGHTWATCH_REGISTRY overrides it for benches.
+// (issue #6). NIGHTWATCH_REGISTRY overrides it for benches. Its twin is
+// registryFile() in machinery/platform.mjs: change one, change both.
 fn registry_file() -> PathBuf {
     if let Ok(p) = std::env::var("NIGHTWATCH_REGISTRY") {
         return PathBuf::from(p);

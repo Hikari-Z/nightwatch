@@ -228,7 +228,9 @@ export function registryDir(kind = platformKind()) {
 }
 
 /** The registry file itself: every reader and writer names it through here
- *  (Set up, Doctor, the viewer), so there is one place, per platform. */
+ *  (Set up, Doctor, the viewer), so there is one place, per platform. Its
+ *  twin in Rust is registry_file() in app/src-tauri/src/lib.rs, which follows
+ *  the same rule by hand: change one, change both. */
 export function registryFile(kind = platformKind()) {
   return join(registryDir(kind), 'hubs.json');
 }
