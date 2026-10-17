@@ -23,10 +23,14 @@ SPOOL="$SPOOL_BASE/$LANE"
 mkdir -p "$SPOOL"
 
 # One watcher per lane, judged by parentage (10/16). A watcher whose parent
-# is pid 1 was detached (a trailing `&`, or its session ended): its exit
+# isn't a shell was detached (a trailing `&`, or its session ended): its exit
 # reaches no one, so a bell it catches is printed to nowhere. It is stopped
-# here, and this arm takes its place. A watcher with a live parent is a
-# tracked one; then this arm stands down rather than run a second. Twice a
+# here, and this arm takes its place. A watcher whose parent is a shell (the
+# harness's wrapper, or a person's terminal) is a tracked one; then this arm
+# stands down rather than run a second. "Parent is pid 1" was the first test,
+# and it holds on macOS only: Linux hands an orphan to the nearest subreaper
+# (systemd --user, or WSL's per-session /init, "Relay(n)"), so there every
+# detached watcher looked tracked, and the arm stood down for it (10/17). Twice a
 # detached watcher looked like coverage (10/14, then again under load on
 # 10/16), and a guard that only counted processes declined to arm the
 # tracked one that would have been heard. Only the shell running this script
@@ -39,7 +43,12 @@ if [ -n "$WATCHERS" ]; then
   LIVE=""
   for pair in $(echo "$WATCHERS" | tr ' ' ':'); do
     pid="${pair%%:*}"; ppid="${pair##*:}"
-    if [ "$ppid" = "1" ]; then
+    pcomm="$(ps -o comm= -p "$ppid" 2>/dev/null)"
+    case "${pcomm##*/}" in
+      sh|bash|zsh|dash|-sh|-bash|-zsh|-dash) tracked=1 ;;
+      *) tracked=0 ;;
+    esac
+    if [ "$ppid" = "1" ] || [ "$tracked" = 0 ]; then
       kill "$pid" 2>/dev/null && echo "bell-watcher: stopped pid $pid, a detached watcher for $LANE (its exit would reach no one)"
     else
       LIVE="$LIVE $pid"
