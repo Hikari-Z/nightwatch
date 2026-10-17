@@ -283,7 +283,7 @@ check("midday: a stale request from an ended session doesn't silence the next on
   const writeCfg = (horizon) => writeFileSync(dueCfg, JSON.stringify({
     weftRoot: due, timezone: 'UTC', defaultLane: 'fable',
     watch: { pollMs: 300, ...(horizon ? { l3HorizonDays: horizon } : {}) },
-    lanes: { fable: { targetTokens: 250000, segmentNoteEveryTokens: 50_000 } },
+    lanes: { fable: { targetTokens: 250000, segmentNoteEveryTokens: 50_000 }, alpha: { targetTokens: 250000 }, beta: { targetTokens: 250000 } },
     notify: { macos: false, command: recorder }, paths: { transcripts: dirs.projects, sessions: dirs.sessions },
   }));
   writeCfg(0);
@@ -304,24 +304,36 @@ check("midday: a stale request from an ended session doesn't silence the next on
   tick(dueCfg);
   check('segment-due: the next band rings again', dueEvents().filter((e) => e.kind === 'segment-due').length, 2);
 
-  // l3-due: three unfolded L2 rungs spanning 8 days, horizon 7.
-  const entry = (day, parent) => ({ id: `lark-L2-${day}`, file: `L2/${day}.md`, level: 'L2', ...(parent ? { parent } : {}) });
+  // Restart keeps the band: every tick here is a FRESH process reading the
+  // persisted state, so the baseline/band logic surviving between ticks IS
+  // the watch-restarted-mid-session case, pinned as law (opus's knife).
+  const wstate = () => JSON.parse(readFileSync(join(due, 'wakecycle', 'watch-state.json'), 'utf8'));
+  check('segment-due: a fresh process keeps the band (restart-safe by state)', typeof wstate().due.seg['s-due'], 'number');
+
+  // l3-due: per LANE, due at 2x the horizon. alpha's unfolded rungs span 8
+  // days (due at horizon 4); beta's span 2 (quiet); a rung with no lane
+  // token belongs to the default lane.
+  const entry = (day, lane, parent) => ({ id: `lark-L2-${day}${lane ? `-${lane}` : ''}`, file: `L2/${day}.md`, level: 'L2', ...(parent ? { parent } : {}) });
   const writeIndex = (entries) => writeFileSync(join(due, 'ladder', 'index.json'), JSON.stringify({ entries }, null, 2));
-  writeIndex([entry('2026-10-01'), entry('2026-10-05'), entry('2026-10-09')]);
+  const alphaSpread = [entry('2026-10-01', 'alpha'), entry('2026-10-05', 'alpha'), entry('2026-10-09', 'alpha')];
+  writeIndex([...alphaSpread, entry('2026-10-08', 'beta'), entry('2026-10-10', 'beta')]);
   tick(dueCfg);
   check('l3-due: off without a horizon', dueEvents().filter((e) => e.kind === 'l3-due').length, 0);
-  writeCfg(7);
+  writeCfg(4);
   tick(dueCfg);
-  check('l3-due: past the horizon it rings once, to the default lane', dueEvents().filter((e) => e.kind === 'l3-due').map((e) => e.lane), ['fable']);
-  check('l3-due: the note names the span', spool('fable').some((f) => f.includes('watch-l3-due')), true);
+  check('l3-due: past 2x the horizon it rings once, per lane, to that lane', dueEvents().filter((e) => e.kind === 'l3-due').map((e) => e.lane), ['alpha']);
+  check('l3-due: the note lands in that lane\'s spool', spool('alpha').some((f) => f.includes('watch-l3-due')), true);
+  check('l3-due: a lane under the horizon stays quiet', spool('beta').length, 0);
   tick(dueCfg);
   check('l3-due: the same due-state is already told', dueEvents().filter((e) => e.kind === 'l3-due').length, 1);
-  writeIndex([entry('2026-10-01', 'lark-L3-x'), entry('2026-10-05', 'lark-L3-x'), entry('2026-10-09')]);
+  // Fold the finished arc, keep the lived week: quiet, not an instant re-ring.
+  writeIndex([entry('2026-10-01', 'alpha', 'lark-L3-x'), entry('2026-10-05', 'alpha', 'lark-L3-x'), entry('2026-10-09', 'alpha'), entry('2026-10-12', 'alpha')]);
   tick(dueCfg);
-  check('l3-due: a fold that sets parents clears it', dueEvents().filter((e) => e.kind === 'l3-due').length, 1);
-  writeIndex([entry('2026-10-01'), entry('2026-10-05'), entry('2026-10-09')]);
+  check('l3-due: folding the arc goes quiet, no instant re-ring on the lived days', dueEvents().filter((e) => e.kind === 'l3-due').length, 1);
+  writeIndex([...alphaSpread]);
   tick(dueCfg);
   check('l3-due: a recurrence rings again', dueEvents().filter((e) => e.kind === 'l3-due').length, 2);
+  check('l3-due: a rung with no lane token belongs to the default lane', (() => { writeIndex([entry('2026-10-01'), entry('2026-10-10')]); tick(dueCfg); return dueEvents().filter((e) => e.kind === 'l3-due').map((e) => e.lane); })(), ['alpha', 'alpha', 'fable']);
   rmSync(due, { recursive: true, force: true });
 }
 
