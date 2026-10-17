@@ -31,7 +31,6 @@ import { join, dirname, basename } from 'node:path';
 
 import { loadConfig } from './config.mjs';
 
-const CFG = loadConfig();
 const args = process.argv.slice(2);
 const src = args.find((a) => !a.startsWith('--'));
 const target = Number((args.find((a) => a.startsWith('--target-tokens')) ?? '').split('=')[1] || args[args.indexOf('--target-tokens') + 1] || 250_000);
@@ -41,8 +40,11 @@ if (!src) {
   process.exit(2);
 }
 
-const PROJECT_DIR = CFG.paths.transcripts;
-const srcPath = existsSync(src) ? src : join(PROJECT_DIR, `${src}.jsonl`);
+// A path names its own transcript. Only a bare session id needs the hub's
+// transcripts folder, so only then is a hub config required: since #7 (A2)
+// a missing config is an error, and loading it up front refused path runs
+// that touch no hub (trim-test's, and any by hand).
+const srcPath = existsSync(src) ? src : join(loadConfig().paths.transcripts, `${src}.jsonl`);
 if (!existsSync(srcPath)) {
   console.error(`no transcript at ${srcPath}`);
   process.exit(2);
