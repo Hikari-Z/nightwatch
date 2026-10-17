@@ -50,6 +50,13 @@ function fillWelcome(ctx) {
     .replaceAll('<sleep time>', ctx.sleep).replaceAll('<hub>', ctx.hub);
 }
 
+function fillHubClaude(ctx) {
+  let t;
+  try { t = readFileSync(join(WC, 'templates', 'hub-claude.md'), 'utf8'); }
+  catch { die('The hub CLAUDE.md template is missing (templates/hub-claude.md).'); }
+  return t.replaceAll('<hub>', ctx.hub);
+}
+
 function firstWakeNote(ctx) {
   const fold = `Tonight at ${ctx.sleep} you'll get a note that it's time to sleep: write your first rung, then the fold runs, then update your checkpoint section. ${ctx.person} can see from Nightwatch whether you're awake.`;
   if (ctx.siblings.length) {
@@ -148,6 +155,17 @@ function initSteps(spec) {
     run() {
       const about = imp?.identity ? readFileSync(join(expand(spec.import.from), 'identity.md'), 'utf8').trim() : spec.persona.about.trim();
       writeFileSync(join(part, 'identity.md'), about + '\n\n---\n\n' + fillWelcome(ctx));
+    },
+  });
+  steps.push({
+    verb: 'Write', what: 'CLAUDE.md and a seed ladder/ladder.md', detail: 'so every session in the hub loads identity.md and the ladder (issue #3: without this file, neither ever reaches a session)',
+    run() {
+      writeFileSync(join(part, 'CLAUDE.md'), fillHubClaude(ctx));
+      // The seed makes CLAUDE.md's @ladder/ladder.md import resolve from the
+      // first session; the fold machinery regenerates the whole file at each
+      // sleep, so nothing here survives the first night — deliberately.
+      writeFileSync(join(part, 'ladder', 'ladder.md'),
+        '# ladder — the folded past\n\n*No folds yet. The first night\u2019s rung starts this record; the fold machinery regenerates this file at each sleep.*\n');
     },
   });
   if (imp) {
