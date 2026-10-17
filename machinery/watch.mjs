@@ -397,34 +397,34 @@ function dueNote(lane, slug, text) {
   renameSync(join(dir, `.${name}.tmp`), join(dir, name));
 }
 
-// Opt-in per lane: lanes.<id>.segmentNoteEveryTokens. The first sight of a
-// session BASELINES its band without ringing — a wake's tail is carried
-// context, not new growth — and each later band crossing rings once.
+// Opt-in per lane: lanes.<id>.segmentNoteEveryTokens. The trigger is the
+// DISTANCE from the last ring, not band boundaries: the knob promises one
+// note per `every` tokens of growth, and a boundary can't keep that promise
+// unless rings happen to land on it (the second and third live rings proved
+// it, 10/17 eve: a mid-band ring at 892k, then a boundary at 901k — 9k of
+// growth re-ringing; opus's knife on #21 named the trigger as the bug the
+// figure fix had only described). So: the first sight of a session
+// BASELINES its tokens without ringing — a wake's tail is carried context,
+// not new growth — and each `every` tokens of growth since the LAST RING
+// rings once, with the exact figure, never less than `every` apart in
+// tokens. Deliberately no time floor: heavy burn is exactly when the day's
+// detail is most at risk, and a time floor would hold a real seam back.
+// A shrunken context (a fold mid-day) rebaselines. A pre-#21 bare-band
+// entry reads as its boundary's tokens and converges in one ring.
 function segmentDueCheck(now, s, entries) {
   const every = lanesNow()?.[s.lane]?.segmentNoteEveryTokens;
   if (!Number.isFinite(every) || every <= 0) return;
   const ctx = contextOf(s, entries);
   if (!ctx) return;
-  const band = Math.floor(ctx.tokens / every);
-  // State per session: { band, tokens } — the tokens at the last ring (or
-  // baseline), because rings fire MID-band and "(band - prev) × every" is
-  // exact only at band boundaries. The second live ring proved it: 892k →
-  // 901k crossed the 900k boundary, 9k of real growth, and #20's figure
-  // said "another ~75k" (found by this lane on its own note, 10/17 eve).
-  // A pre-fix bare-number entry reads as its band with its boundary as the
-  // tokens, converging in one ring.
   const prevEntry = state.due.seg[s.sid];
-  const prev = typeof prevEntry === 'number' ? { band: prevEntry, tokens: prevEntry * every } : prevEntry;
-  if (prev === undefined || band < prev.band) { state.due.seg[s.sid] = { band, tokens: ctx.tokens }; return; }
-  if (band === prev.band) return;
+  const prev = typeof prevEntry === 'number' ? { tokens: prevEntry * every } : prevEntry;
+  if (prev === undefined || ctx.tokens < prev.tokens) { state.due.seg[s.sid] = { tokens: ctx.tokens }; return; }
+  if (ctx.tokens - prev.tokens < every) return;
   const grewK = Math.round((ctx.tokens - prev.tokens) / 1000);
-  state.due.seg[s.sid] = { band, tokens: ctx.tokens };
+  state.due.seg[s.sid] = { tokens: ctx.tokens };
   const kTok = Math.round(ctx.tokens / 1000);
-  log(`SEGMENT DUE: ${s.lane} (${s.sid.slice(0, 8)}…) at ~${kTok}k (band ${band})`);
-  emit({ at: new Date(now).toISOString(), kind: 'segment-due', lane: s.lane, session: s.sid, tokens: ctx.tokens, band });
-  // The growth since the last ring is one band — kTok is the TOTAL context
-  // and must not wear the growth's clause (the first live note said "grown
-  // another ~826k" at band 11 of a 75k knob; opus, 10/17).
+  log(`SEGMENT DUE: ${s.lane} (${s.sid.slice(0, 8)}…) at ~${kTok}k (+~${grewK}k since the last ring)`);
+  emit({ at: new Date(now).toISOString(), kind: 'segment-due', lane: s.lane, session: s.sid, tokens: ctx.tokens, grewTokens: ctx.tokens - prev.tokens });
   dueNote(s.lane, 'segment-due', `[watch] Segment seam for the ${s.lane} lane: this session has grown another ~${grewK}k tokens since this watch last rang (to ~${kTok}k; it can't see whether you've banked since). At the next clean stopping point, bank a segment (${join(CFG.weftRoot, 'segments', s.lane)}/) so the day's detail survives whatever ends the session early — then delete this note. The next ${Math.round(every / 1000)}k of growth rings once, the same way.`);
 }
 
