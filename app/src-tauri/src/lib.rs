@@ -112,9 +112,23 @@ struct Hub {
     state: PathBuf,     // its receipts, lane registry, armed file (paths.wakecycle)
 }
 
+// The machine's hub registry, where machinery/platform.mjs registryFile() puts
+// it: Application Support on macOS, $XDG_CONFIG_HOME/nightwatch (or
+// ~/.config/nightwatch) elsewhere. It was the macOS path on every platform
+// (issue #6). NIGHTWATCH_REGISTRY overrides it for benches.
 fn registry_file() -> PathBuf {
-    std::env::var("NIGHTWATCH_REGISTRY").map(PathBuf::from)
-        .unwrap_or_else(|_| home().join("Library/Application Support/Nightwatch/hubs.json"))
+    if let Ok(p) = std::env::var("NIGHTWATCH_REGISTRY") {
+        return PathBuf::from(p);
+    }
+    let dir = if cfg!(target_os = "macos") {
+        home().join("Library/Application Support/Nightwatch")
+    } else {
+        match std::env::var("XDG_CONFIG_HOME") {
+            Ok(x) if !x.is_empty() => PathBuf::from(x).join("nightwatch"),
+            _ => home().join(".config/nightwatch"),
+        }
+    };
+    dir.join("hubs.json")
 }
 
 fn registered_hubs() -> Vec<PathBuf> {
