@@ -29,7 +29,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { daemonJob, registryDir, summonArgvFor, withToolPath } from './platform.mjs';
+import { daemonJob, registryFile, summonArgvFor, withToolPath } from './platform.mjs';
 import { applyRetention, stepFor, survey } from './retention.mjs';
 
 const WC = dirname(fileURLToPath(import.meta.url));
@@ -244,7 +244,7 @@ function initSteps(spec) {
   });
   if (!noActivate) {
     steps.push({
-      verb: 'Start', what: 'the nightshift, with a test', detail: `loads both background jobs, adds this hub to Nightwatch's list of hubs (${join(registryDir(), 'hubs.json').replace(HOME, '~')}), records both in the hub's wakecycle/installed.json, and proves it can open a Terminal window (the one permission prompt)`,
+      verb: 'Start', what: 'the nightshift, with a test', detail: `loads both background jobs, adds this hub to Nightwatch's list of hubs (${registryFile().replace(HOME, '~')}), records both in the hub's wakecycle/installed.json, and proves it can open a Terminal window (the one permission prompt)`,
       run() {
         // Guard at the point of effect, not only at the flag: whatever the
         // argument plumbing said, nothing user-global is written for a hub
@@ -256,9 +256,8 @@ function initSteps(spec) {
         writeFileSync(join(job.installDir, job.fileName), job.content);
         // The machine registry: every hub the app shows. Append
         // idempotently, deduped by real path (multi-persona plan, 10/7).
-        const regDir = registryDir();
-        mkdirSync(regDir, { recursive: true });
-        const regPath = join(regDir, 'hubs.json');
+        const regPath = registryFile();
+        mkdirSync(dirname(regPath), { recursive: true });
         let reg = { version: 1, hubs: [] };
         try { reg = JSON.parse(readFileSync(regPath, 'utf8')); } catch { /* first hub */ }
         const real = (p) => { try { return realpathSync(p); } catch { return p; } };
@@ -282,7 +281,7 @@ function initSteps(spec) {
             { label: job.label, file: join(job.installDir, job.fileName) },
             { label: watchJob.label, file: join(watchJob.installDir, watchJob.fileName) },
           ],
-          registry: { file: join(regDir, 'hubs.json'), entry: hub },
+          registry: { file: regPath, entry: hub },
         }, null, 2) + '\n');
         for (const { bin, args } of job.loadArgv(join(job.installDir, job.fileName))) execFileSync(bin, args);
         for (const { bin, args } of watchJob.loadArgv(join(watchJob.installDir, watchJob.fileName))) execFileSync(bin, args);
@@ -585,7 +584,7 @@ function sweepFindings() {
     if (!parsed) missing.push('unparseable');
     if (missing.length) findings.push({ kind: 'job', label: f.slice(0, -ext.length), file, hub: cfg ? dirname(cfg) : null, missing });
   }
-  const regPath = join(registryDir(), 'hubs.json');
+  const regPath = registryFile();
   let reg = null;
   try { reg = JSON.parse(readFileSync(regPath, 'utf8')); } catch { /* no registry */ }
   for (const h of reg?.hubs ?? []) {
