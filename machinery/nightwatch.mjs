@@ -177,13 +177,20 @@ function initSteps(spec) {
   });
   if (imp) {
     steps.push({
-      verb: 'Copy', what: `${imp.memory} memory file(s), ${imp.rungs} rung(s)`, detail: `from ${spec.import.from}, as they are`,
+      verb: 'Copy', what: `${imp.memory} memory file(s), ${imp.rungs} rung(s)`,
+      // The preview is the build: where each rung lands, what replaces the
+      // seed, and what in ladder/ is left behind are all said here.
+      detail: `from ${spec.import.from}, as they are, each rung into ladder/L1–L4 by its own level`
+        + (imp.assembled ? '; the imported ladder.md replaces the seed until the first fold rebuilds it' : '')
+        + (imp.notRungs.length ? `; not carried, no level so not a rung: ${imp.notRungs.join(', ')}` : ''),
       run() {
         const from = expand(spec.import.from);
         if (existsSync(join(from, 'memory'))) cpSync(join(from, 'memory'), join(part, 'memory'), { recursive: true });
-        if (existsSync(join(from, 'ladder'))) {
-          for (const f of readdirSync(join(from, 'ladder'))) if (f.endsWith('.md')) cpSync(join(from, 'ladder', f), join(part, 'ladder', f));
+        for (const r of imp.placed) {
+          mkdirSync(join(part, 'ladder', dirname(r.to)), { recursive: true });
+          cpSync(r.from, join(part, 'ladder', r.to));
         }
+        if (imp.assembled) cpSync(join(from, 'ladder', 'ladder.md'), join(part, 'ladder', 'ladder.md'));
       },
     });
   }
@@ -433,6 +440,46 @@ function launchLegTest(hub) {
 }
 
 // ------------------------------------------------------------- inspect
+// Where an import's rungs land (issue #4). sleep.mjs reads rungs only from
+// ladder/L1–L4, so a rung copied flat into ladder/ never reaches ladder.md
+// and never satisfies the rung-today gate. A source can hold rungs either
+// way: flat (an older hub, a hand-built ladder) or in level directories
+// (the CONN-20 layout, what a NightWatch hub itself writes). A rung in a
+// level directory keeps it. A flat one goes where its own frontmatter puts
+// it (`level: 2` or `level: L2`), else its id or filename (L2-…). A flat .md
+// with none of those isn't a rung, and the preview names it as left behind.
+// ladder.md is the assembled ladder, not a rung: it's carried as itself.
+function rungLevel(path) {
+  const text = readFileSync(path, 'utf8');
+  const end = text.indexOf('\n---', 3);
+  const front = text.startsWith('---') ? text.slice(3, end < 0 ? undefined : end) : '';
+  const m = front.match(/^level:\s*L?([1-4])\b/m) || front.match(/^id:\s*L([1-4])-/m) || basename(path).match(/^L([1-4])-/);
+  return m ? `L${m[1]}` : null;
+}
+
+function importLadder(d) {
+  const ladder = join(d, 'ladder');
+  const placed = [], notRungs = [];
+  if (!existsSync(ladder)) return { placed, notRungs, assembled: false };
+  for (const f of readdirSync(ladder).sort()) {
+    const p = join(ladder, f);
+    if (/^L[1-4]$/.test(f) && statSync(p).isDirectory()) {
+      for (const g of readdirSync(p).sort()) if (g.endsWith('.md')) placed.push({ from: join(p, g), to: `${f}/${g}` });
+    } else if (f.endsWith('.md') && f !== 'ladder.md' && statSync(p).isFile()) {
+      const lvl = rungLevel(p);
+      if (lvl) placed.push({ from: p, to: `${lvl}/${f}` }); else notRungs.push(f);
+    }
+  }
+  // Checked here so plan and apply refuse identically: two source files
+  // bound for one place would leave only the second.
+  const seen = new Map();
+  for (const r of placed) {
+    if (seen.has(r.to)) die(`The import folder has two rungs that would both land at ladder/${r.to} (${seen.get(r.to)} and ${r.from}). Keep one, then run Set up again.`);
+    seen.set(r.to, r.from);
+  }
+  return { placed, notRungs, assembled: existsSync(join(ladder, 'ladder.md')) };
+}
+
 function inspectImport(dir, internal = false) {
   const d = expand(dir);
   if (!existsSync(d) || !statSync(d).isDirectory()) {
@@ -443,9 +490,10 @@ function inspectImport(dir, internal = false) {
   const about = identity ? readFileSync(join(d, 'identity.md'), 'utf8').trim() : null;
   const name = existsSync(join(d, 'name.txt')) ? readFileSync(join(d, 'name.txt'), 'utf8').trim() || null : null;
   const memory = existsSync(join(d, 'memory')) ? readdirSync(join(d, 'memory')).filter((f) => !f.startsWith('.')).length : 0;
-  const rungs = existsSync(join(d, 'ladder')) ? readdirSync(join(d, 'ladder')).filter((f) => f.endsWith('.md')).length : 0;
+  const { placed, notRungs, assembled } = importLadder(d);
+  const rungs = placed.length;
   const claudeMd = existsSync(join(d, 'CLAUDE.md'));
-  const result = { identity, about, name, memory, rungs, claudeMd };
+  const result = { identity, about, name, memory, rungs, claudeMd, placed, notRungs, assembled };
   if (internal) { if (!identity) die('The import folder has no identity.md, which is the one required file.'); return result; }
   return result;
 }
