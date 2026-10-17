@@ -309,6 +309,22 @@ check('…and loadConfig refuses, naming NIGHTWATCH_CONFIG', () =>
   });
 }
 
+// ── the due notes' knobs are settable (watch.mjs, #11) ──
+check('config.mjs set takes lanes.<id>.segmentNoteEveryTokens and watch.l3HorizonDays, and reads them back', () => {
+  const d = mkdtempSync(join(tmpdir(), 'nw-due-knobs-'));
+  try {
+    const cfg = join(d, 'nightwatch.config.json');
+    writeFileSync(cfg, JSON.stringify({ defaultLane: 'main', lanes: { main: {} } }));
+    const env = { ...process.env, NIGHTWATCH_CONFIG: cfg };
+    delete env.WEFT_CONFIG;
+    const cli = (...a) => execFileSync(process.execPath, [new URL('./config.mjs', import.meta.url).pathname, ...a], { encoding: 'utf8', env }).trim();
+    cli('set', 'lanes.main.segmentNoteEveryTokens', '75000');
+    cli('set', 'watch.l3HorizonDays', '7');
+    assert.equal(cli('get', 'lanes.main.segmentNoteEveryTokens'), '75000');
+    assert.equal(cli('get', 'watch.l3HorizonDays'), '7');
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
 // ── banners ──
 check('darwin banner is the live osascript line with escaping', () => {
   const argv = bannerArgv({ title: 'Nightwatch', text: 'he said "hi" \\ there' }, 'darwin');

@@ -322,6 +322,9 @@ const LANE_KEYS = {
   // softPct of the window (no timer: the agent's own fold is its "ready"),
   // an urgent one at urgentPct that forces the fold after urgentMin.
   middayCycle: { softPct: 'number', urgentPct: 'number', urgentMin: 'number' },
+  // The segment-due note (watch.mjs): present = on for this lane, ringing
+  // once per this many tokens of growth. Absent = off.
+  segmentNoteEveryTokens: 'number',
 };
 const ALLOWED = {
   weftRoot: 'string', timezone: 'string', defaultLane: 'string',
@@ -329,7 +332,9 @@ const ALLOWED = {
   persona: { name: 'string', pronouns: 'string' },
   schedule: Object.fromEntries(Object.keys(DEFAULTS.schedule).map((k) => [k, k === 'sleep' || k === 'wake' ? 'time' : 'number'])),
   models: { bell: 'string' },
-  watch: Object.fromEntries(Object.keys(DEFAULTS.watch).map((k) => [k, 'number'])),
+  // l3HorizonDays: the l3-due note (watch.mjs), off unless set. It isn't in
+  // DEFAULTS.watch because absent is how "off" reads there.
+  watch: { ...Object.fromEntries(Object.keys(DEFAULTS.watch).map((k) => [k, 'number'])), l3HorizonDays: 'number' },
   notify: { macos: 'boolean', command: 'string' },
   viewer: { port: 'number' },
   paths: Object.fromEntries(Object.keys(DEFAULTS.paths).map((k) => [k, 'string'])),
