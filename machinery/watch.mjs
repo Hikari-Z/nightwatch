@@ -377,7 +377,8 @@ function middayCheck(s, entries) {
 // delivers it and the lane acts at its own seam, or doesn't. The watch
 // still never touches a session; a note is an invitation, not an act.
 function dueNote(lane, slug, text) {
-  const dir = join(CFG.weftRoot, P.spool ?? 'doorbell/spool', lane);
+  // P.spool is resolved absolute by config.mjs, as the nightshift reads it.
+  const dir = join(P.spool ?? join(CFG.weftRoot, 'doorbell', 'spool'), lane);
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `${Date.now()}-watch-${slug}.txt`);
   writeFileSync(`${file}.tmp`, text + '\n');

@@ -275,6 +275,56 @@ check("midday: a stale request from an ended session doesn't silence the next on
   } finally { w.kill(); }
 }
 
+// ── due notes: segment-due and l3-due ──────────────────────────────────────
+{
+  const due = mkdtempSync(join(process.env.TMPDIR ?? '/tmp', 'watch-due-'));
+  for (const d of ['wakecycle', 'ladder', 'doorbell']) mkdirSync(join(due, d), { recursive: true });
+  const dueCfg = join(due, 'nightwatch.config.json');
+  const writeCfg = (horizon) => writeFileSync(dueCfg, JSON.stringify({
+    weftRoot: due, timezone: 'UTC', defaultLane: 'fable',
+    watch: { pollMs: 300, ...(horizon ? { l3HorizonDays: horizon } : {}) },
+    lanes: { fable: { targetTokens: 250000, segmentNoteEveryTokens: 50_000 } },
+    notify: { macos: false, command: recorder }, paths: { transcripts: dirs.projects, sessions: dirs.sessions },
+  }));
+  writeCfg(0);
+  const usage = (tokens) => ({ type: 'assistant', uuid: `u${++seq}`, timestamp: iso(now - 30_000), message: { role: 'assistant', model: 'claude-fable-5', content: [{ type: 'text', text: 'x' }], usage: { input_tokens: 100, cache_read_input_tokens: tokens - 100, output_tokens: 5 } } });
+  session('s-due', null); writeFileSync(join(due, 'wakecycle', 'lane.s-due'), JSON.stringify({ lane: 'fable' }));
+  write('s-due', [usage(120_000)]);
+  const dueEvents = () => lines(join(due, 'events.jsonl'));
+  const spool = (lane) => existsSync(join(due, 'doorbell', 'spool', lane)) ? readdirSync(join(due, 'doorbell', 'spool', lane)) : [];
+  tick(dueCfg);
+  check('segment-due: the first sight of a session baselines without ringing', dueEvents().filter((e) => e.kind === 'segment-due').length, 0);
+  append('s-due', usage(180_000));
+  tick(dueCfg);
+  check('segment-due: a band crossing rings once', dueEvents().filter((e) => e.kind === 'segment-due').length, 1);
+  check('segment-due: one spool note, named for the watch', spool('fable').filter((f) => f.includes('watch-segment-due')).length, 1);
+  tick(dueCfg);
+  check('segment-due: no growth, no re-ring', dueEvents().filter((e) => e.kind === 'segment-due').length, 1);
+  append('s-due', usage(238_000));
+  tick(dueCfg);
+  check('segment-due: the next band rings again', dueEvents().filter((e) => e.kind === 'segment-due').length, 2);
+
+  // l3-due: three unfolded L2 rungs spanning 8 days, horizon 7.
+  const entry = (day, parent) => ({ id: `lark-L2-${day}`, file: `L2/${day}.md`, level: 'L2', ...(parent ? { parent } : {}) });
+  const writeIndex = (entries) => writeFileSync(join(due, 'ladder', 'index.json'), JSON.stringify({ entries }, null, 2));
+  writeIndex([entry('2026-10-01'), entry('2026-10-05'), entry('2026-10-09')]);
+  tick(dueCfg);
+  check('l3-due: off without a horizon', dueEvents().filter((e) => e.kind === 'l3-due').length, 0);
+  writeCfg(7);
+  tick(dueCfg);
+  check('l3-due: past the horizon it rings once, to the default lane', dueEvents().filter((e) => e.kind === 'l3-due').map((e) => e.lane), ['fable']);
+  check('l3-due: the note names the span', spool('fable').some((f) => f.includes('watch-l3-due')), true);
+  tick(dueCfg);
+  check('l3-due: the same due-state is already told', dueEvents().filter((e) => e.kind === 'l3-due').length, 1);
+  writeIndex([entry('2026-10-01', 'lark-L3-x'), entry('2026-10-05', 'lark-L3-x'), entry('2026-10-09')]);
+  tick(dueCfg);
+  check('l3-due: a fold that sets parents clears it', dueEvents().filter((e) => e.kind === 'l3-due').length, 1);
+  writeIndex([entry('2026-10-01'), entry('2026-10-05'), entry('2026-10-09')]);
+  tick(dueCfg);
+  check('l3-due: a recurrence rings again', dueEvents().filter((e) => e.kind === 'l3-due').length, 2);
+  rmSync(due, { recursive: true, force: true });
+}
+
 // A passing run leaves nothing behind; a failing one keeps its scratch hub
 // to look at (Ra, 10/11: tests clean up after themselves).
 if (fail) console.log(`${pass} passed, ${fail} failed  (scratch kept: ${root})`);
