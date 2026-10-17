@@ -1,6 +1,6 @@
 #!/bin/sh
 # Bench for bell-watcher.sh's singleton guard (10/16). A watcher whose parent
-# is pid 1 (detached) must be stopped by the next arm, which takes its place;
+# isn't a shell (detached) must be stopped by the next arm, which takes its place;
 # a second arm beside a tracked watcher must stand down. Runs on a scratch hub
 # config and a scratch lane, and stops everything it started.
 #   sh machinery/watcher-singleton-test.sh [bell-watcher.sh]
@@ -15,10 +15,14 @@ watchers() { ps -axo pid=,ppid=,command= | awk -v t="bell-watcher.sh $LANE" '($3
 cleanup() { for p in $(watchers | awk '{print $1}'); do kill "$p" 2>/dev/null; done; rm -rf "$T"; }
 trap cleanup EXIT
 
-# A detached watcher: double fork, so its parent becomes pid 1.
+# A detached watcher: double fork, so it is reparented. On macOS that's pid 1;
+# on Linux it's the nearest subreaper (systemd --user, WSL's /init), which is
+# why the guard asks "is the parent a shell?" and not "is it pid 1?".
 ( sh "$W" "$LANE" > "$T/orphan.out" 2>&1 & )
 sleep 2
-check "the detached watcher's parent is pid 1" "$(watchers | awk '{print $2}')" "1"
+PCOMM="$(ps -o comm= -p "$(watchers | awk '{print $2}')" 2>/dev/null)"
+case "${PCOMM##*/}" in sh|bash|zsh|dash|-sh|-bash|-zsh|-dash) PSHELL=yes ;; *) PSHELL=no ;; esac
+check "the detached watcher's parent isn't a shell" "$PSHELL" "no"
 ORPHAN="$(watchers | awk '{print $1}')"
 
 # A tracked arm (a child of this shell) stops it and takes its place.
