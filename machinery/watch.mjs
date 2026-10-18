@@ -386,8 +386,11 @@ function middayCheck(s, entries) {
 // delivers it and the lane acts at its own seam, or doesn't. The watch
 // still never touches a session; a note is an invitation, not an act.
 function dueNote(lane, slug, text) {
-  // P.spool is resolved absolute by config.mjs, as the nightshift reads it.
-  const dir = join(P.spool ?? join(CFG.weftRoot, 'doorbell', 'spool'), lane);
+  // Due notes live apart from the spool (10/18): a watcher wakes for one
+  // that lands while it's armed, and one left waiting no longer makes every
+  // re-arm exit at once (bell-watcher.sh). P.due is resolved absolute by
+  // config.mjs.
+  const dir = join(P.due ?? join(CFG.weftRoot, 'doorbell', 'due'), lane);
   mkdirSync(dir, { recursive: true });
   const name = `${Date.now()}-watch-${slug}.txt`;
   // Staged as a DOTFILE: bell-watcher's `ls` (no -a) can't see it, so a

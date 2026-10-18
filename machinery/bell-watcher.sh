@@ -21,6 +21,20 @@ SPOOL_BASE="$(node "$MACHINERY_DIR/config.mjs" get paths.spool)" || {
   echo "bell-watcher: hub config unreadable (set NIGHTWATCH_CONFIG to the hub's config file)"; exit 3; }
 SPOOL="$SPOOL_BASE/$LANE"
 mkdir -p "$SPOOL"
+# Due notes (the watch's segment-due and l3-due) live apart, in due/<lane>
+# (10/18): a due note waits for a seam by design, and one left waiting in
+# the spool made every re-arm exit at once, silencing the watcher for the
+# bell. Here a due note wakes the lane only if it lands while this watcher
+# is armed; one already waiting is listed below, once, and left to wait.
+# The arm's mark is stamped BEFORE that listing, and anything newer than it
+# counts as fresh, so a note landing in the arm's first instant is listed
+# and wakes it too: a duplicate, never a silent wait (Fable's tie-break).
+DUE_BASE="$(node "$MACHINERY_DIR/config.mjs" get paths.due)" || DUE_BASE=""
+DUE=""
+if [ -n "$DUE_BASE" ] && [ "$DUE_BASE" != "null" ]; then
+  DUE="$DUE_BASE/$LANE"
+  mkdir -p "$DUE"
+fi
 
 # One watcher per lane, judged by parentage (10/16). A watcher whose parent
 # isn't a shell was detached (a trailing `&`, or its session ended): its exit
@@ -59,14 +73,44 @@ if [ -n "$WATCHERS" ]; then
     exit 0
   fi
 fi
-echo "bell-watcher up: lane=$LANE spool=$SPOOL poll=5s (exits on first note)"
+# At every exit, the due notes still waiting are listed after the note
+# printed, so whoever reads that note sees them too: on a plain install the
+# watcher is the only path a due note takes, and this is what makes "by the
+# next exit at the latest" true.
+due_tail() {
+  [ -n "$DUE" ] || return 0
+  LEFT="$(ls "$DUE" 2>/dev/null | grep '\.txt$' | sed "s|^|$DUE/|" | grep -v -x -F "${1:-}" || true)"
+  [ -n "$LEFT" ] && { echo "--- due notes also waiting here, for your next seam:"; echo "$LEFT" | sed 's/^/  /'; }
+  return 0
+}
+ARM_MARK=""
+if [ -n "$DUE" ]; then
+  ARM_MARK="$(mktemp "${TMPDIR:-/tmp}/bell-watcher-arm.XXXXXX")"
+  trap 'rm -f "$ARM_MARK"' EXIT
+fi
+echo "bell-watcher up: lane=$LANE spool=$SPOOL${DUE:+ due=$DUE} poll=5s (exits on first note)"
+if [ -n "$DUE" ]; then
+  WAITING="$(ls "$DUE" 2>/dev/null | grep '\.txt$' || true)"
+  [ -n "$WAITING" ] && { echo "due notes already waiting here, for your next seam (they don't wake this watcher):"; echo "$WAITING" | sed "s|^|  $DUE/|"; }
+fi
 while :; do
   NOTE="$(ls "$SPOOL" 2>/dev/null | head -1)"
   if [ -n "$NOTE" ]; then
     echo "BELL — read the note, run what it says, delete the file, re-arm the watcher:"
     echo "--- $SPOOL/$NOTE"
     cat "$SPOOL/$NOTE"
+    due_tail
     exit 0
+  fi
+  if [ -n "$ARM_MARK" ]; then
+    FRESH="$(find "$DUE" -maxdepth 1 -name '*.txt' -newer "$ARM_MARK" 2>/dev/null | sort | head -1)"
+    if [ -n "$FRESH" ]; then
+      echo "DUE — a note from the watch: read it, act at your next clean seam, delete the file, re-arm the watcher:"
+      echo "--- $FRESH"
+      cat "$FRESH"
+      due_tail "$FRESH"
+      exit 0
+    fi
   fi
   sleep 5
 done
