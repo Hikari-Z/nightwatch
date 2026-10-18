@@ -291,16 +291,19 @@ check("midday: a stale request from an ended session doesn't silence the next on
   session('s-due', null); writeFileSync(join(due, 'wakecycle', 'lane.s-due'), JSON.stringify({ lane: 'fable' }));
   write('s-due', [usage(120_000)]);
   const dueEvents = () => lines(join(due, 'events.jsonl'));
-  const spool = (lane) => existsSync(join(due, 'doorbell', 'spool', lane)) ? readdirSync(join(due, 'doorbell', 'spool', lane)) : [];
+  // Due notes live in due/<lane>, never in the spool a watcher treats as bells (10/18).
+  const dueNotes = (lane) => existsSync(join(due, 'doorbell', 'due', lane)) ? readdirSync(join(due, 'doorbell', 'due', lane)) : [];
+  const spoolOf = (lane) => existsSync(join(due, 'doorbell', 'spool', lane)) ? readdirSync(join(due, 'doorbell', 'spool', lane)) : [];
   tick(dueCfg);
   check('segment-due: the first sight of a session baselines without ringing', dueEvents().filter((e) => e.kind === 'segment-due').length, 0);
   append('s-due', usage(180_000));
   tick(dueCfg);
   check('segment-due: a band crossing rings once', dueEvents().filter((e) => e.kind === 'segment-due').length, 1);
-  check('segment-due: one spool note, named for the watch', spool('fable').filter((f) => f.includes('watch-segment-due')).length, 1);
+  check('segment-due: one due note, named for the watch', dueNotes('fable').filter((f) => f.includes('watch-segment-due')).length, 1);
+  check('segment-due: nothing in the spool, where a watcher would take it for a bell', spoolOf('fable').length, 0);
   check('segment-due: the growth figure is the real tokens since the last ring, not the band', (() => {
-    const f = spool('fable').find((n) => n.includes('watch-segment-due'));
-    const text = readFileSync(join(due, 'doorbell', 'spool', 'fable', f), 'utf8');
+    const f = dueNotes('fable').find((n) => n.includes('watch-segment-due'));
+    const text = readFileSync(join(due, 'doorbell', 'due', 'fable', f), 'utf8');
     return [/grown another ~60k/.test(text), /to ~180k/.test(text), /another ~180k/.test(text)];
   })(), [true, true, false]);
   tick(dueCfg);
@@ -316,8 +319,8 @@ check("midday: a stale request from an ended session doesn't silence the next on
   append('s-due', usage(345_000)); // a big jump in one poll (a huge tool result)
   tick(dueCfg);
   check('segment-due: a big jump rings once and states the exact growth since the last ring', (() => {
-    const notes = spool('fable').filter((n) => n.includes('watch-segment-due')).sort();
-    const text = readFileSync(join(due, 'doorbell', 'spool', 'fable', notes[notes.length - 1]), 'utf8');
+    const notes = dueNotes('fable').filter((n) => n.includes('watch-segment-due')).sort();
+    const text = readFileSync(join(due, 'doorbell', 'due', 'fable', notes[notes.length - 1]), 'utf8');
     return [dueEvents().filter((e) => e.kind === 'segment-due').length, /grown another ~107k/.test(text), /to ~345k/.test(text)];
   })(), [3, true, true]);
 
@@ -339,8 +342,9 @@ check("midday: a stale request from an ended session doesn't silence the next on
   writeCfg(4);
   tick(dueCfg);
   check('l3-due: past 2x the horizon it rings once, per lane, to that lane', dueEvents().filter((e) => e.kind === 'l3-due').map((e) => e.lane), ['alpha']);
-  check('l3-due: the note lands in that lane\'s spool', spool('alpha').some((f) => f.includes('watch-l3-due')), true);
-  check('l3-due: a lane under the horizon stays quiet', spool('beta').length, 0);
+  check('l3-due: the note lands in that lane\'s due/', dueNotes('alpha').some((f) => f.includes('watch-l3-due')), true);
+  check('l3-due: and not in its spool', spoolOf('alpha').length, 0);
+  check('l3-due: a lane under the horizon stays quiet', dueNotes('beta').length, 0);
   tick(dueCfg);
   check('l3-due: the same due-state is already told', dueEvents().filter((e) => e.kind === 'l3-due').length, 1);
   // Fold the finished arc, keep the lived week: quiet, not an instant re-ring.
