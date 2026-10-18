@@ -111,6 +111,9 @@ export const DEFAULTS = {
     armedFile: 'wakecycle/nightshift.armed',
     stateFile: 'wakecycle/nightshift.state.json',
     spool: 'doorbell/spool',
+    // The watch's due notes (segment-due, l3-due): apart from the spool, so a
+    // note that waits for a seam never silences a watcher (bell-watcher.sh).
+    due: 'doorbell/due',
     // Claude Code keeps a project's transcripts in a folder named after the
     // folder it runs in (transcriptsFor). Unset, it's derived from workdir
     // when a config loads, so the two can't drift apart.
