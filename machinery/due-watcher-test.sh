@@ -17,7 +17,9 @@ check() { if [ "$2" = "$3" ]; then echo "PASS $1"; pass=$((pass+1)); else echo "
 alive() { ps -p "$1" >/dev/null 2>&1 && echo alive || echo gone; }
 # As watch.mjs writes one: a dotfile staged, then renamed into place.
 due_note() { printf '%s\n' "$2" > "$DUE/.$1.tmp"; mv "$DUE/.$1.tmp" "$DUE/$1"; }
-arm() { sh "$W" "$LANE" > "$1" 2>&1 & ARMED=$!; }
+# Each case arms on a clean slate: a watcher an earlier case left running would
+# make this arm stand down (the singleton guard) and read as an exit.
+arm() { for p in $WPIDS; do kill "$p" 2>/dev/null; done; sleep 0.3; sh "$W" "$LANE" > "$1" 2>&1 & ARMED=$!; }
 wait_up() { i=0; while [ $i -lt 50 ] && ! grep -q 'bell-watcher up' "$1" 2>/dev/null; do sleep 0.1; i=$((i+1)); done; }
 WPIDS=""
 cleanup() { for p in $WPIDS; do kill "$p" 2>/dev/null; done; rm -rf "$T"; }
