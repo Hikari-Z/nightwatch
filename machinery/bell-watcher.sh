@@ -73,6 +73,16 @@ if [ -n "$WATCHERS" ]; then
     exit 0
   fi
 fi
+# At every exit, the due notes still waiting are listed after the note
+# printed, so whoever reads that note sees them too: on a plain install the
+# watcher is the only path a due note takes, and this is what makes "by the
+# next exit at the latest" true.
+due_tail() {
+  [ -n "$DUE" ] || return 0
+  LEFT="$(ls "$DUE" 2>/dev/null | grep '\.txt$' | sed "s|^|$DUE/|" | grep -v -x -F "${1:-}" || true)"
+  [ -n "$LEFT" ] && { echo "--- due notes also waiting here, for your next seam:"; echo "$LEFT" | sed 's/^/  /'; }
+  return 0
+}
 ARM_MARK=""
 if [ -n "$DUE" ]; then
   ARM_MARK="$(mktemp "${TMPDIR:-/tmp}/bell-watcher-arm.XXXXXX")"
@@ -89,6 +99,7 @@ while :; do
     echo "BELL — read the note, run what it says, delete the file, re-arm the watcher:"
     echo "--- $SPOOL/$NOTE"
     cat "$SPOOL/$NOTE"
+    due_tail
     exit 0
   fi
   if [ -n "$ARM_MARK" ]; then
@@ -97,6 +108,7 @@ while :; do
       echo "DUE — a note from the watch: read it, act at your next clean seam, delete the file, re-arm the watcher:"
       echo "--- $FRESH"
       cat "$FRESH"
+      due_tail "$FRESH"
       exit 0
     fi
   fi

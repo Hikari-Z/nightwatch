@@ -38,6 +38,7 @@ echo "the sleep-bell" > "$SPOOL/2000-bell.txt"
 sleep 7
 check "a spool note wakes the watcher" "$(alive "$W1")" "gone"
 check "and it prints the bell" "$(grep -c 'the sleep-bell' "$T/w1.out")" "1"
+check "and after the bell, lists the due note still waiting (the delivery bound)" "$(sed -n '/the sleep-bell/,$p' "$T/w1.out" | grep -c '1000-watch-l3-due.txt')" "1"
 rm -f "$SPOOL/2000-bell.txt"
 
 # 3. A due note that lands while the watcher is armed wakes it.
