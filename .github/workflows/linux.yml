@@ -9,6 +9,9 @@ on:
     branches: [main, 'feat/**', 'fix/**']
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   machinery:
     runs-on: ubuntu-latest
@@ -55,31 +58,49 @@ jobs:
       - name: the bridge's tests
         run: cargo test --manifest-path app/src-tauri/Cargo.toml
 
-  # The desktop app as a person on Linux downloads it: a .deb and an AppImage,
-  # kept as the run's artifacts. Built here, the app looks for its viewer and
-  # machinery at run time (NIGHTWATCH_REPO, else the tree the person's
-  # registered hub points at), so the bundle works beside their own checkout.
+  # The desktop app as a .deb a person on Linux can download (Ubuntu 22.04
+  # or newer: built on the oldest base it's meant for, since a binary needs
+  # at least the glibc it was linked against). Built here, the app finds its
+  # viewer and machinery at run time through a hub the person has set up, or
+  # NIGHTWATCH_REPO (docs/SETUP.md). Pushes only: a pull request's checks
+  # don't need a download, and every bundle is an 80 MB artifact. The
+  # AppImage waits for a real run on Linux: its bundled GTK environment may
+  # reach the terminals --wake opens.
   bundle:
-    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    runs-on: ubuntu-22.04
+    concurrency:
+      group: bundle-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
+      - name: the installer's syntax
+        run: sh -n app/install.sh
       - name: Tauri's Linux dependencies
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev build-essential pkg-config
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: build the .deb and the AppImage
+      - name: build the .deb
         working-directory: app
         run: |
           npm ci
-          npx tauri build --bundles deb,appimage
-      - name: the installer's syntax
-        run: sh -n app/install.sh
+          npx tauri build --bundles deb
+      - name: the package is Nightwatch's, not a default Tauri app
+        run: |
+          deb=$(ls app/src-tauri/target/release/bundle/deb/*.deb)
+          echo "$deb"
+          dpkg-deb -c "$deb" | grep -E '\./usr/bin/|\.desktop$'
+          dpkg-deb -c "$deb" | grep -q '\./usr/bin/nightwatch$' || { echo "expected usr/bin/nightwatch in the package"; exit 1; }
+          if dpkg-deb -c "$deb" | grep -q '\./usr/bin/app$'; then echo "the package still installs usr/bin/app"; exit 1; fi
+          dpkg-deb -f "$deb" Package Version Maintainer Description
+          if dpkg-deb -f "$deb" Description | grep -q 'A Tauri App'; then echo "the package still carries Tauri's default description"; exit 1; fi
+          dpkg-deb -x "$deb" "$RUNNER_TEMP/deb"
+          echo "glibc floor: $(objdump -T "$RUNNER_TEMP/deb/usr/bin/nightwatch" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)"
       - uses: actions/upload-artifact@v4
         with:
-          name: nightwatch-linux
-          path: |
-            app/src-tauri/target/release/bundle/deb/*.deb
-            app/src-tauri/target/release/bundle/appimage/*.AppImage
+          name: nightwatch-linux-deb
+          path: app/src-tauri/target/release/bundle/deb/*.deb
+          retention-days: 14
           if-no-files-found: error

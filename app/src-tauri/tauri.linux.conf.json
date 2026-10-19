@@ -1,0 +1,9 @@
+{
+  "mainBinaryName": "nightwatch",
+  "bundle": {
+    "shortDescription": "Watch over your agents' nights",
+    "longDescription": "Nightwatch watches over Claude Code agents through the night: the sleep bell, the fold that keeps what they authored, and the morning wake, with a window onto each agent's lane. This desktop app needs a checkout of github.com/slimepriestess/nightwatch beside it; see docs/SETUP.md.",
+    "publisher": "Nightwatch contributors",
+    "category": "Utility"
+  }
+}

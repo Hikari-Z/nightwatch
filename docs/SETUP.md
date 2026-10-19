@@ -183,6 +183,31 @@ The thresholds live under `watch.*` (`spiralThreshold`, `waitingMs`,
 nights. `node machinery/watch-test.mjs` runs the whole watch against a
 scratch hub.
 
+## The desktop app
+
+The app is a window onto the same hub: lanes, timelines, fold meters, and
+the buttons (Wake, Sleep, Fold now, settings). It runs its viewer and calls
+its machinery from a checkout of this repo, so it always lives beside one.
+
+- **macOS:** `sh app/install.sh` from your checkout builds it and installs
+  `~/Applications/Nightwatch.app`.
+- **Linux, built here (WSLg included):** `sh app/install.sh` from your
+  checkout. It needs Rust, node and WebKitGTK's development files, and names
+  the packages if they're missing. It installs `~/.local/bin/nightwatch` and
+  a launcher entry. Built here, it finds this checkout by itself.
+- **Linux, the prebuilt `.deb`:** each push to the repo's CI keeps a `.deb`
+  as the run's artifact (Ubuntu 22.04 or newer). A build made elsewhere finds
+  your checkout through a hub you've already set up, which points at it. On a
+  machine with no hub yet, tell it where the checkout is with
+  `NIGHTWATCH_REPO`. Apps started from the launcher don't read your shell's
+  rc files, so put it where the desktop session reads it, for example a line
+  `NIGHTWATCH_REPO=/home/you/nightwatch` in
+  `~/.config/environment.d/nightwatch.conf`, then log in again. The app says
+  this too if it can't find the checkout.
+
+Bringing a lane's terminal forward works on macOS only; elsewhere that
+button is read-only, and you bring the terminal forward yourself.
+
 ## The parts the config can't do for you
 
 The ritual itself is the agent's: the rung (the day, in the agent's own words,
