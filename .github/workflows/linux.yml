@@ -91,9 +91,9 @@ jobs:
         run: |
           deb=$(ls app/src-tauri/target/release/bundle/deb/*.deb)
           echo "$deb"
-          dpkg-deb -c "$deb" | grep -E '\./usr/bin/|\.desktop$'
-          dpkg-deb -c "$deb" | grep -q '\./usr/bin/nightwatch$' || { echo "expected usr/bin/nightwatch in the package"; exit 1; }
-          if dpkg-deb -c "$deb" | grep -q '\./usr/bin/app$'; then echo "the package still installs usr/bin/app"; exit 1; fi
+          dpkg-deb -c "$deb" | grep -E '[ /]usr/bin/|\.desktop$'
+          dpkg-deb -c "$deb" | grep -Eq '[ /]usr/bin/nightwatch$' || { echo "expected usr/bin/nightwatch in the package"; exit 1; }
+          if dpkg-deb -c "$deb" | grep -Eq '[ /]usr/bin/app$'; then echo "the package still installs usr/bin/app"; exit 1; fi
           dpkg-deb -f "$deb" Package Version Maintainer Description
           if dpkg-deb -f "$deb" Description | grep -q 'A Tauri App'; then echo "the package still carries Tauri's default description"; exit 1; fi
           dpkg-deb -x "$deb" "$RUNNER_TEMP/deb"
