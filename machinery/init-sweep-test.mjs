@@ -17,6 +17,12 @@ import { tmpdir } from 'node:os';
 import assert from 'node:assert';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+// The sweep reads the platform's own job files: launchd plists on macOS,
+// systemd user units elsewhere (nightwatch#13). The cases follow it; the few
+// that are about the plist format itself run on macOS only, and say so.
+const DARWIN = process.platform === 'darwin';
+const EXT = DARWIN ? '.plist' : '.service';
+const skip = (name, why) => console.log(`  - ${name} (skipped: ${why})`);
 let pass = 0, fail = 0;
 const check = (name, fn) => { try { fn(); pass++; console.log(`  ✓ ${name}`); } catch (e) { fail++; console.log(`  ✗ ${name}\n    ${e.message}`); } };
 
@@ -67,15 +73,27 @@ try {
   const liveHub = join(scratch, 'living-hub');
   mkdirSync(liveHub, { recursive: true });
   writeFileSync(join(liveHub, 'nightwatch.config.json'), '{}\n');
-  const plist = (label, cfg, script) => `<?xml version="1.0" encoding="UTF-8"?>
+  // A job as an older install wrote it (WEFT_CONFIG, the pre-#7 name), in the
+  // platform's own format: a plist, or a systemd unit as daemonJob writes one.
+  const plist = (label, cfg, script) => DARWIN ? `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>
   <key>Label</key><string>${label}</string>
   <key>ProgramArguments</key><array><string>/usr/bin/node</string><string>${script}</string></array>
   <key>EnvironmentVariables</key><dict><key>WEFT_CONFIG</key><string>${cfg}</string></dict>
-</dict></plist>\n`;
-  writeFileSync(join(jobsDir, 'house.nightwatch.ghost.plist'),
+</dict></plist>\n` : `[Unit]
+Description=${label}
+
+[Service]
+ExecStart="/usr/bin/node" "${script}"
+Environment="WEFT_CONFIG=${cfg}"
+Restart=always
+
+[Install]
+WantedBy=default.target
+`;
+  writeFileSync(join(jobsDir, `house.nightwatch.ghost${EXT}`),
     plist('house.nightwatch.ghost', join(scratch, 'deleted-hub', 'nightwatch.config.json'), join(scratch, 'deleted-wt', 'nightshift.mjs')));
-  writeFileSync(join(jobsDir, 'house.nightwatch.living.plist'),
+  writeFileSync(join(jobsDir, `house.nightwatch.living${EXT}`),
     plist('house.nightwatch.living', join(liveHub, 'nightwatch.config.json'), join(HERE, 'nightshift.mjs')));
   writeFileSync(join(regDir, 'hubs.json'), JSON.stringify({ version: 1, hubs: [{ path: liveHub }, { path: join(scratch, 'deleted-hub') }] }, null, 2) + '\n');
 
@@ -83,11 +101,11 @@ try {
   check('the sweep flags the orphan job', () => assert.match(report, /house\.nightwatch\.ghost.*missing hub/));
   check('the sweep flags the dead registry entry', () => assert.match(report, /hubs\.json entry.*deleted-hub.*missing hub/));
   check('the sweep never flags the living job', () => assert.doesNotMatch(report, /house\.nightwatch\.living/));
-  check('report mode removes nothing', () => assert.ok(existsSync(join(jobsDir, 'house.nightwatch.ghost.plist'))));
+  check('report mode removes nothing', () => assert.ok(existsSync(join(jobsDir, `house.nightwatch.ghost${EXT}`))));
 
   const removal = nw(['doctor-sweep', '--remove', '--yes']);
-  check('--remove --yes deletes the orphan job file', () => assert.ok(!existsSync(join(jobsDir, 'house.nightwatch.ghost.plist'))));
-  check('--remove --yes keeps the living job', () => assert.ok(existsSync(join(jobsDir, 'house.nightwatch.living.plist'))));
+  check('--remove --yes deletes the orphan job file', () => assert.ok(!existsSync(join(jobsDir, `house.nightwatch.ghost${EXT}`))));
+  check('--remove --yes keeps the living job', () => assert.ok(existsSync(join(jobsDir, `house.nightwatch.living${EXT}`))));
   check('--remove --yes drops only the dead registry entry', () => {
     const reg = JSON.parse(readFileSync(join(regDir, 'hubs.json'), 'utf8'));
     assert.deepEqual(reg.hubs.map((h) => h.path), [liveHub]);
@@ -101,27 +119,34 @@ try {
   mkdirSync(ampHub, { recursive: true });
   writeFileSync(join(ampHub, 'nightwatch.config.json'), '{}\n');
   const { daemonJob } = await import('./platform.mjs');
-  const ampJob = daemonJob({ slug: 'ampersand', hub: ampHub, machineryDir: HERE }, 'darwin');
+  const ampJob = daemonJob({ slug: 'ampersand', hub: ampHub, machineryDir: HERE }, DARWIN ? 'darwin' : 'linux');
   writeFileSync(join(jobsDir, ampJob.fileName), ampJob.content);
-  check('the writer produces a valid plist for an & path', () => {
-    execFileSync('plutil', ['-lint', join(jobsDir, ampJob.fileName)], { stdio: 'pipe' });
-  });
-  check('an entity-escaped living hub is never flagged', () =>
+  if (DARWIN) {
+    check('the writer produces a valid plist for an & path', () => {
+      execFileSync('plutil', ['-lint', join(jobsDir, ampJob.fileName)], { stdio: 'pipe' });
+    });
+  } else skip('the writer produces a valid plist for an & path', 'plutil and plists are macOS only');
+  check('a living hub with & in its path is never flagged', () =>
     assert.doesNotMatch(nw(['doctor-sweep']), /ampersand/));
-  execFileSync('plutil', ['-convert', 'binary1', join(jobsDir, ampJob.fileName)]);
-  check('the same living job as binary1 is never flagged', () =>
-    assert.doesNotMatch(nw(['doctor-sweep']), /ampersand/));
-  writeFileSync(join(jobsDir, 'house.nightwatch.garbage.plist'), 'not a plist at all\n');
+  if (DARWIN) {
+    execFileSync('plutil', ['-convert', 'binary1', join(jobsDir, ampJob.fileName)]);
+    check('the same living job as binary1 is never flagged', () =>
+      assert.doesNotMatch(nw(['doctor-sweep']), /ampersand/));
+  } else skip('the same living job as binary1 is never flagged', 'binary plists are macOS only');
+  writeFileSync(join(jobsDir, `house.nightwatch.garbage${EXT}`), 'not a plist at all\n');
   check('garbage is reported as unreadable', () =>
     assert.match(nw(['doctor-sweep']), /house\.nightwatch\.garbage.*unparseable/));
   nw(['doctor-sweep', '--remove', '--yes']);
   check('garbage is never removed automatically', () =>
-    assert.ok(existsSync(join(jobsDir, 'house.nightwatch.garbage.plist'))));
-  check('the living binary job survives --remove --yes', () =>
+    assert.ok(existsSync(join(jobsDir, `house.nightwatch.garbage${EXT}`))));
+  check('the living & job survives --remove --yes', () =>
     assert.ok(existsSync(join(jobsDir, ampJob.fileName))));
-  rmSync(join(jobsDir, 'house.nightwatch.garbage.plist'));
+  rmSync(join(jobsDir, `house.nightwatch.garbage${EXT}`));
   // A hand-added node flag shifts ProgramArguments; the script index then
   // reads '--inspect', which must make the job UNREADABLE, never removable.
+  // (A unit is read by ExecStart's quoted script, which a flag doesn't shift.)
+  if (!DARWIN) skip('a flag-shifted living job is unreadable, not missing', 'ProgramArguments indexing is a plist shape');
+  if (DARWIN) {
   writeFileSync(join(jobsDir, 'house.nightwatch.flagged.plist'), `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>
   <key>Label</key><string>house.nightwatch.flagged</string>
@@ -133,12 +158,13 @@ try {
   check('a flag-shifted living job survives --remove --yes', () =>
     assert.ok(existsSync(join(jobsDir, 'house.nightwatch.flagged.plist'))));
   rmSync(join(jobsDir, 'house.nightwatch.flagged.plist'));
+  }
 
   // 6. The app's shape (opus's Doctor-panel spec): --json findings as data,
   //    --remove-item removes exactly one, refusing stale or unreadable ids.
-  writeFileSync(join(jobsDir, 'house.nightwatch.ghost2.plist'),
+  writeFileSync(join(jobsDir, `house.nightwatch.ghost2${EXT}`),
     plist('house.nightwatch.ghost2', join(scratch, 'gone-hub', 'nightwatch.config.json'), join(scratch, 'gone-wt', 'nightshift.mjs')));
-  writeFileSync(join(jobsDir, 'house.nightwatch.garbage2.plist'), 'still not a plist\n');
+  writeFileSync(join(jobsDir, `house.nightwatch.garbage2${EXT}`), 'still not a plist\n');
   const envelope = JSON.parse(nw(['doctor-sweep', '--json']));
   check('--json is a versioned envelope with a sweep stamp', () => {
     assert.equal(envelope.version, 1);
@@ -157,7 +183,7 @@ try {
   check('--remove-item refuses an unreadable id', () => {
     assert.throws(() => nw(['doctor-sweep', '--remove-item', 'house.nightwatch.garbage2'], {}, { stdio: 'pipe' }),
       (e) => /unreadable/.test(String(e.stderr)));
-    assert.ok(existsSync(join(jobsDir, 'house.nightwatch.garbage2.plist')));
+    assert.ok(existsSync(join(jobsDir, `house.nightwatch.garbage2${EXT}`)));
   });
   check('--remove-item refuses an id that is not a finding', () => {
     assert.throws(() => nw(['doctor-sweep', '--remove-item', 'house.nightwatch.living'], {}, { stdio: 'pipe' }),
@@ -165,11 +191,11 @@ try {
   });
   check('--remove-item removes exactly the named finding', () => {
     nw(['doctor-sweep', '--remove-item', 'house.nightwatch.ghost2']);
-    assert.ok(!existsSync(join(jobsDir, 'house.nightwatch.ghost2.plist')));
-    assert.ok(existsSync(join(jobsDir, 'house.nightwatch.garbage2.plist')), 'the unreadable one is untouched');
+    assert.ok(!existsSync(join(jobsDir, `house.nightwatch.ghost2${EXT}`)));
+    assert.ok(existsSync(join(jobsDir, `house.nightwatch.garbage2${EXT}`)), 'the unreadable one is untouched');
     assert.ok(existsSync(join(jobsDir, ampJob.fileName)), 'the living one is untouched');
   });
-  rmSync(join(jobsDir, 'house.nightwatch.garbage2.plist'));
+  rmSync(join(jobsDir, `house.nightwatch.garbage2${EXT}`));
 
   // 7. A clean second sweep has nothing to do.
   check('a second sweep finds a clean house', () => assert.match(nw(['doctor-sweep']), /Nothing to do/));
