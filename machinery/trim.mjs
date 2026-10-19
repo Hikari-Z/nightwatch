@@ -78,15 +78,20 @@ function isHarnessLoaded(e) {
   return e?.type === 'attachment' && HARNESS_LOADED.has(e.attachment?.type);
 }
 
-// Entries Claude Code writes as its own request log (`api-request`, since
-// 2.1.300): each carries the request's full params, so a day's transcript
-// holds megabytes of them, but a resume never loads one into context. They
-// stay in the kept file (they are the session's own record), and they weigh
-// nothing in the estimate — counting them produced the 10/16–10/18 phantom
-// overshoots (a 6.22x warning over a ~88k conversation, and a 1.33x fold
-// receipt the night the conversation was under target).
+// Entries Claude Code writes as its own request log (since 2.1.300):
+// `api-request` (full request params), `api-request-blob` (the log's
+// content-by-hash dedup store) and `api-request-shape` (the system-prompt
+// shape). A day's transcript holds megabytes of them, but none carries a
+// uuid and no entry's parentUuid points at one, so a resume never loads
+// any into context (measured on two live transcripts, 10/19). They stay
+// in the kept file (they are the session's own record), and they weigh
+// nothing in the estimate — counting them produced the 10/16–10/18
+// phantom overshoots (a 6.22x warning over a ~88k conversation). The
+// list stays explicit rather than a "no uuid" rule: an unknown future
+// type then defaults to counted, which can only overcount, never hide.
+const REQUEST_LOG = new Set(['api-request', 'api-request-blob', 'api-request-shape']);
 function isResumeInert(e) {
-  return e?.type === 'api-request';
+  return REQUEST_LOG.has(e?.type);
 }
 
 // STALE USAGE: every reply records the token usage of the request that made

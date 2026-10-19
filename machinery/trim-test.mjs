@@ -122,6 +122,8 @@ try {
   const add4 = (e) => { const uuid = `r${++n4}`; rows4.push({ parentUuid: prev4, uuid, sessionId: SID4, timestamp: `2026-10-19T00:${String(n4).padStart(2, '0')}:00.000Z`, ...e }); prev4 = uuid; };
   add4({ type: 'user', message: { role: 'user', content: 'the prompt' } });
   add4({ type: 'api-request', request: { model: 'm', messages: [{ role: 'user', content: 'q '.repeat(150_000) }] } });
+  add4({ type: 'api-request-blob', hash: 'h1', content: 'b '.repeat(60_000) });
+  add4({ type: 'api-request-shape', shape: 's '.repeat(40_000) });
   add4({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'the reply' }] } });
   const dir4 = mkdtempSync(join(tmpdir(), 'trim-test-apireq-'));
   const src4 = join(dir4, `${SID4}.jsonl`);
@@ -129,7 +131,7 @@ try {
   const run4 = spawnSync(process.execPath, [join(HERE, 'trim.mjs'), src4, '--target-tokens', '5000'], { encoding: 'utf8' });
   const rep = JSON.parse(run4.stdout);
   const kept = readFileSync(rep.path, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-  check('api-request entries stay in the kept file', kept.some((e) => e.type === 'api-request'), kept.map((e) => e.type).join(','));
+  check('all three request-log types stay in the kept file', ['api-request', 'api-request-blob', 'api-request-shape'].every((t) => kept.some((e) => e.type === t)), kept.map((e) => e.type).join(','));
   check('and weigh nothing in the estimate', rep.estTokens < 2_000, `est ${rep.estTokens}`);
   check('and never manufacture an overshoot', !('overshoot' in rep) && !/OVERSHOOT/.test(run4.stderr), `${JSON.stringify(rep.overshoot)} ${run4.stderr.trim()}`);
   rmSync(dir4, { recursive: true, force: true });
