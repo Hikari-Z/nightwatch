@@ -85,11 +85,11 @@ be the real failure.*
 | Nightly cycle (bell/fold/wake/receipts) | lived-on daily since 2026-09-30 |
 | Multi-agent hubs, per-lane schedules | working, lived-on |
 | Transcript archive (hub-owned raw history) | new this week |
-| Desktop app | working, rough edges, macOS build |
+| Desktop app | working, rough edges; lived-on as the macOS build, and the Linux build compiles and passes its tests in CI |
 | Stuck/spiral watch | live; thresholds from this house's nights |
 | macOS (launchd + Terminal) | the lived platform |
-| Windows 11 / WSL2 | port planned, seams audited |
-| Linux (systemd + tmux/terminal spawn) | should mostly work; glue missing, PRs welcome |
+| Windows 11 / WSL2 | running in a second house since 2026-10-16 (the machinery and the browser viewer); the app's host actions go through the machinery, and bringing a lane's terminal forward is macOS only |
+| Linux (systemd + tmux/terminal spawn) | the machinery's tests and the nightshift's rehearsal bench pass in CI on every push; the app's host actions are wired except bringing a terminal forward; testing by people who run it is next |
 | Backends beyond Claude Code (codex, connectome, hermes, …) | roadmap |
 
 One more honest sticker: some shipped defaults still assume the house
