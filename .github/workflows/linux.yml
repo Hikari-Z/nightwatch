@@ -1,0 +1,56 @@
+# Nightwatch on Linux (nightwatch#2, #13, #14): the machinery's own tests and
+# the desktop app's bridge, built against WebKitGTK. macOS is where it's lived
+# on daily; this is the check that a Linux install still works between the
+# reports of the people who run it there.
+name: linux
+
+on:
+  push:
+    branches: [main, 'feat/**', 'fix/**']
+  pull_request:
+
+jobs:
+  machinery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # platform-test runs the headless Linux summons against a real tmux.
+      - run: sudo apt-get update && sudo apt-get install -y tmux
+      - name: machinery tests
+        # Every test runs, and the job fails at the end if any did, so one
+        # red test doesn't hide the rest.
+        run: |
+          failed=""
+          for t in machinery/*-test.mjs; do
+            echo "::group::$t"
+            node "$t" || failed="$failed $t"
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then echo "failed:$failed"; exit 1; fi
+      - name: nightshift rehearsal, on a scratch hub
+        run: |
+          hub="$RUNNER_TEMP/nw-hub"
+          mkdir -p "$hub/wakecycle" "$hub/ladder" "$hub/projects" "$hub/sessions"
+          printf '{"weftRoot":"%s","persona":{"name":"Lark"},"lanes":{"fable":{"targetTokens":250000},"opus":{"targetTokens":250000}},"notify":{"macos":false},"paths":{"transcripts":"%s/projects","sessions":"%s/sessions"}}\n' "$hub" "$hub" "$hub" > "$hub/nightwatch.config.json"
+          NIGHTWATCH_CONFIG="$hub/nightwatch.config.json" node machinery/nightshift.mjs --rehearse
+      - name: viewer probes
+        run: |
+          node gui/test/assemble-probes.mjs
+          node gui/test/hubs-probes.mjs
+          node skins/test/chrome-test.mjs
+
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Tauri 2 on Linux: WebKitGTK 4.1, the tray's appindicator, rsvg.
+      - name: Tauri's Linux dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev build-essential
+      - uses: dtolnay/rust-toolchain@stable
+      - name: the bridge compiles for Linux
+        run: cargo check --manifest-path app/src-tauri/Cargo.toml
+      - name: the bridge's tests
+        run: cargo test --manifest-path app/src-tauri/Cargo.toml
