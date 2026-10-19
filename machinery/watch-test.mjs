@@ -5,7 +5,7 @@
 // real is read or written. Run: node machinery/watch-test.mjs
 //
 // Written by: claude-opus-5-5, 2026-10-09 (cases from weft's stuck-test.mjs, 10/8)
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, existsSync, chmodSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -401,6 +401,33 @@ check("midday: a stale request from an ended session doesn't silence the next on
     check('hot: notifyAmberUncycled flipped mid-run notifies the next crossing, no restart', sent().map((e) => e.kind), ['context-high']);
   } finally { hw.kill(); }
   rmSync(hot, { recursive: true, force: true });
+}
+
+// nightwatch#22: inside the nightly window an armed lane's nightly bell covers
+// it, so --midday stands aside; an unarmed lane has no nightly bell, so it is
+// rung, and the daemon carries the request out.
+{
+  const win = mkdtempSync(join(process.env.TMPDIR ?? '/tmp', 'watch-win-'));
+  for (const d of ['wakecycle', 'ladder']) mkdirSync(join(win, d), { recursive: true });
+  const winCfg = join(win, 'nightwatch.config.json');
+  writeFileSync(winCfg, JSON.stringify({
+    weftRoot: win, timezone: 'UTC', schedule: { sleep: hhmm(now - 3600_000), wake: hhmm(now + 3600_000) },
+    lanes: { opus: { targetTokens: 250000, middayCycle: { softPct: 0.85, urgentPct: 0.95, urgentMin: 10 } } },
+    notify: { macos: false, command: recorder }, paths: { transcripts: dirs.projects, sessions: dirs.sessions },
+  }));
+  session('s-win-opus'); write('s-win-opus', [usageAt(880_000)]);
+  writeFileSync(join(win, 'wakecycle', 'lane.s-win-opus'), JSON.stringify({ lane: 'opus' }));
+  const env = { ...process.env, NIGHTWATCH_CONFIG: winCfg };
+  for (const k of ['WEFT_CONFIG', 'WEFT_LANE', 'NIGHTWATCH_LANE']) delete env[k];
+  const midday = () => spawnSync(process.execPath, [join(HERE, 'nightshift.mjs'), '--midday', 'opus', 'soft', '--session', 's-win-opus'], { env, encoding: 'utf8', timeout: 20_000 });
+  const winState = () => { try { return JSON.parse(readFileSync(join(win, 'wakecycle', 'nightshift.state.json'), 'utf8')); } catch { return {}; } };
+  const unarmed = midday();
+  check('window: an unarmed lane is rung inside the nightly window', [unarmed.status, winState().opus?.foldRequest?.tier], [0, 'soft']);
+  rmSync(join(win, 'wakecycle', 'nightshift.state.json'), { force: true });
+  writeFileSync(join(win, 'wakecycle', 'nightshift.armed'), 'opus\n');
+  const armedRun = midday();
+  check('window: an armed lane stands aside for its nightly bell', [armedRun.status, /nightly bell covers/.test(armedRun.stdout), winState().opus?.foldRequest ?? null], [0, true, null]);
+  rmSync(win, { recursive: true, force: true });
 }
 
 // A passing run leaves nothing behind; a failing one keeps its scratch hub

@@ -389,6 +389,7 @@ const io = {
   now: () => Date.now(),
   nowMin,
   armedLanes,
+  configuredLanes: () => Object.keys(CFG.lanes ?? {}),
   configMtime: () => { try { return statSync(CFG.__configFile).mtimeMs; } catch { return 0; } },
   reloadConfig: () => { try { return reloadConfig(); } catch (e) { log(`config reload FAILED (keeping the running schedule): ${e.message}`); return null; } },
   state,
@@ -554,15 +555,30 @@ function tickWith(io) {
     }
   }
 
-  const lanes = io.armedLanes();
-  if (!lanes.length) return; // disarmed — the latch
+  // Arming is the Nightly toggle: the 02:00 bell, the night's close and the
+  // morning wake. A fold request (a midday bell, a Fold now press) is carried
+  // out for any configured lane, armed or not (Ra, 10/19, nightwatch#22): it
+  // has already reached the agent, and an agent told to fold whose window
+  // never closes and reopens keeps running in the full context the request
+  // was meant to end, while the card counts down to a force that never comes.
+  // Every request comes from a person's press or the lane's own middayCycle.
+  const armed = io.armedLanes();
+  const st = io.state();
+  const configured = new Set(io.configuredLanes?.() ?? armed);
+  const requested = Object.keys(st).filter((l) => !armed.includes(l) && configured.has(l)
+    && (st[l]?.foldRequest || st[l]?.refreshWake || st[l]?.refreshFrom));
+  const lanes = [...armed, ...requested];
+  if (!lanes.length) return; // nothing armed and no fold request standing
   const m = io.nowMin();
   const now = io.now();
-  const st = io.state();
 
   for (const lane of lanes) {
     const laneState = (st[lane] ??= {});
     const nwMtime = io.nextWakeMtime(lane);
+    // An unarmed lane is here only for its fold request: no bell, no night
+    // close, no scheduled wake. With no night to fold into, its refresh runs
+    // at any hour, the sleep window included.
+    const isArmed = armed.includes(lane);
 
     // ── Fold-now (Ra, 10/6: "ring the bell first, force on timeout" +
     // "close the window and open a new one right away"). The CLI rings
@@ -606,7 +622,7 @@ function tickWith(io) {
     }
     // Refresh close: a met fold-now leaves the old panel open; close it as
     // the night does (slept + quiet), any hour, then the wake side runs.
-    if (laneState.refreshWake && !inSleepWindow(m)) {
+    if (laneState.refreshWake && (!inSleepWindow(m) || !isArmed)) {
       // Close BY IDENTITY, never by lane: the first live Fold now (10/6
       // 23:16) closed its own freshly-woken session, because a resumed
       // tail's transcript reads hours-quiet by construction and this
@@ -630,7 +646,7 @@ function tickWith(io) {
 
     const live = laneSessionsRanked(io.liveSessions(), io.laneAttribution, lane);
 
-    if (inSleepWindow(m)) {
+    if (isArmed && inSleepWindow(m)) {
       // Bell: once per window, only if the lane is actually up.
       if (live.length && now - (laneState.belledAt ?? 0) > WINDOW_GAP_MS) {
         // A session whose newest reply is "Prompt is too long" can't take any
@@ -702,7 +718,10 @@ function tickWith(io) {
         }
       }
     }
-    if (!inSleepWindow(m)) {
+    if (!inSleepWindow(m) || !isArmed) {
+      // The schedule never wakes an unarmed lane (Ra's 10/9 spec: a disarmed
+      // agent put to sleep stays asleep until the Wake button); a refresh does.
+      if (!isArmed && !laneState.refreshWake) continue;
       // ── Wake side: wake anything that slept and hasn't been woken — but
       // ONLY inside a bounded morning window [WAKE, WAKE+2h). Outside it, a
       // fresh sleep receipt means a DELIBERATE daytime/evening fold (Ra
@@ -897,6 +916,7 @@ async function rehearse() {
       now: () => (w.day * 1440 + w.min) * 60_000 + (w.ms ?? 0),
       nowMin: () => w.min,
       armedLanes: () => w.armed ?? lanes, // scenarios may disarm (w.armed = [])
+      configuredLanes: () => w.configured ?? lanes, // scenarios may remove a lane
       state: () => w.st,
       saveState: () => {},
       liveSessions: () => w.sessions.map(({ pid, sessionId }) => ({ pid, sessionId })),
@@ -1305,6 +1325,81 @@ async function rehearse() {
     check('disarmed-sleep', 'a disarmed slept lane is never woken by the schedule', count(w, 'wake:') === 0, w.events.join());
   }
 
+  // nightwatch#22 (Ra, 10/19): arming is the Nightly toggle only. A fold
+  // request on an unarmed lane is still carried out; nothing else is.
+  { // A disarmed lane awake all night gets no bell and no orphan fold.
+    const w = makeWorld(['fable']);
+    w.armed = [];
+    w.sessions = [{ pid: 50, sessionId: 'sess-f', lane: 'fable', quietMs: 60 * 60_000 }];
+    w.step(14 * 60); // 19:00 → 09:00, through the whole window
+    check('unarmed-night', 'no bell, no orphan fold, no close, no wake', count(w, 'bell:') + count(w, 'orphanfold:') + count(w, 'close:') + count(w, 'wake:') === 0, w.events.join());
+  }
+
+  { // A soft midday request on a disarmed lane, met by the agent's own fold:
+    // the window closes and reopens, as on an armed lane.
+    const w = makeWorld(['fable']);
+    w.armed = [];
+    w.sessions = [{ pid: 51, sessionId: 'sess-f', lane: 'fable', quietMs: 10 * 60_000 }];
+    w.st.fable = { foldRequest: { sessionId: 'sess-f', requestedAt: w.io.now(), deadline: null, tier: 'soft' } };
+    w.step(3);
+    check('unarmed-midday', 'a soft request is never forced', count(w, 'orphanfold:') === 0 && !!w.st.fable.foldRequest, JSON.stringify(w.st.fable));
+    w.nextWake.fable = w.io.now(); // the agent folds at its own seam
+    w.step(1);
+    check('unarmed-midday', 'met: the request clears and a refresh is set', !w.st.fable.foldRequest && w.st.fable.refreshWake === true, JSON.stringify(w.st.fable));
+    w.step(3);
+    check('unarmed-midday', 'the old window closes and a fresh one opens', count(w, 'close:fable') === 1 && count(w, 'wake:fable') === 1, w.events.join());
+    w.step(2);
+    check('unarmed-midday', 'the wake confirms and the refresh clears', !w.st.fable.refreshWake && !!w.st.fable.wokenAt, JSON.stringify(w.st.fable));
+    w.step(24 * 60);
+    check('unarmed-midday', 'and the schedule still never belled or woke it', count(w, 'bell:') === 0 && count(w, 'wake:fable') === 1, w.events.join());
+  }
+
+  { // Fold now on a disarmed lane, unanswered: the deadline forces it.
+    const w = makeWorld(['fable']);
+    w.armed = [];
+    w.sessions = [{ pid: 52, sessionId: 'sess-f', lane: 'fable', quietMs: 10 * 60_000 }];
+    w.st.fable = { foldRequest: { sessionId: 'sess-f', requestedAt: w.io.now(), deadline: w.io.now() + 10 * 60_000 } };
+    w.step(9);
+    check('unarmed-force', 'no force while the deadline holds', count(w, 'orphanfold:') === 0, w.events.join());
+    w.step(6);
+    check('unarmed-force', 'forced at the deadline, then a fresh window', count(w, 'orphanfold:fable') === 1 && count(w, 'wake:fable') === 1, w.events.join());
+  }
+
+  { // Inside the nightly window a disarmed lane has no night to fold into:
+    // its met request refreshes at once, not at the morning wake.
+    const w = makeWorld(['fable']);
+    w.armed = [];
+    w.step(8 * 60); // 19:00 → 03:00
+    w.sessions = [{ pid: 53, sessionId: 'sess-f', lane: 'fable', quietMs: 10 * 60_000 }];
+    w.st.fable = { foldRequest: { sessionId: 'sess-f', requestedAt: w.io.now(), deadline: null, tier: 'soft' } };
+    w.nextWake.fable = w.io.now() + 1; // folded just after the request
+    w.step(5);
+    check('unarmed-window', 'closed and reopened at 03:0x, not 08:00', count(w, 'close:fable') === 1 && count(w, 'wake:fable') === 1 && /@\dd03:0/.test(w.events.find((e) => e.startsWith('wake:fable')) ?? ''), w.events.join());
+  }
+
+  { // A request standing through the morning window on a disarmed lane with
+    // an old sleep receipt: the request brings the lane into the loop, but
+    // the schedule's wake still never fires for it (Ra's 10/9 spec).
+    const w = makeWorld(['fable']);
+    w.armed = [];
+    w.nextWake.fable = w.io.now() - 10 * 3600_000; // slept long ago, never woken
+    w.step(13 * 60); // 19:00 → 08:00
+    w.sessions = [{ pid: 55, sessionId: 'sess-f', lane: 'fable', quietMs: 10 * 60_000 }];
+    w.st.fable = { foldRequest: { sessionId: 'sess-f', requestedAt: w.io.now(), deadline: null, tier: 'soft' } };
+    w.step(60); // through the morning window, unanswered
+    check('unarmed-morning', 'a standing request never sets off the scheduled wake', count(w, 'wake:') === 0, w.events.join());
+  }
+
+  { // A request standing for a lane no longer in the config does nothing.
+    const w = makeWorld(['fable']);
+    w.armed = [];
+    w.configured = [];
+    w.sessions = [{ pid: 54, sessionId: 'sess-f', lane: 'fable', quietMs: 10 * 60_000 }];
+    w.st.fable = { foldRequest: { sessionId: 'sess-f', requestedAt: w.io.now(), deadline: w.io.now() } };
+    w.step(30);
+    check('unarmed-removed', 'no fold, close or wake for a removed lane', count(w, 'orphanfold:') + count(w, 'close:') + count(w, 'wake:') === 0, w.events.join());
+  }
+
   { // Regression (opus, 10/9): a NIGHT bell whose orphan fold was deferred
     // past the wake (real work under the panel all night, the 10/8 shape)
     // must still wake THIS morning — the trigger counts from the bell, not
@@ -1444,7 +1539,9 @@ if (process.argv.includes('--midday')) {
     process.exit(5);
   }
   const nowMin_ = nowMin();
-  if (inSleepWindow(nowMin_)) {
+  // Only an armed lane has a nightly bell to cover it (nightwatch#22); an
+  // unarmed one is rung at any hour, and its refresh runs at once.
+  if (inSleepWindow(nowMin_) && armedLanes().includes(lane)) {
     console.log(`--midday: inside the nightly window; the nightly bell covers ${lane}`);
     process.exit(0);
   }
