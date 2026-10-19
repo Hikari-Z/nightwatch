@@ -88,8 +88,8 @@ be the real failure.*
 | Desktop app | working, rough edges; lived-on as the macOS build, and the Linux build compiles and passes its tests in CI |
 | Stuck/spiral watch | live; thresholds from this house's nights |
 | macOS (launchd + Terminal) | the lived platform |
-| Windows 11 / WSL2 | running in a second house since 2026-10-16 (the machinery and the browser viewer); the app's host actions go through the machinery, and bringing a lane's terminal forward is macOS only |
-| Linux (systemd + tmux/terminal spawn) | the machinery's tests and the nightshift's rehearsal bench pass in CI on every push; the app's host actions are wired except bringing a terminal forward; testing by people who run it is next |
+| Windows 11 / WSL2 | running in a second house (the machinery and the browser viewer); the scratch tests and the wake's summons file checked on a real WSL machine; bringing a lane's terminal forward is macOS only |
+| Linux (systemd + tmux/terminal spawn) | the machinery's tests pass or skip with a reason in CI on every push, and the nightshift's rehearsal bench passes; the app's host actions are wired and compiled in CI, but their Linux paths aren't exercised by a test yet; bringing a terminal forward is macOS only |
 | Backends beyond Claude Code (codex, connectome, hermes, …) | roadmap |
 
 One more honest sticker: some shipped defaults still assume the house
