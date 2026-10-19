@@ -78,6 +78,17 @@ function isHarnessLoaded(e) {
   return e?.type === 'attachment' && HARNESS_LOADED.has(e.attachment?.type);
 }
 
+// Entries Claude Code writes as its own request log (`api-request`, since
+// 2.1.300): each carries the request's full params, so a day's transcript
+// holds megabytes of them, but a resume never loads one into context. They
+// stay in the kept file (they are the session's own record), and they weigh
+// nothing in the estimate — counting them produced the 10/16–10/18 phantom
+// overshoots (a 6.22x warning over a ~88k conversation, and a 1.33x fold
+// receipt the night the conversation was under target).
+function isResumeInert(e) {
+  return e?.type === 'api-request';
+}
+
 // STALE USAGE: every reply records the token usage of the request that made
 // it. Claude Code reads the newest one as the session's current size, and on
 // resume it trusted the kept tail's last figure: 937k, recorded at 93% before
@@ -148,7 +159,7 @@ let est = 0;
 let cut = lines.length; // index of first KEPT line
 const suffixEst = new Array(lines.length + 1).fill(0);
 for (let i = lines.length - 1; i >= 0; i--) {
-  if (!isHarnessLoaded(entries[i])) est += estLine(lines[i]);
+  if (!isHarnessLoaded(entries[i]) && !isResumeInert(entries[i])) est += estLine(lines[i]);
   suffixEst[i] = est;
   if (est >= target && cut === lines.length) cut = i;
 }
@@ -209,7 +220,7 @@ for (let i = cut; i < lines.length; i++) {
   if (stripped) { e = stripped; usageStripped++; changed = true; }
   const line = changed ? JSON.stringify(e) : lines[i];
   kept.push(line);
-  keptEst += estLine(line);
+  if (!isResumeInert(e)) keptEst += estLine(line);
 }
 
 const newId = randomUUID();
