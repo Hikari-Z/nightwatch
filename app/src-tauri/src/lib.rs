@@ -70,7 +70,12 @@ fn ensure_server() -> Result<(), String> {
     if server_up() {
         return Ok(());
     }
-    let node = find_node().ok_or("node not found (looked in /opt/homebrew/bin, /usr/local/bin, and the login shell)")?;
+    let node = find_node().ok_or("node not found (looked in /opt/homebrew/bin, /usr/local/bin, the login shell and ~/.nvm)")?;
+    // A downloaded build on a machine with no hub yet has no tree to find:
+    // say how to give it one instead of failing on a file it can't open.
+    if !is_repo(&repo()) {
+        return Err("Nightwatch can't find its source checkout (the viewer and machinery live there). Clone github.com/slimepriestess/nightwatch, then either set NIGHTWATCH_REPO to that folder for your desktop session (on Linux, a line NIGHTWATCH_REPO=/path/to/nightwatch in ~/.config/environment.d/nightwatch.conf, then log in again), or run Set up once from the checkout: node machinery/nightwatch.mjs.".into());
+    }
     let gui = repo().join("gui"); // the product's own viewer, beside this app in the repo
     let log = std::fs::OpenOptions::new().create(true).append(true).open(gui.join("viewer.log")).map_err(|e| e.to_string())?;
     Command::new(node)
@@ -122,21 +127,42 @@ const HOST_CAN: &[&str] = &["hide-window", "wake", "sleep", "retry-wake", "wake-
 // The product's own source tree (the repo this app was built from): its gui/
 // serves the page and its machinery/ is what Set up points new hubs at.
 const REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-// The tree this app was built from, while it's still there: every local
-// build, macOS's install.sh among them. A bundle built somewhere else (a
-// Linux package from CI) finds the tree at run time instead: NIGHTWATCH_REPO
-// when it's set, else the tree a registered hub's machinery lives in. A
-// candidate counts only if it holds both the viewer and the machinery.
+// Where the source tree comes from, in order: NIGHTWATCH_REPO when it's set
+// (an absolute path; this overrides the built tree on macOS too, for the
+// rare launch whose environment carries it), then the tree this app was
+// built from, while it's still there (every local build, macOS's install.sh
+// among them), then the tree a registered hub's machinery lives in, for a
+// bundle built somewhere else (a Linux package from CI). A candidate counts
+// only if it holds both the viewer and the machinery. Decided once per run
+// and logged with its reason, so the viewer the app started and a later Set
+// up can't disagree about which tree is Nightwatch.
 fn repo() -> PathBuf {
-    repo_candidates(std::env::var("NIGHTWATCH_REPO").ok(), Path::new(REPO), &all_hub_roots())
-        .into_iter().find(|p| is_repo(p)).map(|p| canon(&p))
-        .unwrap_or_else(|| canon(Path::new(REPO)))
+    static REPO_CHOICE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    REPO_CHOICE.get_or_init(|| {
+        let candidates = repo_candidates(std::env::var("NIGHTWATCH_REPO").ok(), Path::new(REPO), &all_hub_roots());
+        let found: Vec<&(PathBuf, String)> = candidates.iter().filter(|(p, _)| is_repo(p)).collect();
+        match found.first() {
+            Some((p, why)) => {
+                log::info!("source tree: {} ({why})", p.display());
+                let others: Vec<String> = found.iter().skip(1).map(|(q, _)| canon(q)).filter(|q| *q != canon(p)).map(|q| q.display().to_string()).collect();
+                if !others.is_empty() { log::warn!("other trees a hub points at, not used: {}", others.join(", ")); }
+                canon(p)
+            }
+            None => {
+                log::error!("no source tree found (NIGHTWATCH_REPO unset or not a tree, the built tree {REPO} gone, no registered hub pointing at one)");
+                canon(Path::new(REPO))
+            }
+        }
+    }).clone()
 }
-fn repo_candidates(env: Option<String>, built: &Path, hubs: &[PathBuf]) -> Vec<PathBuf> {
-    let mut c: Vec<PathBuf> = env.filter(|e| e.starts_with('/')).map(PathBuf::from).into_iter().collect();
-    c.push(built.to_path_buf());
+fn repo_candidates(env: Option<String>, built: &Path, hubs: &[PathBuf]) -> Vec<(PathBuf, String)> {
+    let mut c: Vec<(PathBuf, String)> = env.filter(|e| e.starts_with('/')).map(|e| (PathBuf::from(e), "NIGHTWATCH_REPO".to_string())).into_iter().collect();
+    c.push((built.to_path_buf(), "the tree this app was built from".into()));
     for root in hubs {
-        if let Some(p) = Hub::open(root).ok().and_then(|h| h.machinery.parent().map(Path::to_path_buf)) { c.push(p); }
+        // The machinery's own location, a symlinked one followed to its target.
+        if let Some(p) = Hub::open(root).ok().and_then(|h| canon(&h.machinery).parent().map(Path::to_path_buf)) {
+            c.push((p, format!("the tree {} runs from", root.display())));
+        }
     }
     c
 }
@@ -402,30 +428,51 @@ fn restart_app(app: &AppHandle) {
 #[cfg(test)]
 mod repo_tests {
     use super::*;
-    // A bundle built elsewhere: its baked-in tree is gone, and the person's
-    // own checkout is found through the hub that points at it.
-    #[test]
-    fn finds_the_tree_through_a_registered_hub_when_the_built_one_is_gone() {
-        let t = std::env::temp_dir().join(format!("nw-repo-test-{}", std::process::id()));
-        let tree = t.join("checkout");
+    fn make_tree(t: &Path, name: &str) -> PathBuf {
+        let tree = t.join(name);
         std::fs::create_dir_all(tree.join("gui")).unwrap();
         std::fs::create_dir_all(tree.join("machinery")).unwrap();
         std::fs::write(tree.join("gui/server.mjs"), "").unwrap();
         std::fs::write(tree.join("machinery/nightshift.mjs"), "").unwrap();
-        let hub = t.join("hub");
+        tree
+    }
+    fn hub_at(t: &Path, name: &str, tree: &Path) -> PathBuf {
+        let hub = t.join(name);
         std::fs::create_dir_all(&hub).unwrap();
         std::fs::write(hub.join("nightwatch.config.json"), format!(r#"{{"paths":{{"machinery":"{}"}}}}"#, tree.join("machinery").display())).unwrap();
+        hub
+    }
+    fn first_tree(c: Vec<(PathBuf, String)>) -> Option<PathBuf> { c.into_iter().map(|(p, _)| p).find(|p| is_repo(p)) }
+
+    // A bundle built elsewhere: its baked-in tree is gone, and the person's
+    // own checkout is found through the hub that points at it.
+    #[test]
+    fn finds_the_tree_through_a_registered_hub_when_the_built_one_is_gone() {
+        let t = std::env::temp_dir().join(format!("nw-repo-test-a-{}", std::process::id()));
+        let tree = make_tree(&t, "checkout");
+        let hub = hub_at(&t, "hub", &tree);
         let gone = t.join("ci-runner/nightwatch");
-        let c = repo_candidates(None, &gone, &[hub.clone()]);
-        assert_eq!(c.into_iter().find(|p| is_repo(p)), Some(tree.clone()));
-        // NIGHTWATCH_REPO wins when it's a real tree; a relative or bogus one is passed over.
-        let c = repo_candidates(Some(tree.display().to_string()), &gone, &[]);
-        assert_eq!(c.into_iter().find(|p| is_repo(p)), Some(tree.clone()));
-        let c = repo_candidates(Some("relative/path".into()), &gone, &[]);
-        assert_eq!(c.into_iter().find(|p| is_repo(p)), None);
+        assert_eq!(first_tree(repo_candidates(None, &gone, &[hub])), Some(canon(&tree)));
         // A half tree (machinery without the viewer) isn't a tree.
         std::fs::remove_file(tree.join("gui/server.mjs")).unwrap();
         assert!(!is_repo(&tree));
+        let _ = std::fs::remove_dir_all(&t);
+    }
+
+    // The order: NIGHTWATCH_REPO over a real built tree, the built tree over
+    // a hub's, and a relative NIGHTWATCH_REPO is never a candidate at all.
+    #[test]
+    fn the_order_is_env_then_built_then_hubs() {
+        let t = std::env::temp_dir().join(format!("nw-repo-test-b-{}", std::process::id()));
+        let env_tree = make_tree(&t, "env-tree");
+        let built = make_tree(&t, "built-tree");
+        let hub_tree = make_tree(&t, "hub-tree");
+        let hub = hub_at(&t, "hub", &hub_tree);
+        assert_eq!(first_tree(repo_candidates(Some(env_tree.display().to_string()), &built, &[hub.clone()])), Some(env_tree.clone()));
+        assert_eq!(first_tree(repo_candidates(None, &built, &[hub.clone()])), Some(built.clone()));
+        let c = repo_candidates(Some("relative/env-tree".into()), &built, &[]);
+        assert!(c.iter().all(|(p, _)| p.is_absolute()), "{c:?}");
+        assert_eq!(c.len(), 1);
         let _ = std::fs::remove_dir_all(&t);
     }
 }
