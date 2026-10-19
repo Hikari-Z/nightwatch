@@ -1487,7 +1487,7 @@ if (process.argv.includes('--armed')) {
 for (const op of ['--arm', '--disarm']) {
   if (!process.argv.includes(op)) continue;
   const lane = process.argv[process.argv.indexOf(op) + 1];
-  if (!lane || !(lane in (CFG.lanes ?? {}))) {
+  if (!lane || !Object.hasOwn(CFG.lanes ?? {}, lane)) {
     console.error(`${op}: unknown agent "${lane ?? ''}" (known: ${Object.keys(CFG.lanes ?? {}).join(', ')})`);
     process.exit(2);
   }
@@ -1508,7 +1508,7 @@ for (const op of ['--arm', '--disarm']) {
 // lane hasn't folded on its own.
 if (process.argv.includes('--fold-now')) {
   const lane = process.argv[process.argv.indexOf('--fold-now') + 1];
-  if (!lane || !(lane in (CFG.lanes ?? {}))) {
+  if (!lane || !Object.hasOwn(CFG.lanes ?? {}, lane)) {
     console.error(`--fold-now: unknown agent "${lane ?? ''}" (known: ${Object.keys(CFG.lanes ?? {}).join(', ')})`);
     process.exit(2);
   }
@@ -1561,7 +1561,7 @@ if (process.argv.includes('--midday')) {
   const lane = process.argv[at + 1];
   const tier = process.argv[at + 2];
   const mc = CFG.lanes?.[lane]?.middayCycle;
-  if (!lane || !(lane in (CFG.lanes ?? {}))) {
+  if (!lane || !Object.hasOwn(CFG.lanes ?? {}, lane)) {
     console.error(`--midday: unknown agent "${lane ?? ''}" (known: ${Object.keys(CFG.lanes ?? {}).join(', ')})`);
     process.exit(2);
   }
@@ -1641,7 +1641,7 @@ if (process.argv.includes('--midday')) {
 // awake, the trust the daemon's own wake-suppression uses.
 if (process.argv.includes('--wake')) {
   const lane = process.argv[process.argv.indexOf('--wake') + 1];
-  if (!lane || !(lane in (CFG.lanes ?? {}))) {
+  if (!lane || !Object.hasOwn(CFG.lanes ?? {}, lane)) {
     console.error(`--wake: unknown agent "${lane ?? ''}" (known: ${Object.keys(CFG.lanes ?? {}).join(', ')})`);
     process.exit(2);
   }
@@ -1664,7 +1664,7 @@ if (process.argv.includes('--wake')) {
 // not awake, nonzero with one line, like sleep.mjs's own guards.
 if (process.argv.includes('--ring')) {
   const lane = process.argv[process.argv.indexOf('--ring') + 1];
-  if (!lane || !(lane in (CFG.lanes ?? {}))) {
+  if (!lane || !Object.hasOwn(CFG.lanes ?? {}, lane)) {
     console.error(`--ring: unknown agent "${lane ?? ''}" (known: ${Object.keys(CFG.lanes ?? {}).join(', ')})`);
     process.exit(2);
   }

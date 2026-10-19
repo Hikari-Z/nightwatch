@@ -1,8 +1,14 @@
 // wake-cli-test.mjs — nightshift.mjs --wake against a scratch hub, the app's
-// Wake button off macOS (nightwatch#2). The platform's terminal launcher
-// (osascript on macOS, x-terminal-emulator on a Linux desktop) is a stub
-// first on PATH that records its argv, so no real window opens. Checks:
+// Wake button off macOS (nightwatch#2). Every terminal launcher the platform
+// might call (osascript on macOS, wt.exe on WSL, x-terminal-emulator on a
+// Linux desktop, tmux headless) is a stub first on PATH that records its
+// argv, so no real window opens. (The first version left wt.exe out, and on
+// WSL it opened a real Windows Terminal tab: marginalia's report, 10/19.) On
+// WSL the launch names a summons file, not the command, so the checks read
+// through it, as marginalia's fix does. Checks:
 //   - an unknown agent is refused, and nothing is launched;
+//   - so is a name every object inherits ("constructor"): the guard reads
+//     the config's own lanes only (Sonnet Weft's second read);
 //   - an agent the registry shows awake is refused, and nothing is launched;
 //   - otherwise the launcher gets this hub's wake.sh for that lane, with the
 //     hub's config named, exactly as the daemon's own 08:00 wake builds it.
@@ -22,7 +28,7 @@ function check(name, ok, detail = '') {
 const hub = mkdtempSync(join(tmpdir(), 'nw-wakecli-'));
 for (const d of ['wakecycle', 'ladder', 'sessions', 'projects', 'bin']) mkdirSync(join(hub, d), { recursive: true });
 const record = join(hub, 'launched.argv');
-for (const name of ['osascript', 'x-terminal-emulator']) {
+for (const name of ['osascript', 'wt.exe', 'x-terminal-emulator', 'tmux']) {
   const stub = join(hub, 'bin', name);
   writeFileSync(stub, `#!/bin/sh\nprintf '%s\\n' "${name}" "$@" >> "${record}"\n`);
   chmodSync(stub, 0o755);
@@ -45,6 +51,8 @@ const launched = () => existsSync(record) ? readFileSync(record, 'utf8') : '';
 try {
   const unknown = wake('nobody');
   check('an unknown agent is refused, nothing launched', unknown.status === 2 && launched() === '', `status ${unknown.status}: ${unknown.stderr}`);
+  const inherited = wake('constructor');
+  check('an inherited name ("constructor") is refused, nothing launched', inherited.status === 2 && launched() === '', `status ${inherited.status}: ${inherited.stdout}${inherited.stderr}`);
 
   // A live session the registry attributes to main: a process whose command
   // name is claude (a copy of sleep), its status file, and the registry entry.
@@ -62,7 +70,10 @@ try {
   rmSync(join(hub, 'wakecycle', 'lane.sess-up'));
 
   const ok = wake('main');
-  const argv = launched();
+  // On WSL wt.exe is handed a summons file that holds the command; read it too.
+  const sent = launched();
+  const summons = sent.match(/sh "([^"]+wake-summon-[^"]+\.sh)"/);
+  const argv = summons && existsSync(summons[1]) ? `${sent}\n${readFileSync(summons[1], 'utf8')}` : sent;
   check('a sleeping agent is woken: exit 0 and a terminal launched', ok.status === 0 && /Waking main/.test(ok.stdout) && argv !== '', `status ${ok.status}: ${ok.stderr}`);
   check("the launcher runs this hub's wake.sh for that lane", argv.includes(join(MACHINERY, 'wake.sh')) && /wake\.sh\\?"? main/.test(argv), argv);
   check("and names this hub's config", argv.includes(`NIGHTWATCH_CONFIG=`) && argv.includes(cfgFile), argv);

@@ -265,8 +265,8 @@ fn wake(h: &Hub, lane: Option<&str>) -> Result<String, String> {
     let sessions = receipt_sessions(h, &lane)?;
     // Every process's full command line: BSD ps on macOS, procps on Linux
     // (where -e means every process; on macOS it adds the environment).
-    let ps_args: &[&str] = if cfg!(target_os = "macos") { &["-axo", "command"] } else { &["-eo", "args"] };
-    let ps = Command::new("ps").args(ps_args).output().map_err(|e| e.to_string())?;
+    let (ps_bin, ps_args): (&str, &[&str]) = if cfg!(target_os = "macos") { ("/bin/ps", &["-axo", "command"]) } else { ("ps", &["-eo", "args"]) };
+    let ps = Command::new(ps_bin).args(ps_args).output().map_err(|e| e.to_string())?;
     if let Some(s) = live_resume(&String::from_utf8_lossy(&ps.stdout), &sessions) {
         return Err(format!("{lane} is already awake (a session is resuming {}).", &s[..8.min(s.len())]));
     }
