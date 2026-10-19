@@ -12,6 +12,12 @@ import { sweepOrphans } from './chrome.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+// chrome.mjs launches this Chrome; without it every case would time out
+// waiting for a browser that never starts (nightwatch#14). Say so and stop.
+if (!existsSync(CHROME)) {
+  console.log(`SKIP chrome-test: no Chrome at ${CHROME} (this bench drives a real headless Chrome; it runs on a Mac with Chrome installed)`);
+  process.exit(0);
+}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let pass = 0, fail = 0;
 const check = (name, ok, why = '') => { ok ? pass++ : fail++; console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : `  (${why})`}`); };
