@@ -54,3 +54,32 @@ jobs:
         run: cargo check --manifest-path app/src-tauri/Cargo.toml
       - name: the bridge's tests
         run: cargo test --manifest-path app/src-tauri/Cargo.toml
+
+  # The desktop app as a person on Linux downloads it: a .deb and an AppImage,
+  # kept as the run's artifacts. Built here, the app looks for its viewer and
+  # machinery at run time (NIGHTWATCH_REPO, else the tree the person's
+  # registered hub points at), so the bundle works beside their own checkout.
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tauri's Linux dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev build-essential pkg-config
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: build the .deb and the AppImage
+        working-directory: app
+        run: |
+          npm ci
+          npx tauri build --bundles deb,appimage
+      - name: the installer's syntax
+        run: sh -n app/install.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nightwatch-linux
+          path: |
+            app/src-tauri/target/release/bundle/deb/*.deb
+            app/src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
