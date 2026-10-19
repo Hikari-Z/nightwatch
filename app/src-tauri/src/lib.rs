@@ -31,9 +31,33 @@ fn find_node() -> Option<PathBuf> {
             return Some(PathBuf::from(p));
         }
     }
-    let out = Command::new("/bin/zsh").args(["-lc", "command -v node"]).output().ok()?;
-    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    (!s.is_empty()).then(|| PathBuf::from(s))
+    // A login shell's PATH: zsh on macOS; on Linux the person's own $SHELL,
+    // then bash (most Linux installs have no zsh, nightwatch#2). The shell is
+    // only ever the program run, never text spliced into a command line, and
+    // the command it runs is fixed.
+    let mut shells: Vec<String> = vec!["/bin/zsh".into()];
+    if !cfg!(target_os = "macos") {
+        shells = std::env::var("SHELL").ok().filter(|s| s.starts_with('/')).into_iter().collect();
+        shells.push("/bin/bash".into());
+    }
+    for sh in shells {
+        let Ok(out) = Command::new(&sh).args(["-lc", "command -v node"]).output() else { continue };
+        let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if !s.is_empty() && Path::new(&s).is_file() { return Some(PathBuf::from(s)); }
+    }
+    // nvm installs node per version under ~/.nvm and wires it up only in an
+    // interactive shell's rc file, which a login shell may not read (WSL's
+    // first install, 10/16). The newest version installed.
+    let nvm = home().join(".nvm/versions/node");
+    let mut versions: Vec<PathBuf> = std::fs::read_dir(&nvm).ok()?.flatten().map(|e| e.path().join("bin/node")).filter(|p| p.is_file()).collect();
+    versions.sort_by_key(|p| node_version(p));
+    versions.pop()
+}
+
+// "v22.21.1" from ~/.nvm/versions/node/v22.21.1/bin/node, as numbers, so
+// v22 sorts above v9.
+fn node_version(p: &Path) -> Vec<u64> {
+    p.ancestors().nth(2).and_then(|d| d.file_name()).map(|n| n.to_string_lossy().trim_start_matches('v').split('.').map(|x| x.parse().unwrap_or(0)).collect()).unwrap_or_default()
 }
 
 fn server_up() -> bool {
@@ -84,7 +108,15 @@ fn toggle(app: &AppHandle) {
 // The page's write buttons arrive here through window.NW_HOST.act (contract
 // v0.8). Built one at a time, safest first (Ra, 10/6): hide-window, then
 // wake. Anything not listed in HOST_CAN stays read-only in the page.
+#[cfg(target_os = "macos")]
 const HOST_CAN: &[&str] = &["hide-window", "wake", "sleep", "retry-wake", "open-terminal", "hide-terminal", "terminal-state", "wake-all", "sleep-all", "restore-checkpoint", "restart-daemon",
+    "save-lane", "save-settings", "toggle-nightly", "arm-lane", "toggle-midday", "remove-lane", "emergency-fold", "fold-all", "run-doctor"];
+// Off macOS a lane's terminal can't be found or raised: Terminal tabs are
+// found by tty through AppleScript, and the Linux answer is "don't" (a wrong
+// window raised is worse than none, nightwatch#2). Those buttons stay
+// read-only in the page; everything else is wired.
+#[cfg(not(target_os = "macos"))]
+const HOST_CAN: &[&str] = &["hide-window", "wake", "sleep", "retry-wake", "wake-all", "sleep-all", "restore-checkpoint", "restart-daemon",
     "save-lane", "save-settings", "toggle-nightly", "arm-lane", "toggle-midday", "remove-lane", "emergency-fold", "fold-all", "run-doctor"];
 
 // The product's own source tree (the repo this app was built from): its gui/
@@ -185,8 +217,8 @@ impl Hub {
     fn daemon_label(&self) -> String {
         std::fs::read_dir(&self.state).ok().into_iter().flatten().flatten()
             .map(|e| e.file_name().to_string_lossy().to_string())
-            .find(|n| n.starts_with("house.nightwatch.") && n.ends_with(".plist"))
-            .map(|n| n.trim_end_matches(".plist").to_string())
+            .find(|n| n.starts_with("house.nightwatch.") && (n.ends_with(".plist") || n.ends_with(".service")))
+            .map(|n| n.trim_end_matches(".plist").trim_end_matches(".service").to_string())
             .unwrap_or_else(|| "com.weft.nightshift".into())
     }
     // Every CLI runs this hub's machinery against this hub's config.
@@ -231,9 +263,17 @@ fn live_resume(ps_out: &str, sessions: &[String]) -> Option<String> {
 fn wake(h: &Hub, lane: Option<&str>) -> Result<String, String> {
     let lane = h.check_lane(lane)?;
     let sessions = receipt_sessions(h, &lane)?;
-    let ps = Command::new("/bin/ps").args(["-axo", "command"]).output().map_err(|e| e.to_string())?;
+    // Every process's full command line: BSD ps on macOS, procps on Linux
+    // (where -e means every process; on macOS it adds the environment).
+    let ps_args: &[&str] = if cfg!(target_os = "macos") { &["-axo", "command"] } else { &["-eo", "args"] };
+    let ps = Command::new("ps").args(ps_args).output().map_err(|e| e.to_string())?;
     if let Some(s) = live_resume(&String::from_utf8_lossy(&ps.stdout), &sessions) {
         return Err(format!("{lane} is already awake (a session is resuming {}).", &s[..8.min(s.len())]));
+    }
+    // Off macOS the machinery opens the window (nightwatch#2): the daemon's
+    // own launcher, a terminal emulator or tmux on Linux and wt.exe on WSL.
+    if !cfg!(target_os = "macos") {
+        return h.node("nightshift.mjs", &["--wake", &lane]).map_err(|e| e.replace("--wake: ", ""));
     }
     // Exactly what the nightshift does at 08:00, so the wake is the same wake:
     // this hub's wake.sh, against this hub's config.
@@ -350,6 +390,14 @@ mod restart_tests {
         assert_eq!(bundle_of(p).unwrap(), std::path::PathBuf::from("/Users/x/Applications/Nightwatch.app"));
         assert!(bundle_of(std::path::Path::new("/tmp/target/debug/app")).is_none());
     }
+    // nvm's newest node is picked by version, not by name: v22 above v9.
+    #[test]
+    fn nvm_versions_sort_by_number() {
+        let v = |s: &str| super::node_version(&std::path::PathBuf::from(format!("/h/.nvm/versions/node/{s}/bin/node")));
+        assert_eq!(v("v22.21.1"), vec![22, 21, 1]);
+        assert!(v("v22.0.0") > v("v9.11.2"));
+        assert!(v("v22.21.1") > v("v22.3.0"));
+    }
 }
 
 // Keep on top is the viewer's choice (View menu), off unless they ask.
@@ -395,6 +443,12 @@ fn lane_pid(h: &Hub, lane: &str) -> Option<u32> {
 // launch Terminal just to report that nothing is open.
 fn lane_terminal(h: &Hub, lane: Option<&str>, verb: &str) -> Result<String, String> {
     let lane = h.check_lane(lane)?;
+    // Not in HOST_CAN off macOS, so the page never asks; a caller that does
+    // gets a plain answer rather than an AppleScript error.
+    if !cfg!(target_os = "macos") {
+        let _ = verb;
+        return Err(format!("Bringing {lane}'s terminal forward works on macOS only; bring it forward yourself."));
+    }
     let pid = lane_pid(h, &lane).ok_or(format!("{lane} has no live session to show."))?;
     let out = Command::new("/bin/ps").args(["-p", &pid.to_string(), "-o", "tty="]).output().map_err(|e| e.to_string())?;
     let tty = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -468,6 +522,14 @@ fn restore_checkpoint(h: &Hub) -> Result<String, String> {
 }
 
 fn restart_daemon(h: &Hub) -> Result<String, String> {
+    // Off macOS the job is a systemd user unit (platform.mjs's daemonJob,
+    // which Set up installs as <label>.service).
+    if !cfg!(target_os = "macos") {
+        let out = Command::new("systemctl").args(["--user", "restart", &format!("{}.service", h.daemon_label())])
+            .output().map_err(|e| e.to_string())?;
+        return if out.status.success() { Ok("Restarted the nightshift. Its heartbeat shows within the minute.".into()) }
+            else { Err(format!("systemctl refused: {}", String::from_utf8_lossy(&out.stderr).trim())) };
+    }
     let uid = String::from_utf8_lossy(&Command::new("/usr/bin/id").arg("-u").output().map_err(|e| e.to_string())?.stdout).trim().to_string();
     let out = Command::new("/bin/launchctl").args(["kickstart", "-k", &format!("gui/{uid}/{}", h.daemon_label())])
         .output().map_err(|e| e.to_string())?;
