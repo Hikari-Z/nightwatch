@@ -74,7 +74,7 @@ fn ensure_server() -> Result<(), String> {
     // A downloaded build on a machine with no hub yet has no tree to find:
     // say how to give it one instead of failing on a file it can't open.
     if !is_repo(&repo()) {
-        return Err("Nightwatch can't find its source checkout (the viewer and machinery live there). Clone github.com/slimepriestess/nightwatch, then either set NIGHTWATCH_REPO to that folder for your desktop session (on Linux, a line NIGHTWATCH_REPO=/path/to/nightwatch in ~/.config/environment.d/nightwatch.conf, then log in again), or run Set up once from the checkout: node machinery/nightwatch.mjs.".into());
+        return Err("Nightwatch can't find its source checkout (the viewer and machinery live there). Clone github.com/slimepriestess/nightwatch, set NIGHTWATCH_REPO to that folder for your desktop session (on Linux, a line NIGHTWATCH_REPO=/path/to/nightwatch in ~/.config/environment.d/nightwatch.conf, then log in again), and restart Nightwatch. Once it opens, Set up makes your first hub, and from then on the app finds the checkout through it.".into());
     }
     let gui = repo().join("gui"); // the product's own viewer, beside this app in the repo
     let log = std::fs::OpenOptions::new().create(true).append(true).open(gui.join("viewer.log")).map_err(|e| e.to_string())?;
@@ -145,7 +145,7 @@ fn repo() -> PathBuf {
             Some((p, why)) => {
                 log::info!("source tree: {} ({why})", p.display());
                 let others: Vec<String> = found.iter().skip(1).map(|(q, _)| canon(q)).filter(|q| *q != canon(p)).map(|q| q.display().to_string()).collect();
-                if !others.is_empty() { log::warn!("other trees a hub points at, not used: {}", others.join(", ")); }
+                if !others.is_empty() { log::warn!("other Nightwatch trees found, not used: {}", others.join(", ")); }
                 canon(p)
             }
             None => {
@@ -473,6 +473,24 @@ mod repo_tests {
         let c = repo_candidates(Some("relative/env-tree".into()), &built, &[]);
         assert!(c.iter().all(|(p, _)| p.is_absolute()), "{c:?}");
         assert_eq!(c.len(), 1);
+        let _ = std::fs::remove_dir_all(&t);
+    }
+
+    // A first Set up: the new hub's config path, and a working folder that
+    // exists (the nearest one above a hub that isn't there yet).
+    #[test]
+    fn a_first_set_up_runs_from_the_new_hubs_own_config() {
+        let t = std::env::temp_dir().join(format!("nw-first-hub-{}", std::process::id()));
+        std::fs::create_dir_all(&t).unwrap();
+        let target = t.join("not-yet/the-hub");
+        let h = first_hub(&serde_json::json!({ "op": "init", "hub": target.display().to_string() })).unwrap();
+        assert_eq!(h.config_file, target.join("nightwatch.config.json"));
+        assert_eq!(h.root, t);
+        assert!(h.root.is_dir());
+        // ~/ means home; a relative folder is refused rather than guessed at.
+        assert_eq!(first_hub(&serde_json::json!({ "hub": "~/my-hub" })).unwrap().config_file, home().join("my-hub/nightwatch.config.json"));
+        assert!(first_hub(&serde_json::json!({ "hub": "my-hub" })).is_none());
+        assert!(first_hub(&serde_json::json!({})).is_none());
         let _ = std::fs::remove_dir_all(&t);
     }
 }
@@ -937,9 +955,27 @@ fn remove_orphan(h: &Hub, d: &serde_json::Value) -> Result<String, String> {
 }
 
 fn creation_hub(sel: Option<&str>, d: &serde_json::Value) -> Result<Hub, String> {
-    let mut h = hub(sel)?;
-    if d.get("op").and_then(|v| v.as_str()) == Some("init") { h.machinery = app_machinery(); }
+    let init = d.get("op").and_then(|v| v.as_str()) == Some("init");
+    let mut h = match hub(sel) {
+        Ok(h) => h,
+        // The first Set up on a machine with no hub yet has no hub to borrow:
+        // it runs against the new hub's own config, not written yet.
+        Err(e) if init && sel.is_none() && all_hub_roots().is_empty() => first_hub(d).ok_or(e)?,
+        Err(e) => return Err(e),
+    };
+    if init { h.machinery = app_machinery(); }
     Ok(h)
+}
+
+// The hub a first Set up is creating, as the CLI needs it: its config path
+// (which init writes) and a working folder that already exists, the nearest
+// existing folder above it (init assembles the hub beside its path and moves
+// it into place). The spec's folder must be absolute, or ~/ for home.
+fn first_hub(d: &serde_json::Value) -> Option<Hub> {
+    let raw = d.get("hub").and_then(|v| v.as_str())?.trim();
+    let target = match raw.strip_prefix("~/") { Some(rest) => home().join(rest), None if raw.starts_with('/') => PathBuf::from(raw), None => return None };
+    let root = target.ancestors().skip(1).find(|p| p.is_dir()).map(Path::to_path_buf).unwrap_or_else(home);
+    Some(Hub { root, config_file: target.join("nightwatch.config.json"), cfg: serde_json::json!({}), machinery: app_machinery(), state: target.join("wakecycle") })
 }
 
 #[tauri::command]

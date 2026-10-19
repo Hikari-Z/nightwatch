@@ -199,11 +199,15 @@ its machinery from a checkout of this repo, so it always lives beside one.
   as the run's artifact (Ubuntu 22.04 or newer). A build made elsewhere finds
   your checkout through a hub you've already set up, which points at it. On a
   machine with no hub yet, tell it where the checkout is with
-  `NIGHTWATCH_REPO`. Apps started from the launcher don't read your shell's
-  rc files, so put it where the desktop session reads it, for example a line
+  `NIGHTWATCH_REPO`, then open Nightwatch and use Set up to make your first
+  hub; after that the hub points at the checkout and the variable isn't
+  needed. Apps started from the launcher don't read your shell's rc files, so
+  put it where the desktop session reads it, for example a line
   `NIGHTWATCH_REPO=/home/you/nightwatch` in
-  `~/.config/environment.d/nightwatch.conf`, then log in again. The app says
-  this too if it can't find the checkout.
+  `~/.config/environment.d/nightwatch.conf`, then log in again (a session
+  without systemd, such as some WSLg setups, may not read that file; there,
+  launch it from a terminal with the variable set). The app says this too if
+  it can't find the checkout, and needs a restart once it's set.
 
 Bringing a lane's terminal forward works on macOS only; elsewhere that
 button is read-only, and you bring the terminal forward yourself.
