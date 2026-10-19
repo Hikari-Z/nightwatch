@@ -493,6 +493,15 @@ mod repo_tests {
         assert!(first_hub(&serde_json::json!({})).is_none());
         let _ = std::fs::remove_dir_all(&t);
     }
+
+    // The first-hub path opens for exactly one case.
+    #[test]
+    fn only_a_first_set_up_on_an_empty_machine_takes_the_first_hub_path() {
+        assert!(first_setup_allowed(true, None, true));
+        assert!(!first_setup_allowed(false, None, true), "adding an agent");
+        assert!(!first_setup_allowed(true, Some("/h"), true), "a named hub");
+        assert!(!first_setup_allowed(true, None, false), "a machine that has hubs");
+    }
 }
 
 #[cfg(test)]
@@ -960,12 +969,16 @@ fn creation_hub(sel: Option<&str>, d: &serde_json::Value) -> Result<Hub, String>
         Ok(h) => h,
         // The first Set up on a machine with no hub yet has no hub to borrow:
         // it runs against the new hub's own config, not written yet.
-        Err(e) if init && sel.is_none() && all_hub_roots().is_empty() => first_hub(d).ok_or(e)?,
+        Err(e) if first_setup_allowed(init, sel, all_hub_roots().is_empty()) => first_hub(d).ok_or(e)?,
         Err(e) => return Err(e),
     };
     if init { h.machinery = app_machinery(); }
     Ok(h)
 }
+
+// Only a Set up (init), naming no hub, on a machine whose registry lists
+// none: adding an agent, or anything aimed at a named hub, keeps the error.
+fn first_setup_allowed(init: bool, sel: Option<&str>, no_hubs: bool) -> bool { init && sel.is_none() && no_hubs }
 
 // The hub a first Set up is creating, as the CLI needs it: its config path
 // (which init writes) and a working folder that already exists, the nearest
