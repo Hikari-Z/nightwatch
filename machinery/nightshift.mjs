@@ -1633,6 +1633,29 @@ if (process.argv.includes('--midday')) {
   process.exit(0);
 }
 
+// --wake <lane>: wake that lane NOW, by hand, through the daemon's own
+// launcher (summonWindow and its platform seams: Terminal on macOS, the
+// summons file on WSL, a terminal emulator or tmux on Linux). The app's Wake
+// button on every platform but macOS, whose bridge still opens Terminal
+// itself (nightwatch#2). Refuses unknown lanes and lanes the registry shows
+// awake, the trust the daemon's own wake-suppression uses.
+if (process.argv.includes('--wake')) {
+  const lane = process.argv[process.argv.indexOf('--wake') + 1];
+  if (!lane || !(lane in (CFG.lanes ?? {}))) {
+    console.error(`--wake: unknown agent "${lane ?? ''}" (known: ${Object.keys(CFG.lanes ?? {}).join(', ')})`);
+    process.exit(2);
+  }
+  const up = liveSessions().find((s) => { const at = laneAttribution(s.sessionId); return at?.lane === lane && at.grade === 'registry'; });
+  if (up) {
+    console.error(`--wake: agent ${lane} is already awake (session ${up.sessionId.slice(0, 8)}…)`);
+    process.exit(3);
+  }
+  try { io.launchWake(lane); }
+  catch (e) { console.error(`--wake: the window didn't open: ${e.message}`); process.exit(4); }
+  console.log(`Waking ${lane}: a terminal window is resuming them.`);
+  process.exit(0);
+}
+
 // --ring <lane>: ring that lane's sleep-bell NOW, by hand — the app's Sleep
 // button and any human who wants an early night. Exactly the 02:00 bell
 // (same ringBell, same spool note, same ritual text, same event), except
