@@ -111,5 +111,29 @@ try {
   rmSync(dir3, { recursive: true, force: true });
 }
 
+// api-request entries (fix 6, 10/19): Claude Code 2.1.300+ writes its own
+// request log into the transcript. A resume never loads one, so they weigh
+// nothing in the estimate or the overshoot math — but they stay in the kept
+// file: they are the session's record. Counting them produced the 10/16–18
+// phantom overshoots (a 6.22x warning over a ~88k conversation).
+{
+  const SID4 = '44444444-2222-3333-4444-555555555555';
+  const rows4 = []; let n4 = 0; let prev4 = null;
+  const add4 = (e) => { const uuid = `r${++n4}`; rows4.push({ parentUuid: prev4, uuid, sessionId: SID4, timestamp: `2026-10-19T00:${String(n4).padStart(2, '0')}:00.000Z`, ...e }); prev4 = uuid; };
+  add4({ type: 'user', message: { role: 'user', content: 'the prompt' } });
+  add4({ type: 'api-request', request: { model: 'm', messages: [{ role: 'user', content: 'q '.repeat(150_000) }] } });
+  add4({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'the reply' }] } });
+  const dir4 = mkdtempSync(join(tmpdir(), 'trim-test-apireq-'));
+  const src4 = join(dir4, `${SID4}.jsonl`);
+  writeFileSync(src4, rows4.map((r) => JSON.stringify(r)).join('\n') + '\n');
+  const run4 = spawnSync(process.execPath, [join(HERE, 'trim.mjs'), src4, '--target-tokens', '5000'], { encoding: 'utf8' });
+  const rep = JSON.parse(run4.stdout);
+  const kept = readFileSync(rep.path, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  check('api-request entries stay in the kept file', kept.some((e) => e.type === 'api-request'), kept.map((e) => e.type).join(','));
+  check('and weigh nothing in the estimate', rep.estTokens < 2_000, `est ${rep.estTokens}`);
+  check('and never manufacture an overshoot', !('overshoot' in rep) && !/OVERSHOOT/.test(run4.stderr), `${JSON.stringify(rep.overshoot)} ${run4.stderr.trim()}`);
+  rmSync(dir4, { recursive: true, force: true });
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nall pass');
 process.exit(fails ? 1 : 0);
