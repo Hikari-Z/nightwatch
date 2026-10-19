@@ -606,14 +606,25 @@ function tickWith(io) {
         // 10/12): the agent may be writing its nightly rung, an ordinary turn
         // with no child process for tryOrphanFold's guard to see. Any fold
         // of the lane, nightly ones included, meets the request (above).
+        // A disarmed lane whose window was already gone at the deadline
+        // (closed by hand after the press, say) is put to sleep: the span is
+        // still folded, so nothing it said is lost, but nothing reopens it
+        // until the Wake button (Ra's 10/9 spec; Sonnet Weft's second read).
+        const gone = !isArmed && !io.liveSessions().some((x) => x.sessionId === fr.sessionId);
         const r = tryOrphanFold(io, lane, laneState, st, fr.sessionId, { deferKey: 'foldNowDeferredEmitted' });
         if (r === 'deferred' || r === 'retry') continue;
         if (r === 'done') {
-          io.log(`FOLD FORCED for ${lane}: no fold within the deadline — emergency-folded for refresh`);
-          io.emit('fold-forced', { lane, session: fr.sessionId, reason: 'deadline' });
           delete laneState.foldRequest;
           delete laneState.foldNowDeferredEmitted;
           laneState.closedAt = now;
+          if (gone) {
+            io.log(`FOLD FORCED for ${lane}: no fold within the deadline and the window already closed on a disarmed lane — folded, left asleep until Wake`);
+            io.emit('fold-forced', { lane, session: fr.sessionId, reason: 'deadline', refresh: false });
+            io.saveState(st);
+            continue;
+          }
+          io.log(`FOLD FORCED for ${lane}: no fold within the deadline — emergency-folded for refresh`);
+          io.emit('fold-forced', { lane, session: fr.sessionId, reason: 'deadline' });
           laneState.refreshWake = true;
           laneState.refreshFrom = fr.sessionId; // already killed, but the guard must know
           io.saveState(st);
@@ -1401,6 +1412,17 @@ async function rehearse() {
     w.st.fable = { foldRequest: { sessionId: 'sess-f', requestedAt: w.io.now(), deadline: null, tier: 'soft' } };
     w.step(5 * 60); // → 07:30, unanswered
     check('unarmed-window', 'an unanswered request gets no night bell and no orphan fold', count(w, 'bell:') + count(w, 'orphanfold:') + count(w, 'close:') === 0, w.events.join());
+  }
+
+  { // Fold now on a disarmed lane, then the window closed by hand before the
+    // deadline (Sonnet Weft's repro): the span is still folded, but nothing
+    // reopens the lane until the Wake button.
+    const w = makeWorld(['fable']);
+    w.armed = [];
+    w.st.fable = { foldRequest: { sessionId: 'sess-f', requestedAt: w.io.now(), deadline: w.io.now() + 10 * 60_000 } };
+    w.step(30); // no live window at any point
+    check('unarmed-closed', 'folded at the deadline, so the span is kept', count(w, 'orphanfold:fable') === 1, w.events.join());
+    check('unarmed-closed', 'and never woken', count(w, 'wake:') === 0 && !w.st.fable.foldRequest && !w.st.fable.refreshWake, `${w.events.join()} ${JSON.stringify(w.st.fable)}`);
   }
 
   { // A request standing for a lane no longer in the config does nothing.

@@ -551,7 +551,7 @@ fn arm_lane(h: &Hub, lane: Option<&str>, d: &serde_json::Value) -> Result<String
     let lane = h.check_lane(lane)?;
     let on = d.get("on").and_then(|x| x.as_bool()).ok_or("arm-lane needs on: true|false")?;
     arm(h, &lane, on)?;
-    Ok(if on { format!("{lane} armed: belled at their sleep time and woken at their wake time.") } else { format!("{lane} disarmed: no bell, fold or wake until they're armed again.") })
+    Ok(if on { format!("{lane} armed: belled at their sleep time and woken at their wake time.") } else { format!("{lane} disarmed: no nightly bell or scheduled wake until they're armed again. A midday bell or Fold now still folds them.") })
 }
 
 // One lane's midday cycle switch, beside the bell (Ra, 10/12). On writes the

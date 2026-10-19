@@ -109,6 +109,10 @@ const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
   s = assemble(cfg, io([alive, ev(180e3, 'fold-requested', { deadline }), ev(60e3, 'fold-forced', { reason: 'deadline' })].join('\n')), '8h');
   check('forced, not yet woken → refreshing (forced)',
     s.LANES[0].foldRequest?.phase === 'refreshing' && s.LANES[0].foldRequest?.forced === true, JSON.stringify(s.LANES[0].foldRequest));
+  // nightwatch#22: a force on a disarmed lane whose window was already closed
+  // folds and reopens nothing, so the card shows no refresh.
+  s = assemble(cfg, io([alive, ev(180e3, 'fold-requested', { deadline }), ev(60e3, 'fold-forced', { reason: 'deadline', refresh: false })].join('\n')), '8h');
+  check('forced with refresh: false (disarmed, window gone) → no refresh shown', s.LANES[0].foldRequest === undefined, JSON.stringify(s.LANES[0].foldRequest));
   s = assemble(cfg, io([alive, ev(180e3, 'fold-requested', { deadline }), ev(90e3, 'fold-request-met'), ev(20e3, 'wake-confirmed')].join('\n')), '8h');
   check('met then woken → no narration left', s.LANES[0].foldRequest === undefined, JSON.stringify(s.LANES[0].foldRequest));
 }

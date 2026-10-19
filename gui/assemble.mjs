@@ -420,7 +420,9 @@ export function assemble(cfg, io, range = '8h') {
       }
       // Refreshing ends with any word that the wake happened or won't
       // (10/8: an already-awake left "waking fresh" on the card for hours).
-      else if (!after.slice(after.indexOf(done) + 1).some((e) => ['wake-confirmed', 'already-awake', 'wake-failed', 'stale-receipt'].includes(e.kind))) {
+      // A force on a disarmed lane whose window was already closed folds and
+      // reopens nothing (refresh: false, nightwatch#22): no refresh to show.
+      else if (done.refresh !== false && !after.slice(after.indexOf(done) + 1).some((e) => ['wake-confirmed', 'already-awake', 'wake-failed', 'stale-receipt'].includes(e.kind))) {
         foldRequest = { phase: 'refreshing', forced: done.kind === 'fold-forced', ...(laneEvents[iReq].tier ? { tier: laneEvents[iReq].tier } : {}) };
         refreshFoldedSid = done.session;
       }
