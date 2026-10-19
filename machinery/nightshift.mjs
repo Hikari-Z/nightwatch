@@ -1384,10 +1384,23 @@ async function rehearse() {
     w.armed = [];
     w.nextWake.fable = w.io.now() - 10 * 3600_000; // slept long ago, never woken
     w.step(13 * 60); // 19:00 → 08:00
-    w.sessions = [{ pid: 55, sessionId: 'sess-f', lane: 'fable', quietMs: 10 * 60_000 }];
-    w.st.fable = { foldRequest: { sessionId: 'sess-f', requestedAt: w.io.now(), deadline: null, tier: 'soft' } };
+    // The request outlived its session (closed by hand), so nothing reads
+    // the lane as already awake.
+    w.st.fable = { foldRequest: { sessionId: 'sess-gone', requestedAt: w.io.now(), deadline: null, tier: 'soft' } };
     w.step(60); // through the morning window, unanswered
     check('unarmed-morning', 'a standing request never sets off the scheduled wake', count(w, 'wake:') === 0, w.events.join());
+  }
+
+  { // An unanswered soft request on a disarmed lane inside the nightly window:
+    // the request brings the lane into the loop, but not into the night's
+    // bell or orphan fold, and a soft request is never forced.
+    const w = makeWorld(['fable']);
+    w.armed = [];
+    w.step(7 * 60 + 30); // 19:00 → 02:30
+    w.sessions = [{ pid: 56, sessionId: 'sess-f', lane: 'fable', quietMs: 60 * 60_000 }];
+    w.st.fable = { foldRequest: { sessionId: 'sess-f', requestedAt: w.io.now(), deadline: null, tier: 'soft' } };
+    w.step(5 * 60); // → 07:30, unanswered
+    check('unarmed-window', 'an unanswered request gets no night bell and no orphan fold', count(w, 'bell:') + count(w, 'orphanfold:') + count(w, 'close:') === 0, w.events.join());
   }
 
   { // A request standing for a lane no longer in the config does nothing.
