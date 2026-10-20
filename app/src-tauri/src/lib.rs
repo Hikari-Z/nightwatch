@@ -257,13 +257,22 @@ impl Hub {
         let known = self.cfg.get("lanes").and_then(|l| l.get(lane)).is_some();
         if plain && known { Ok(lane.to_string()) } else { Err(format!("\"{lane}\" isn't one of {}'s agents", self.name())) }
     }
-    // The nightshift's launchd job: Set up's per-hub one, else our legacy one.
-    fn daemon_label(&self) -> String {
-        std::fs::read_dir(&self.state).ok().into_iter().flatten().flatten()
+    // The nightshift's job: Set up's per-hub one (its copy in the state dir),
+    // else on Linux the installed unit that runs this hub's config (a hub set
+    // up by hand has no state-dir copy; found on WSL, 10/20), else on macOS
+    // our legacy launchd job. None when there is no job to name.
+    fn daemon_label(&self) -> Option<String> { self.daemon_label_in(&systemd_user_dir()) }
+    fn daemon_label_in(&self, units_dir: &Path) -> Option<String> {
+        let staged = std::fs::read_dir(&self.state).ok().into_iter().flatten().flatten()
             .map(|e| e.file_name().to_string_lossy().to_string())
             .find(|n| n.starts_with("house.nightwatch.") && (n.ends_with(".plist") || n.ends_with(".service")))
-            .map(|n| n.trim_end_matches(".plist").trim_end_matches(".service").to_string())
-            .unwrap_or_else(|| "com.weft.nightshift".into())
+            .map(|n| n.trim_end_matches(".plist").trim_end_matches(".service").to_string());
+        if staged.is_some() { return staged; }
+        if cfg!(target_os = "macos") { return Some("com.weft.nightshift".into()); }
+        let units: Vec<(String, String)> = std::fs::read_dir(units_dir).ok().into_iter().flatten().flatten()
+            .map(|e| (e.file_name().to_string_lossy().to_string(), std::fs::read_to_string(e.path()).unwrap_or_default()))
+            .collect();
+        unit_for_config(&units, &self.config_file).or_else(|| unit_for_config(&units, &canon(&self.config_file)))
     }
     // Every CLI runs this hub's machinery against this hub's config.
     fn node(&self, script: &str, args: &[&str]) -> Result<String, String> {
@@ -398,16 +407,35 @@ fn work_area(win: &tauri::WebviewWindow) -> Option<(f64, f64, f64, f64)> {
     let wa = m.work_area();
     Some((wa.position.x as f64 / s, wa.position.y as f64 / s, wa.size.width as f64 / s, wa.size.height as f64 / s))
 }
+// The work area last asked for. cover() compares the new one against this,
+// not against the window's own geometry read back: what a window reports
+// depends on the window manager. On WSLg's X server the readback carries the
+// frame extents ((-38,-59) 2636x1537 for a (0,0) 2560x1440 canvas), so it
+// never matched and the canvas was re-set every tick (10/20).
+static COVERED: Mutex<Option<[f64; 4]>> = Mutex::new(None);
+fn already_covered(last: Option<[f64; 4]>, want: [f64; 4]) -> bool {
+    last.is_some_and(|l| l.iter().zip(want).all(|(a, b)| (a - b).abs() < 1.0))
+}
 fn cover(win: &tauri::WebviewWindow) {
     let Some((x, y, w, h)) = work_area(win) else { log::warn!("canvas: no monitor to cover"); return };
+    let mut last = COVERED.lock().unwrap();
+    if already_covered(*last, [x, y, w, h]) { return; }
     let s = win.scale_factor().unwrap_or(1.0);
     let (at, size) = (win.outer_position().map(|p| p.to_logical::<f64>(s)), win.outer_size().map(|z| z.to_logical::<f64>(s)));
-    let same = matches!((&at, &size), (Ok(p), Ok(z)) if (p.x - x).abs() < 1.0 && (p.y - y).abs() < 1.0 && (z.width - w).abs() < 1.0 && (z.height - h).abs() < 1.0);
-    if same { return; }
     log::info!("canvas: window {:?} {:?} -> covering the work area", at.as_ref().ok().map(|p| (p.x.round(), p.y.round())), size.as_ref().ok().map(|z| (z.width.round(), z.height.round())));
     let _ = win.set_position(tauri::LogicalPosition::new(x, y));
     let _ = win.set_size(tauri::LogicalSize::new(w, h));
+    *last = Some([x, y, w, h]);
     log::info!("canvas: {w:.0}x{h:.0} at ({x:.0},{y:.0})");
+}
+
+// WSLg offers Wayland, and GTK takes it; but a Wayland client can't learn
+// where its window is (outer_position reads (0,0)), so on two monitors
+// current_monitor() alternated and cover() flipped the canvas between them
+// every tick: the whole window flickered (10/20). Under X11 the canvas holds
+// still. Only on WSL, and never over a backend someone chose.
+fn wsl_wants_x11(wsl_distro: Option<std::ffi::OsString>, gdk_backend: Option<std::ffi::OsString>) -> bool {
+    wsl_distro.is_some_and(|d| !d.is_empty()) && gdk_backend.is_none()
 }
 
 // Restart (Ra, 10/6: Nightwatch stays running, so updates need a way in).
@@ -644,17 +672,36 @@ fn restore_checkpoint(h: &Hub) -> Result<String, String> {
     Ok(format!("Restored the checkpoint from {newest}."))
 }
 
+// Where platform.mjs's daemonJob installs a systemd user unit: NW_INSTALL_DIR
+// for benches, else ~/.config/systemd/user. Change one, change both.
+fn systemd_user_dir() -> PathBuf {
+    std::env::var_os("NW_INSTALL_DIR").map(PathBuf::from).unwrap_or_else(|| home().join(".config/systemd/user"))
+}
+
+// The nightshift unit (not the .watch one) whose environment names this
+// config, as daemonJob writes it: "NIGHTWATCH_CONFIG=<path>", % doubled; a
+// hand-made unit may still say WEFT_CONFIG.
+fn unit_for_config(units: &[(String, String)], cfg: &Path) -> Option<String> {
+    let want = cfg.to_string_lossy().replace('%', "%%");
+    units.iter()
+        .filter(|(n, _)| n.starts_with("house.nightwatch.") && n.ends_with(".service") && !n.ends_with(".watch.service"))
+        .find(|(_, body)| body.lines().any(|l| l.starts_with("ExecStart=") && l.contains("nightshift.mjs"))
+            && ["NIGHTWATCH_CONFIG", "WEFT_CONFIG"].iter().any(|k| body.contains(&format!("\"{k}={want}\""))))
+        .map(|(n, _)| n.trim_end_matches(".service").to_string())
+}
+
 fn restart_daemon(h: &Hub) -> Result<String, String> {
+    let label = h.daemon_label().ok_or_else(|| format!("No nightshift job found for {} (looked in {} and {}).", h.name(), h.state.display(), systemd_user_dir().display()))?;
     // Off macOS the job is a systemd user unit (platform.mjs's daemonJob,
     // which Set up installs as <label>.service).
     if !cfg!(target_os = "macos") {
-        let out = Command::new("systemctl").args(["--user", "restart", &format!("{}.service", h.daemon_label())])
+        let out = Command::new("systemctl").args(["--user", "restart", &format!("{label}.service")])
             .output().map_err(|e| e.to_string())?;
         return if out.status.success() { Ok("Restarted the nightshift. Its heartbeat shows within the minute.".into()) }
             else { Err(format!("systemctl refused: {}", String::from_utf8_lossy(&out.stderr).trim())) };
     }
     let uid = String::from_utf8_lossy(&Command::new("/usr/bin/id").arg("-u").output().map_err(|e| e.to_string())?.stdout).trim().to_string();
-    let out = Command::new("/bin/launchctl").args(["kickstart", "-k", &format!("gui/{uid}/{}", h.daemon_label())])
+    let out = Command::new("/bin/launchctl").args(["kickstart", "-k", &format!("gui/{uid}/{label}")])
         .output().map_err(|e| e.to_string())?;
     if out.status.success() { Ok("Restarted the nightshift. Its heartbeat shows within the minute.".into()) }
     else { Err(format!("launchctl refused: {}", String::from_utf8_lossy(&out.stderr).trim())) }
@@ -868,7 +915,7 @@ mod hub_tests {
         assert_eq!(h.machinery, PathBuf::from("/app/machinery"));
         assert_eq!(h.state, new.join("wakecycle"));
         assert_eq!(h.name(), "Lark");
-        assert_eq!(h.daemon_label(), "house.nightwatch.lark");
+        assert_eq!(h.daemon_label().as_deref(), Some("house.nightwatch.lark"));
         assert!(h.check_lane(Some("main")).is_ok());
         assert!(h.check_lane(Some("fable")).is_err());
         // our legacy hub: weft.config.json, its own wakecycle/ for both, the old job
@@ -876,7 +923,36 @@ mod hub_tests {
         std::fs::write(old.join("weft.config.json"), r#"{"lanes":{"fable":{}}}"#).unwrap();
         let h = Hub::open(&old).unwrap();
         assert_eq!((h.machinery.clone(), h.state.clone()), (old.join("wakecycle"), old.join("wakecycle")));
-        assert_eq!(h.daemon_label(), "com.weft.nightshift");
+        let no_units = scratch("no-units");
+        let want = if cfg!(target_os = "macos") { Some("com.weft.nightshift") } else { None };
+        assert_eq!(h.daemon_label_in(&no_units).as_deref(), want);
+    }
+    #[test]
+    fn a_hand_set_up_hub_finds_its_installed_unit() {
+        // No state-dir copy (set up by hand, as on WSL 10/16): the installed
+        // nightshift unit that names this hub's config, never its .watch twin
+        // or another hub's. Shapes as daemonJob writes them, plus a hand-made
+        // unit that still says WEFT_CONFIG.
+        let hub = scratch("by-hand");
+        std::fs::write(hub.join("nightwatch.config.json"), r#"{"lanes":{"main":{}}}"#).unwrap();
+        std::fs::create_dir_all(hub.join("wakecycle")).unwrap();
+        let h = Hub::open(&hub).unwrap();
+        let cfg = h.config_file.display().to_string();
+        let unit = |script: &str, key: &str, cfg: &str| format!("[Service]\nExecStart=\"/usr/bin/node\" \"/nw/machinery/{script}\"\nEnvironment=\"{key}={cfg}\"\nRestart=always\n");
+        let units = scratch("units");
+        std::fs::write(units.join("house.nightwatch.other.service"), unit("nightshift.mjs", "NIGHTWATCH_CONFIG", "/elsewhere/nightwatch.config.json")).unwrap();
+        std::fs::write(units.join("house.nightwatch.mine.watch.service"), unit("watch.mjs", "NIGHTWATCH_CONFIG", &cfg)).unwrap();
+        assert_eq!(h.daemon_label_in(&units), None, "a .watch unit or another hub's must not be taken for this hub's nightshift");
+        std::fs::write(units.join("house.nightwatch.mine.service"), unit("nightshift.mjs", "WEFT_CONFIG", &cfg)).unwrap();
+        assert_eq!(h.daemon_label_in(&units).as_deref(), Some("house.nightwatch.mine"));
+        std::fs::write(units.join("house.nightwatch.mine.service"), unit("nightshift.mjs", "NIGHTWATCH_CONFIG", &cfg)).unwrap();
+        assert_eq!(h.daemon_label_in(&units).as_deref(), Some("house.nightwatch.mine"));
+        // A staged copy still wins, as before.
+        std::fs::write(hub.join("wakecycle/house.nightwatch.staged.service"), "").unwrap();
+        assert_eq!(h.daemon_label_in(&units).as_deref(), Some("house.nightwatch.staged"));
+        // daemonJob doubles % for systemd.
+        let pct = [("house.nightwatch.p.service".to_string(), unit("nightshift.mjs", "NIGHTWATCH_CONFIG", "/h/100%%/nightwatch.config.json"))];
+        assert_eq!(unit_for_config(&pct, Path::new("/h/100%/nightwatch.config.json")).as_deref(), Some("house.nightwatch.p"));
     }
     #[test]
     fn only_a_registered_hub_can_be_named() {
@@ -1058,6 +1134,25 @@ fn host_can(machinery: &std::path::Path) -> Vec<&'static str> {
 mod tests {
     use super::*;
     #[test]
+    fn the_canvas_is_set_once_per_work_area() {
+        // Compared with what was asked for, so a window manager's frame
+        // extents in the readback can't make every tick re-set it.
+        let wa = [0.0, 0.0, 2560.0, 1440.0];
+        assert!(!already_covered(None, wa), "the first cover always sets the canvas");
+        assert!(already_covered(Some(wa), wa));
+        assert!(already_covered(Some([0.0, 0.0, 2560.4, 1440.0]), wa), "sub-pixel rounding isn't a change");
+        assert!(!already_covered(Some(wa), [2560.0, 0.0, 1920.0, 1080.0]), "another display is followed");
+        assert!(!already_covered(Some(wa), [0.0, 0.0, 2560.0, 1392.0]), "a taskbar or resolution change is followed");
+    }
+    #[test]
+    fn x11_on_wsl_unless_a_backend_was_chosen() {
+        let os = |s: &str| Some(std::ffi::OsString::from(s));
+        assert!(wsl_wants_x11(os("Ubuntu-26.04"), None));
+        assert!(!wsl_wants_x11(os("Ubuntu-26.04"), os("wayland")), "a chosen backend is never overridden");
+        assert!(!wsl_wants_x11(None, None), "plain Linux keeps GTK's own choice");
+        assert!(!wsl_wants_x11(os(""), None));
+    }
+    #[test]
     fn lanes_must_be_known_and_plain() {
         let h = Hub { root: "/h".into(), config_file: "/h/c.json".into(), cfg: serde_json::json!({"lanes": {"fable": {}, "opus": {}}}), machinery: "/h".into(), state: "/h".into() };
         assert_eq!(h.check_lane(Some("opus")).unwrap(), "opus");
@@ -1095,6 +1190,12 @@ mod tests {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before GTK starts and before any thread exists (main calls this first),
+    // which is what makes set_var sound here.
+    #[cfg(target_os = "linux")]
+    if wsl_wants_x11(std::env::var_os("WSL_DISTRO_NAME"), std::env::var_os("GDK_BACKEND")) {
+        unsafe { std::env::set_var("GDK_BACKEND", "x11") };
+    }
     tauri::Builder::default()
         .setup(|app| {
             // Logged in every build (~/Library/Logs/house.weft.nightwatch/): the installed app is a release
@@ -1171,7 +1272,7 @@ mod rehearsal_tests {
     fn rehearsal_on_a_scratch_hub() {
         let root = PathBuf::from(std::env::var("NW_REHEARSAL_HUB").expect("NW_REHEARSAL_HUB"));
         let h = hub_among(Some(&root.to_string_lossy()), vec![root.clone()]).expect("the scratch hub opens");
-        println!("hub {} · {} · machinery {} · state {} · job {}", h.name(), h.config_file.display(), h.machinery.display(), h.state.display(), h.daemon_label());
+        println!("hub {} · {} · machinery {} · state {} · job {}", h.name(), h.config_file.display(), h.machinery.display(), h.state.display(), h.daemon_label().as_deref().unwrap_or("(none)"));
         let lane = h.lanes().first().cloned().expect("an agent");
 
         // the persona's settings panel, saved through config.mjs set + nightshift --arm/--disarm
