@@ -60,7 +60,7 @@
       if (b.dataset.roTip || ((WRITES.has(a) || a in NEEDS) && canDo(a))) continue;
       b.setAttribute('aria-disabled', 'true');
       b.dataset.roTip = '1';
-      const tip = b.dataset.tip ? `${b.dataset.tip}. ` : '';
+      const tip = b.dataset.tip ? `${b.dataset.tip.replace(/\.$/, '')}. ` : '';
       b.dataset.tip = h ? `${tip}Not wired in the app yet.` : `${tip}Read-only for now: Nightwatch shows the house, it doesn't drive it yet.`;
     }
   }
