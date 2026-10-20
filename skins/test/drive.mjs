@@ -47,6 +47,10 @@ await check('shell backdrop on', `document.documentElement.dataset.shell`, 'brow
 await check('desk off', `document.documentElement.dataset.desk`, '0');
 await check('read-only marks the deck\'s big button (Wake all or Sleep all)', `document.querySelector('.nw-app > .nw-controls [data-part="primary"]').getAttribute('aria-disabled')`, 'true');
 await check('show-log stays live', `document.querySelector('.nw-lane [data-action="show-log"]').getAttribute('aria-disabled')`, null);
+// A tip that ends in its own period gets one period before the read-only note, not two (marginalia, #25:
+// "The nightshift keeps watching.. Read-only for now"). Hide's tip is the one that ends in a period.
+await check('read-only tips: one period before the note', `(()=>{const ro=[...document.querySelectorAll('[data-ro-tip]')];return {marked:ro.length>0,doubled:ro.filter(b=>b.dataset.tip.includes('..')).length}})()`, { marked: true, doubled: 0 });
+await check('hide\'s tip reads cleanly', `document.querySelector('[data-action="hide-window"]').dataset.tip`, "Hide to the menu bar. The nightshift keeps watching. Read-only for now: Nightwatch shows the house, it doesn't drive it yet.");
 
 // unforced refresh: runs when idle, holds off while a live form is open
 await ev(`document.querySelector('.nw-app > .nw-lanes').dataset.mark='old'`);

@@ -34,6 +34,9 @@ const check = async (name, expr, want) => {
 await go(BASE + '?skin=minimal');
 await check('no boot errors', 'window.__errs', []);
 await check('shell = tauri, no browser ground', `document.documentElement.dataset.shell`, 'tauri');
+// The app's wording of the read-only note ("Not wired in the app yet."): a tip ending in its own period
+// gets one before the note, never two (marginalia, #25). This host can only hide, so the rest are marked.
+await check('not-wired tips: one period before the note', `(()=>{const ro=[...document.querySelectorAll('[data-ro-tip]')];return {marked:ro.length>0,doubled:ro.filter(b=>b.dataset.tip.includes('..')).length}})()`, { marked: true, doubled: 0 });
 await check('rects reported', `__hits.at(-1).length`, (n) => n >= 5);
 await check('every rect inside the app box', `(()=>{const a=document.querySelector('.nw-app').getBoundingClientRect();return __hits.at(-1).every(([x,y,w,h])=>x>=a.x-1&&y>=a.y-1&&x+w<=a.right+1&&y+h<=a.bottom+1)})()`, true);
 const n0 = await ev('__hits.length');
