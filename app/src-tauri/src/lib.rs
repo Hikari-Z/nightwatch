@@ -97,6 +97,17 @@ fn ensure_server() -> Result<(), String> {
     Err(format!("the viewer server started but never answered on {}", port()))
 }
 
+// Bring the window back from hidden or minimized, covering the screen first,
+// as the tray's toggle does when it shows it.
+fn show_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        cover(&w);
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
 fn toggle(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         if w.is_visible().unwrap_or(false) {
@@ -439,18 +450,62 @@ fn wsl_wants_x11(wsl: bool, gdk_backend: Option<std::ffi::OsString>) -> bool {
 }
 
 // Restart (Ra, 10/6: Nightwatch stays running, so updates need a way in).
-// Relaunch the .app bundle through LaunchServices (`open`), a second after
-// this copy exits, so a freshly installed build is what starts, under the
-// app's own identity and permissions. Outside a bundle (dev), Tauri's own
-// restart.
+// Relaunch the .app bundle through LaunchServices (`open`) once this copy
+// has exited, so a freshly installed build is what starts, under the app's
+// own identity and permissions. It waits for this process to be gone, not a
+// fixed second: with single-instance, a new copy that started while this one
+// was still exiting would hand itself to the dying one and quit, leaving no
+// Nightwatch at all. Outside a bundle (dev), Tauri's own restart, which
+// releases the single-instance lock before it starts the new copy.
 fn bundle_of(exe: &std::path::Path) -> Option<PathBuf> {
     exe.ancestors().find(|p| p.extension().is_some_and(|e| e == "app")).map(|p| p.to_path_buf())
 }
+// $1 is this process's pid, $0 the bundle. A minute's cap, so a copy that
+// never exits can't leave the relaunch waiting forever.
+const WAIT_FOR_EXIT: &str = "i=0; while kill -0 \"$1\" 2>/dev/null && [ $i -lt 600 ]; do sleep 0.1; i=$((i+1)); done";
+fn relaunch_script() -> String { format!("{WAIT_FOR_EXIT}; /usr/bin/open \"$0\"") }
 fn restart_app(app: &AppHandle) {
     let Some(bundle) = std::env::current_exe().ok().as_deref().and_then(bundle_of) else { app.restart() };
-    let _ = Command::new("/bin/sh").arg("-c").arg("sleep 1; /usr/bin/open \"$0\"").arg(&bundle)
+    let _ = Command::new("/bin/sh").arg("-c").arg(relaunch_script()).arg(&bundle).arg(std::process::id().to_string())
         .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
     app.exit(0);
+}
+
+#[cfg(test)]
+mod relaunch_tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+    // The relaunch waits for the copy that asked for it to be gone (it may take
+    // longer than a second to exit), and doesn't wait at all for one already
+    // gone. Driven through /bin/sh with a real child, as restart_app runs it.
+    fn waited(pid: u32) -> Duration {
+        let t = Instant::now();
+        let ok = Command::new("/bin/sh").arg("-c").arg(WAIT_FOR_EXIT).arg("bundle").arg(pid.to_string()).status().unwrap();
+        assert!(ok.success());
+        t.elapsed()
+    }
+    #[test]
+    fn the_relaunch_waits_for_the_old_copy_to_exit() {
+        let mut child = Command::new("/bin/sleep").arg("1.5").spawn().unwrap();
+        let pid = child.id();
+        let reaper = std::thread::spawn(move || child.wait());
+        let took = waited(pid);
+        reaper.join().unwrap().unwrap();
+        assert!(took >= Duration::from_millis(1200), "returned after {took:?}, while the old copy was still running");
+        assert!(took < Duration::from_secs(5), "kept waiting after it exited: {took:?}");
+    }
+    #[test]
+    fn the_relaunch_goes_at_once_when_the_old_copy_is_gone() {
+        let mut child = Command::new("/usr/bin/true").spawn().unwrap();
+        let pid = child.id();
+        child.wait().unwrap();
+        assert!(waited(pid) < Duration::from_millis(500));
+    }
+    #[test]
+    fn the_relaunch_opens_the_bundle_after_the_wait() {
+        let s = relaunch_script();
+        assert!(s.starts_with(WAIT_FOR_EXIT) && s.ends_with("; /usr/bin/open \"$0\""), "{s}");
+    }
 }
 
 #[cfg(test)]
@@ -1231,6 +1286,16 @@ pub fn run() {
         unsafe { std::env::set_var("GDK_BACKEND", "x11") };
     }
     tauri::Builder::default()
+        // One Nightwatch at a time: a second launch (the dock, a launcher, the
+        // command line) brings the first one's window back instead of starting
+        // another copy. It goes first, as the plugin asks, so a second copy
+        // exits before it builds anything. Linux finds the first copy over the
+        // D-Bus session bus, and without one launches normally (the plugin's
+        // own fallback).
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            log::info!("second launch: showing this window");
+            show_main(app);
+        }))
         .setup(|app| {
             // Logged in every build (~/Library/Logs/house.weft.nightwatch/): the installed app is a release
             // build, and a problem only the real window shows needs its own receipts (10/6, the menu cutoff).
