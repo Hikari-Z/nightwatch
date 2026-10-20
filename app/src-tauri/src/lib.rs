@@ -434,8 +434,8 @@ fn cover(win: &tauri::WebviewWindow) {
 // current_monitor() alternated and cover() flipped the canvas between them
 // every tick: the whole window flickered (10/20). Under X11 the canvas holds
 // still. Only on WSL, and never over a backend someone chose.
-fn wsl_wants_x11(wsl_distro: Option<std::ffi::OsString>, gdk_backend: Option<std::ffi::OsString>) -> bool {
-    wsl_distro.is_some_and(|d| !d.is_empty()) && gdk_backend.is_none()
+fn wsl_wants_x11(wsl: bool, gdk_backend: Option<std::ffi::OsString>) -> bool {
+    wsl && gdk_backend.is_none()
 }
 
 // Restart (Ra, 10/6: Nightwatch stays running, so updates need a way in).
@@ -935,6 +935,9 @@ mod hub_tests {
         let want = if cfg!(target_os = "macos") { Some("com.weft.nightshift") } else { None };
         assert_eq!(h.daemon_label_in(&no_units).as_deref(), want);
     }
+    // Off macOS only: there the legacy launchd label answers before any unit
+    // is read (Weft's review on the Mac, 10/20).
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn a_hand_set_up_hub_finds_its_installed_unit() {
         // No state-dir copy (set up by hand, as on WSL 10/16): the installed
@@ -958,8 +961,12 @@ mod hub_tests {
         // A staged copy still wins, as before.
         std::fs::write(hub.join("wakecycle/house.nightwatch.staged.service"), "").unwrap();
         assert_eq!(h.daemon_label_in(&units).as_deref(), Some("house.nightwatch.staged"));
+    }
+    #[test]
+    fn a_unit_names_its_config_with_percent_doubled() {
         // daemonJob doubles % for systemd.
-        let pct = [("house.nightwatch.p.service".to_string(), unit("nightshift.mjs", "NIGHTWATCH_CONFIG", "/h/100%%/nightwatch.config.json"))];
+        let body = "[Service]\nExecStart=\"/usr/bin/node\" \"/nw/machinery/nightshift.mjs\"\nEnvironment=\"NIGHTWATCH_CONFIG=/h/100%%/nightwatch.config.json\"\n";
+        let pct = [("house.nightwatch.p.service".to_string(), body.to_string())];
         assert_eq!(unit_for_config(&pct, Path::new("/h/100%/nightwatch.config.json")).as_deref(), Some("house.nightwatch.p"));
     }
     #[test]
@@ -1143,7 +1150,15 @@ fn host_can_on(machinery: &std::path::Path, wsl: bool) -> Vec<&'static str> {
     if sweep_ready(machinery) { v.extend_from_slice(SWEEP); }
     v
 }
-fn on_wsl() -> bool { std::env::var_os("WSL_DISTRO_NAME").is_some_and(|d| !d.is_empty()) }
+// WSL_DISTRO_NAME isn't in every process's environment (a systemd user
+// service on WSL doesn't carry it, 10/20), so the kernel's release string
+// counts too: WSL's kernels are built as "...-microsoft-standard-WSL2".
+fn on_wsl() -> bool {
+    is_wsl(std::env::var_os("WSL_DISTRO_NAME"), std::fs::read_to_string("/proc/sys/kernel/osrelease").ok().as_deref())
+}
+fn is_wsl(distro: Option<std::ffi::OsString>, osrelease: Option<&str>) -> bool {
+    distro.is_some_and(|d| !d.is_empty()) || osrelease.is_some_and(|r| r.to_ascii_lowercase().contains("microsoft"))
+}
 
 #[cfg(test)]
 mod tests {
@@ -1162,10 +1177,14 @@ mod tests {
     #[test]
     fn x11_on_wsl_unless_a_backend_was_chosen() {
         let os = |s: &str| Some(std::ffi::OsString::from(s));
-        assert!(wsl_wants_x11(os("Ubuntu-26.04"), None));
-        assert!(!wsl_wants_x11(os("Ubuntu-26.04"), os("wayland")), "a chosen backend is never overridden");
-        assert!(!wsl_wants_x11(None, None), "plain Linux keeps GTK's own choice");
-        assert!(!wsl_wants_x11(os(""), None));
+        assert!(wsl_wants_x11(true, None));
+        assert!(!wsl_wants_x11(true, os("wayland")), "a chosen backend is never overridden");
+        assert!(!wsl_wants_x11(false, None), "plain Linux keeps GTK's own choice");
+        // WSL is known by its distro variable or by its kernel.
+        assert!(is_wsl(os("Ubuntu-26.04"), None));
+        assert!(is_wsl(None, Some("6.18.54.1-microsoft-standard-WSL2\n")), "a process started without WSL's environment");
+        assert!(!is_wsl(os(""), Some("6.8.0-45-generic\n")));
+        assert!(!is_wsl(None, None));
     }
     #[test]
     fn lanes_must_be_known_and_plain() {
@@ -1208,7 +1227,7 @@ pub fn run() {
     // Before GTK starts and before any thread exists (main calls this first),
     // which is what makes set_var sound here.
     #[cfg(target_os = "linux")]
-    if wsl_wants_x11(std::env::var_os("WSL_DISTRO_NAME"), std::env::var_os("GDK_BACKEND")) {
+    if wsl_wants_x11(on_wsl(), std::env::var_os("GDK_BACKEND")) {
         unsafe { std::env::set_var("GDK_BACKEND", "x11") };
     }
     tauri::Builder::default()
