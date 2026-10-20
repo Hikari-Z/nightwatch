@@ -136,4 +136,10 @@ await check('agents hidden: the persona card has a click region', COV('.nw-app >
 await check('...and so does the floating + (Add persona)', COV('.nw-app > .nw-lanes > .nw-add-persona'), true);
 await ev('localStorage.clear()');
 
+// ---- a host that can't hide: WSL's case, where Hide itself is marked (Terra, 10/20; Sonnet's read of #26).
+// Hide's own tip ends in a period, so this is the string the doubled period showed up in.
+await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.NW_HOST={can:a=>a!=='hide-window',act:()=>Promise.resolve(''),hitRects:()=>{},onTop:()=>{}};` });
+await go(BASE + '?skin=minimal'); await sleep(500);
+await check('no hide on this host: Hide reads cleanly with the not-wired note', `document.querySelector('[data-action="hide-window"]').dataset.tip`, 'Hide to the menu bar. The nightshift keeps watching. Not wired in the app yet.');
+
 console.log(`\n${pass} passed, ${fail} failed`); await Promise.race([send('Browser.close'), sleep(1000)]); ws.close(); ch.kill(); await sleep(300); rmSync(prof, { recursive: true, force: true }); process.exit(fail ? 1 : 0);
