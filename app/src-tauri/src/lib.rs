@@ -99,9 +99,15 @@ fn ensure_server() -> Result<(), String> {
 
 // Bring the window back from hidden or minimized, covering the screen first,
 // as the tray's toggle does when it shows it.
+//
+// On WSL a window minimized from the Windows taskbar stays down: WSLg never
+// tells the X11 side (is_visible true, is_minimized false) and ignores
+// unminimize(). Unmapping and mapping it again brings it back; on a window
+// that was already up, that costs at most a brief flicker (Terra, 10/20).
 fn show_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         cover(&w);
+        if on_wsl() { let _ = w.hide(); }
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
