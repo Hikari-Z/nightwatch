@@ -856,6 +856,14 @@ mod creation_tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
     #[test]
+    fn hide_is_not_offered_where_nothing_can_bring_the_window_back() {
+        let dir = std::env::temp_dir().join(format!("nw-hide-{}", std::process::id()));
+        assert!(host_can_on(&dir, false).contains(&"hide-window"));
+        let wsl = host_can_on(&dir, true);
+        assert!(!wsl.contains(&"hide-window"), "WSLg has no tray to come back from");
+        assert!(wsl.contains(&"wake"), "only hide is withheld");
+    }
+    #[test]
     fn a_removal_must_name_its_item() {
         let h = Hub { root: "/nowhere".into(), config_file: "/nowhere/x.json".into(), cfg: serde_json::Value::Null, machinery: "/nowhere".into(), state: "/nowhere".into() };
         for d in [serde_json::Value::Null, serde_json::json!({}), serde_json::json!({ "id": "  " }), serde_json::json!({ "id": 7 })] {
@@ -1078,6 +1086,7 @@ fn act(app: AppHandle, action: String, lane: Option<String>, hub: Option<String>
         // The page pings once at load: proof the bridge is permitted.
         "ping" => Ok("pong".into()),
         "hide-window" => {
+            if on_wsl() { return Err("Hide has no way back on WSL (there's no tray icon); click Nightwatch's taskbar icon to minimize it instead.".into()); }
             if let Some(w) = app.get_webview_window("main") { let _ = w.hide(); }
             Ok(String::new())
         }
@@ -1123,12 +1132,18 @@ window.NW_HOST = {{
 addEventListener('DOMContentLoaded', () => window.NW_HOST.act('ping').catch((e) => console.error('nightwatch bridge:', e)));"#, can = serde_json::to_string(&host_can(&app_machinery())).unwrap())
 }
 
-fn host_can(machinery: &std::path::Path) -> Vec<&'static str> {
+fn host_can(machinery: &std::path::Path) -> Vec<&'static str> { host_can_on(machinery, on_wsl()) }
+fn host_can_on(machinery: &std::path::Path, wsl: bool) -> Vec<&'static str> {
     let mut v = HOST_CAN.to_vec();
+    // WSLg shows no tray icon, so a hidden window had no way back: only killing
+    // the app returned it (Terra, 10/20). Hide comes back with a second launch
+    // that shows the first window (single-instance), not before.
+    if wsl { v.retain(|a| *a != "hide-window"); }
     if creation_ready(machinery) { v.extend_from_slice(CREATION); }
     if sweep_ready(machinery) { v.extend_from_slice(SWEEP); }
     v
 }
+fn on_wsl() -> bool { std::env::var_os("WSL_DISTRO_NAME").is_some_and(|d| !d.is_empty()) }
 
 #[cfg(test)]
 mod tests {
