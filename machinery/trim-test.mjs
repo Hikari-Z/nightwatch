@@ -182,6 +182,16 @@ try {
   const goodNear = run(build({ order: 'near' }));
   check('and so does the near-wrapper fixture when the format is intact', goodNear.r.status === 0, `${goodNear.r.status} ${goodNear.r.stderr.trim()}`);
 
+  // The first kept entry keeps its REAL parentUuid (the entry just before the
+  // cut), which is by definition not in the tail. The hole check exempts it;
+  // without the exemption every ordinary fold would be refused (Opus's second
+  // read of #30). The precondition proves the fixture has that shape.
+  {
+    const keptRows = readFileSync(JSON.parse(good.r.stdout).path, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const inTail = new Set(keptRows.map((e) => e.uuid));
+    check('an ordinary cut: the first kept entry points at the entry before the cut, outside the tail', Boolean(keptRows[0].parentUuid) && !inTail.has(keptRows[0].parentUuid), JSON.stringify(keptRows[0].parentUuid));
+    check('and the tail is accepted anyway (the exemption is pinned)', good.r.status === 0 && good.wrote === 1, `${good.r.status} ${good.r.stderr.trim()}`);
+  }
   check('parentUuid renamed: refused, nothing written (relinking would no-op and leave a hole)', refused(run(build({ parentKey: 'parent_uuid' })), /lack a uuid or a parentUuid/), '');
   check('uuid renamed: refused, nothing written', refused(run(build({ uuidKey: 'id' })), /lack a uuid or a parentUuid/), '');
   check('a kept entry whose parent is not in the tail: refused, nothing written', refused(run(build({ order: 'late', mutate: (rows) => { rows.at(-1).parentUuid = 'nowhere'; } })), /not in the tail/), '');
