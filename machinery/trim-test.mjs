@@ -8,7 +8,7 @@
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -40,8 +40,21 @@ function check(name, ok, detail = '') {
   if (!ok) fails++;
 }
 
+// A trim that exits nonzero where a fixture expects a tail is a FAILED CHECK, not
+// a crash: execFileSync threw, the script died with 12 PASS lines and no FAIL
+// line, and a second reader took the red for green (#30, 10/21).
+function trimOrFail(label, path, target) {
+  const r = spawnSync(process.execPath, [join(HERE, 'trim.mjs'), path, '--target-tokens', String(target)], { encoding: 'utf8' });
+  if (r.status !== 0) {
+    check(`trim accepts the ${label} fixture`, false, `exit ${r.status}: ${r.stderr.trim().split('\n').pop()}`);
+    console.log(`\n${fails} FAILED`);
+    process.exit(1);
+  }
+  return JSON.parse(r.stdout);
+}
+
 try {
-  const rep = JSON.parse(execFileSync(process.execPath, [join(HERE, 'trim.mjs'), src, '--target-tokens', '100000'], { encoding: 'utf8' }));
+  const rep = trimOrFail('first', src, 100000);
   const kept = readFileSync(rep.path, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
   const types = kept.map((e) => e.attachment?.type ?? e.type);
   check('no instructions entry kept', !types.includes('instructions'), types.join(','));
@@ -101,7 +114,7 @@ try {
   const dir3 = mkdtempSync(join(tmpdir(), 'trim-test-peer-'));
   const src3 = join(dir3, `${SID3}.jsonl`);
   writeFileSync(src3, rows3.map((r) => JSON.stringify(r)).join('\n') + '\n');
-  const rep = JSON.parse(execFileSync(process.execPath, [join(HERE, 'trim.mjs'), src3, '--target-tokens', '5000'], { encoding: 'utf8' }));
+  const rep = trimOrFail('peer-seam', src3, 5000);
   const kept = readFileSync(rep.path, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
   const first = kept.find((e) => e.type === 'user');
   check('the tail opens at the PEER message, not the morning human prompt',
