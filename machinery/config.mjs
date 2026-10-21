@@ -24,12 +24,16 @@
  *   node config.mjs show                     → full resolved config (JSON)
  *   node config.mjs doctor                   → path existence report, exit 1 on a miss
  */
-import { readFileSync, writeFileSync, renameSync, existsSync, realpathSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, existsSync, realpathSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, isAbsolute, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HOME = homedir();
+
+/** This machine's time zone (the IANA name, as the OS reports it): the default a hub's bell and wake are read in. A
+ *  hub's config pins its own (Set up writes this machine's), so moving a laptop across zones doesn't move its night. */
+export const machineZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } };
 
 /** What every hub starts from: one lane and the schedule this house proved
  *  across its first clean cycles. No hub root: a config's own folder is its
@@ -38,7 +42,8 @@ const HOME = homedir();
  *  names any one house's folders (issue #7). */
 export const DEFAULTS = {
   weftRoot: null,
-  timezone: 'America/Los_Angeles',
+  // the machine's own zone, never one house's (a hub in Berlin rang its bell at 02:00 Pacific)
+  timezone: machineZone(),
   schedule: {
     sleep: '02:00',
     wake: '08:00',
@@ -267,11 +272,22 @@ export function loadConfigFrom(file) {
   return cfg;
 }
 
+/** Claude Code's longest project-folder name before it cuts the name and adds a hash (2.1.306: `D0`/`N`). */
+export const PROJECT_DIR_MAX = 200;
 /** Where Claude Code keeps the transcripts of sessions run in `workdir`: a
- *  folder named after it, every character but letters, digits and '-' made
- *  a '-' (/Users/you/origin → -Users-you-origin). */
-export function transcriptsFor(workdir) {
-  return join(HOME, '.claude', 'projects', String(workdir).replace(/[^A-Za-z0-9-]/g, '-'));
+ *  folder named after it, every character but letters and digits made a '-'
+ *  (/Users/jane.doe/My Hubs/lark → -Users-jane-doe-My-Hubs-lark). A name past
+ *  PROJECT_DIR_MAX is cut there and given '-' and a hash of the whole path,
+ *  which this can't recompute: it finds the one folder that starts with the
+ *  cut name, and until a session has made it, names the cut form (doctor
+ *  says it's missing). `projects` is for tests. */
+export function transcriptsFor(workdir, projects = join(HOME, '.claude', 'projects')) {
+  const name = String(workdir).replace(/[^A-Za-z0-9]/g, '-');
+  if (name.length <= PROJECT_DIR_MAX) return join(projects, name);
+  const cut = name.slice(0, PROJECT_DIR_MAX);
+  let found = [];
+  try { found = readdirSync(projects).filter((d) => d.startsWith(`${cut}-`)); } catch { /* no projects folder yet */ }
+  return join(projects, found.length === 1 ? found[0] : cut);
 }
 
 /** A config naming no hub, for the one reader that must run without one:
@@ -433,6 +449,11 @@ try {
 } catch { /* argv[1] unresolvable — a module import, not a CLI call */ }
 if (invokedDirectly) {
   const [cmd, arg] = process.argv.slice(2);
+  // with no hub named, say so in words (doctor is what a fresh install runs first), never as a stack trace
+  if (!loadConfigOrNone()) {
+    console.error("No hub config named. Set NIGHTWATCH_CONFIG to your hub's nightwatch.config.json (Set up writes one into every hub), then run this again.");
+    process.exit(2);
+  }
   const cfg = loadConfig();
   if (cmd === 'get' && arg) {
     const val = arg.split('.').reduce((o, k) => (o ?? {})[k], cfg);

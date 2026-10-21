@@ -13,8 +13,8 @@ Five cooperating pieces, all small:
 
 - **config.mjs + weft.config.json** — one file of paths and knobs that
   every other piece reads. Start here; `node config.mjs doctor` tells
-  you what's missing. With no config file at all you get a working
-  single-lane setup under `~/origin/weft` called `main`.
+  you what's missing. With no config named (`NIGHTWATCH_CONFIG`), the
+  scripts refuse and say so: the app's Set up writes a hub's config.
 - **sleep.mjs** — the fold. Run by the agent itself at the end of day
   (the "ritual": write the day's rung → run sleep.mjs → rewrite the
   checkpoint, in that order). Trims the transcript to a budget
@@ -104,7 +104,7 @@ this house runs, trimmed to the parts that matter
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>StandardErrorPath</key>
-    <string>/Users/YOU/origin/weft/nightshift.launchd.log</string>
+    <string>/Users/YOU/YOUR-HUB/nightshift.launchd.log</string>
 </dict></plist>
 ```
 

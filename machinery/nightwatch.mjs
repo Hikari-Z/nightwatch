@@ -30,7 +30,7 @@ import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { daemonJob, registryFile, summonArgvFor, withToolPath } from './platform.mjs';
-import { configEnv } from './config.mjs';
+import { configEnv, machineZone } from './config.mjs';
 import { applyRetention, stepFor, survey } from './retention.mjs';
 
 const WC = dirname(fileURLToPath(import.meta.url));
@@ -217,7 +217,12 @@ function initSteps(spec) {
         // behavior with no implied infrastructure (opus's bench nit, 10/7).
         lanes: { [lane.id]: { targetTokens: target, model: lane.model, ...(lane.armed === false ? {} : {}) } },
         machineryVersion,
-        paths: { workdir: hub, machinery: WC, transcripts: join(HOME, '.claude', 'projects', '-' + hub.replaceAll('/', '-').replace(/^-/, '')) },
+        // this machine's zone, pinned: the night stays put if the laptop travels (config.mjs machineZone)
+        timezone: machineZone(),
+        // no transcripts path: config.mjs derives it from workdir at every load (transcriptsFor), by Claude Code's own
+        // rule. Writing it here once encoded only '/', so a hub under /Users/jane.doe or "My Hubs" watched a folder
+        // Claude Code never makes; and a path past 200 characters has a hash only Claude Code's first session creates
+        paths: { workdir: hub, machinery: WC },
       };
       writeFileSync(join(part, 'nightwatch.config.json'), JSON.stringify(cfg, null, 2) + '\n');
       if (lane.armed !== false) writeFileSync(join(part, 'wakecycle', 'nightshift.armed'), lane.id + '\n');

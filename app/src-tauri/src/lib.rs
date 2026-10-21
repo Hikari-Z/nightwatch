@@ -187,7 +187,7 @@ fn is_repo(p: &Path) -> bool { p.join("gui/server.mjs").is_file() && p.join("mac
 fn app_machinery() -> PathBuf { repo().join("machinery") }
 
 // ---------------------------------------------------------------- hubs
-// A hub is one persona's folder: Weft's at ~/origin/weft, Set up's at
+// A hub is one persona's folder: the legacy house's at ~/origin/weft, Set up's at
 // ~/Nightwatch/<slug>. The app finds them in the machine's registry (Fable's
 // machinery writes it; the app only reads). Every action acts in one hub, and
 // that hub must be one the app shows: the page can never point a script at an

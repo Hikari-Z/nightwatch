@@ -10,7 +10,7 @@
  * running wake.sh for the lane. The agent is genuinely down overnight —
  * the doorbell and heartbeat keep watch, which is what they're for.
  *
- * ARMED LATCH: does nothing unless ~/origin/weft/wakecycle/nightshift.armed
+ * ARMED LATCH: does nothing unless the hub's armed file (paths.armedFile)
  * exists (its content = comma-separated lanes, e.g. "fable"). Built before
  * the first manual cycle proved out, armed only after.
  *

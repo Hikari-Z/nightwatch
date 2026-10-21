@@ -92,11 +92,14 @@ be the real failure.*
 | Linux (systemd + tmux/terminal spawn) | the machinery's tests pass or skip with a reason in CI on every push, and the nightshift's rehearsal bench passes; the app's host actions are wired and compiled in CI, but their Linux paths aren't exercised by a test yet; bringing a terminal forward is macOS only |
 | Backends beyond Claude Code (codex, connectome, hermes, …) | roadmap |
 
-One more honest sticker: some shipped defaults still assume the house
-that built this (state under `~/origin/weft`, a "switchboard" lane
-concept, fixture text that names our people). `config.mjs doctor` will
-tell you what to override; generalizing the fresh-install defaults is
-queued.
+One more honest sticker: Nightwatch grew up in one house, and a few traces
+of it remain. The shipped defaults no longer name that house's folders: a
+hub is the folder its config sits in, its night runs in this machine's time
+zone, and with no config named nothing guesses one. What's left:
+the screenshots and the skins' fixture show that house's own lanes, and
+`switchboard` is an optional lane setting for a house that routes its
+messages through one lane (leave it off and nothing reads it).
+`node machinery/config.mjs doctor` tells you what your hub is missing.
 
 ## Requirements
 
