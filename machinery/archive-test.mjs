@@ -10,6 +10,8 @@
 //   6. a re-fold of a SHRUNK session — the larger old copy is kept aside;
 //   7. catch-up — a session that kept writing after its fold is brought up to
 //      date at the next fold.
+//   9. the trim's output check — a broken-format session is refused (event +
+//      stderr, no receipt), and torn lines are counted into the fold row.
 // Run: node machinery/archive-test.mjs   (exit 0 = all pass)
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, appendFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -176,6 +178,31 @@ try {
     check('8 the next fold succeeds', r.code === 0, r.err);
     check('8 a dead process\'s staging file is swept', !existsSync(join(h.archive, `${A}.jsonl.partial-${dead}`)));
     check('8 a live process\'s staging file is left alone', existsSync(join(h.archive, `${A}.jsonl.partial-${process.pid}`)));
+  }
+  // 9. The trim's output check (10/21): a session whose chain field was renamed
+  //    is REFUSED, not folded wrong. sleep exits 1 before any receipt or archive,
+  //    and the refusal lands in the event stream (alarm), not only on stderr.
+  //    Torn lines are counted into the fold row.
+  {
+    const h = hub();
+    transcript(h, A, 6);
+    const f = join(h.transcripts, `${A}.jsonl`);
+    writeFileSync(f, readFileSync(f, 'utf8').split('"parentUuid"').join('"parent_uuid"'));
+    const r = sleep(h, A);
+    check('9 a renamed chain field fails the fold', r.code === 1, `${r.code} ${r.err}`);
+    check('9 and says why on stderr', /OUTPUT CHECK FAILED/.test(r.err), r.err);
+    check('9 no fold row, no archive', lastFold(h) === null && !existsSync(h.archive), lastFold(h));
+    const evPath = join(h.root, 'events.jsonl');
+    const ev = existsSync(evPath) ? readFileSync(evPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l)).find((e) => e.kind === 'trim-failed') : null;
+    check('9 a trim-failed event carries the cause, flagged as an alarm', ev?.alarm === true && ev?.lane === 'solo' && /lack a uuid or a parentUuid/.test(ev?.cause ?? ''), ev);
+  }
+  {
+    const h = hub();
+    transcript(h, A, 6);
+    appendFileSync(join(h.transcripts, `${A}.jsonl`), '{"type":"user","message":{"cont\nnot json\n');
+    const r = sleep(h, A);
+    check('9 a session with torn lines still folds', r.code === 0, r.err);
+    check('9 and its fold row says how many lines were dropped', lastFold(h)?.tornLines === 2, lastFold(h));
   }
 } finally {
   for (const r of roots) rmSync(r, { recursive: true, force: true });

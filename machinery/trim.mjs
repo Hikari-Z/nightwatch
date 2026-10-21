@@ -228,6 +228,42 @@ for (let i = cut; i < lines.length; i++) {
   if (!isResumeInert(e)) keptEst += estLine(line);
 }
 
+// OUTPUT CHECK (10/21): the cut above is made by fields this script does not
+// own, so it checks the tail it just built against the shape a resume needs,
+// and refuses to write one that fails. Three silent failures, each reproduced
+// on a scratch fixture (compat repro, 10/21), all exit 0 before this check:
+//  1. uuid or parentUuid renamed: relinking no-ops (relinked 0), the chain has
+//     a hole, and the harness would resume only the turns after it.
+//  2. a parent that is not in the tail: the same hole by any other cause.
+//  3. isMeta renamed: harness wrappers read as human prompts, and the cut can
+//     land ON one. The wrappers named here carry isMeta in every transcript
+//     measured on this hub (1,344 peer messages, 111 local-command-caveats,
+//     9 "response cut" nudges; 0 exceptions), so one without it is drift.
+//     `<local-command-stdout>` is deliberately NOT listed: it is a real
+//     user-role entry with isMeta false (74 of them).
+// A check that fails exits 1 and writes nothing: a fold skipped loudly beats a
+// tail that resumes wrong silently. The first kept entry may point outside the
+// tail (its parent is the cut); no other entry may.
+const META_WRAPPERS = [/^<local-command-caveat>/, /^Your response above was cut/, /^Another Claude session sent a message/];
+function tailProblems(keptLines) {
+  const rows = keptLines.map((l) => JSON.parse(l));
+  const problems = [];
+  const conv = rows.filter((e) => e.type === 'user' || e.type === 'assistant');
+  const noFields = conv.filter((e) => typeof e.uuid !== 'string' || !('parentUuid' in e)).length;
+  if (noFields) problems.push(`${noFields} of ${conv.length} conversation entries lack a uuid or a parentUuid field: the transcript format may have changed`);
+  const ids = new Set(rows.map((e) => e.uuid).filter((u) => typeof u === 'string'));
+  const holes = rows.slice(1).filter((e) => e.parentUuid && !ids.has(e.parentUuid)).length;
+  if (holes) problems.push(`${holes} kept entries point at a parent that is not in the tail: a resume would load only the turns after the gap`);
+  const drift = rows.filter((e) => e.type === 'user' && typeof e.message?.content === 'string' && e.isMeta !== true && META_WRAPPERS.some((re) => re.test(e.message.content))).length;
+  if (drift) problems.push(`${drift} harness-wrapper entries are not marked isMeta: seam detection can no longer tell them from a human prompt`);
+  return problems;
+}
+const problems = tailProblems(kept);
+if (problems.length) {
+  console.error(`trim: OUTPUT CHECK FAILED, nothing written. ${problems.join('; ')}.`);
+  process.exit(1);
+}
+
 const newId = randomUUID();
 // The session id appears as `sessionId` and `session_id`; the value is the
 // old uuid, globally unique, so a plain string replace is exact.
@@ -257,6 +293,7 @@ const report = {
   targetTokens: target,
   ...(overshoot ? { overshoot } : {}),
   harnessDropped: dropped,
+  tornLines: torn,
   relinked,
   usageStripped,
   cutAt: cutEntry?.timestamp ?? null,

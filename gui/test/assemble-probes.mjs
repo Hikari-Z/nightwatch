@@ -400,5 +400,19 @@ const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
   check('stage: a closed lane whose failed wake was rescued is not failed', L.state !== 'failed', `state=${L.state}`);
 }
 
+// ---- trim-failed (10/21): sleep.mjs's refused trim (the output check) is drawn on the lane's night
+// as a red mark whose tip carries the cause. It raises no card or banner: the mark and the event stream
+// are the whole surface for now.
+{
+  const events = [
+    JSON.stringify({ at: iso(60e3), kind: 'daemon-alive', armed: ['fable'] }),
+    JSON.stringify({ at: iso(30e3), kind: 'trim-failed', lane: 'fable', alarm: true, cause: 'trim: OUTPUT CHECK FAILED, nothing written. 1 kept entries point at a parent that is not in the tail' }),
+  ].join('\n');
+  const io = { readText: (p) => p === '/ev' ? events : p === '/armed' ? 'fable' : null, readDir: () => [], stat: () => null, readTail: () => null, livePids: () => [], psCommand: () => null, now: () => NOW };
+  const node = assemble(cfg, io, '8h').NIGHT.fable?.find((n) => /Fold skipped/.test(n[4]));
+  check('trim-failed draws a failed mark on the lane night, with its cause in the tip',
+    node?.[0] === 'wake-failed' && node?.[1] === 'failed' && /not in the tail/.test(node?.[4] ?? ''), JSON.stringify(node ?? null));
+}
+
 console.log(failures === 0 ? 'PROBES CLEAN' : `PROBES: ${failures} failure(s)`);
 process.exit(failures ? 1 : 0);

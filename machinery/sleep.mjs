@@ -266,7 +266,15 @@ try {
     execFileSync(process.execPath, [join(MACHINERY_DIR, 'trim.mjs'), sessionId, '--target-tokens', String(target)], { encoding: 'utf8' }),
   );
 } catch (e) {
-  console.error(`trim failed for session ${sessionId}: ${e.stderr?.toString().trim() || e.message}`);
+  const why = e.stderr?.toString().trim() || e.message;
+  console.error(`trim failed for session ${sessionId}: ${why}`);
+  // A failed trim is a skipped fold (the output check refuses a tail that
+  // would resume wrong, 10/21). The planned ritual's stderr lands only in the
+  // agent's own session, so the event stream carries it too, for the app and
+  // for whoever reads the night.
+  try {
+    appendFileSync(CFG.paths.events, JSON.stringify({ at: new Date().toISOString(), kind: 'trim-failed', lane, session: sessionId, cause: why.split('\n').pop().slice(0, 300), alarm: true }) + '\n');
+  } catch { /* an event lost, never a fold lost */ }
   process.exit(1);
 }
 
@@ -337,6 +345,7 @@ appendFileSync(
     est_tokens: trimOut.estTokens,
     target_tokens: trimOut.targetTokens ?? target,
     ...(trimOut.overshoot ? { overshoot: trimOut.overshoot } : {}),
+    ...(trimOut.tornLines ? { tornLines: trimOut.tornLines } : {}),
     tail: trimOut.newSessionId,
     ...(deadWake.skipped.length ? { deadWakesSkipped: deadWake.skipped } : {}),
     ...(archived.error ? { archiveError: archived.error } : { archived: archived.path }),
