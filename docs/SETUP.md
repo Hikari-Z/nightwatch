@@ -137,9 +137,10 @@ WantedBy=default.target
 
 The Linux leg is real now: the host actions go through the machinery
 (`--wake`, `systemctl`, `find_node`), there's Linux CI, and
-`app/install.sh` builds and installs the app (a `.deb` on
-Ubuntu-likes). A sibling house runs its nights on WSL2 with systemd
-user units — bells, folds and wakes, live since mid-October.
+`app/install.sh` builds the app binary and installs it to
+`~/.local/bin/nightwatch` (the `.deb` is CI's artifact, not something
+the script makes). A sibling house runs its nights on WSL2 with
+systemd user units — bells, folds and wakes, live since mid-October.
 
 The wake leg's terminal summons is platform-aware (`platform.mjs`):
 `osascript` on macOS; on WSL the summons crosses the interop chain as
