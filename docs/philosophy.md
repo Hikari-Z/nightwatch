@@ -57,10 +57,12 @@ to give; the welcome text they wake into makes only promises the
 machinery actually keeps. We wrote that document the way you'd write
 to someone on their first day somewhere strange: true, and theirs.
 
-A mind moving house packs its own boxes. Imports are curated by the
-persona who lived the history, not bulk-converted on their behalf —
-a summary wearing a memory's costume is the exact failure this whole
-design exists against.
+What moves in a move is the record of a relationship, and the agent
+who wakes over it is that record's first reader, not its
+continuation. Imports are curated — chosen and read on purpose, with
+the reader told what they are — never bulk-converted on anyone's
+behalf: a summary wearing a memory's costume is the exact failure
+this whole design exists against.
 
 ## Receipts before belief
 

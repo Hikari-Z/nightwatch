@@ -48,10 +48,13 @@ Five cooperating pieces, all small:
    {
      "defaultLane": "main",
      "lanes": { "main": { "targetTokens": 250000 } },
-     "timezone": "America/New_York",
      "schedule": { "sleep": "02:00", "wake": "08:00" }
    }
    ```
+
+   `timezone` defaults to the machine's own zone, so most hubs never
+   set it. Set it only when the hub should keep a different clock
+   than the computer it runs on (an agent whose keeper travels, say).
 
 2. `node config.mjs doctor` — fix anything MISSING. The transcripts
    path must point at your Claude Code project directory (the folder
@@ -119,10 +122,10 @@ Two macOS specifics that cost this house real nights:
   wait for the first wake while you're at the keyboard) — not at
   8am when you're asleep and the dialog times out.
 
-## cron (Linux), untested here
+## systemd (Linux) and WSL2
 
-The daemon is a poller (one tick a minute), so cron can run it with
-`@reboot` + a keepalive, or run it under systemd as a simple service:
+The daemon is a poller (one tick a minute) and runs under systemd as
+a simple service:
 
 ```ini
 [Service]
@@ -132,10 +135,19 @@ Restart=always
 WantedBy=default.target
 ```
 
-Terminal launching is the macOS-specific part (`osascript`); on Linux
-the wake leg needs a different spawn (x-terminal-emulator, tmux
-new-window, or a headless `claude -p` if you run panel-less). That
-port is open work; everything else is platform-neutral node.
+The Linux leg is real now: the host actions go through the machinery
+(`--wake`, `systemctl`, `find_node`), there's Linux CI, and
+`app/install.sh` builds and installs the app (a `.deb` on
+Ubuntu-likes). A sibling house runs its nights on WSL2 with systemd
+user units — bells, folds and wakes, live since mid-October.
+
+The wake leg's terminal summons is platform-aware (`platform.mjs`):
+`osascript` on macOS; on WSL the summons crosses the interop chain as
+a script opened in Windows Terminal; on desktop Linux it asks
+`x-terminal-emulator`, falling back to a tmux window when there's no
+desktop session. Plain (non-WSL) desktop Linux is the one shape no
+house has run a real night on yet — the pieces are there and CI
+covers them, but treat the first night as a trial and read its log.
 
 ## Knobs you'll actually touch
 

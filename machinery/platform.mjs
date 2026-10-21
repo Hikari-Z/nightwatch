@@ -9,9 +9,10 @@
  * darwin paths this house has lived on move in unchanged and a WSL or Linux
  * install changes this file's answers, never its callers.
  *
- * Kinds: 'darwin' (the lived platform), 'wsl' (Windows 11 + WSL2, the Terra
- * pilot — Windows interop binaries are reachable from inside WSL on the
- * default config), 'linux' (untested here; the shapes follow the SETUP
+ * Kinds: 'darwin' (the first lived platform), 'wsl' (Windows 11 + WSL2,
+ * lived nightly at a sibling house since mid-October — Windows interop
+ * binaries are reachable from inside WSL on the default config), 'linux'
+ * (no house has run a real night on it yet; the shapes follow the SETUP
  * doc's systemd section). Anything else gets 'linux' answers and loud
  * errors where no answer exists.
  *
