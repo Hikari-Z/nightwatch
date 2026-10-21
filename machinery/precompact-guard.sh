@@ -16,11 +16,18 @@
 # compaction is undocumented on whether it fires this hook at all — if a
 # line ever appears here with an unfamiliar trigger, that's the answer.
 # The receipt lands in the hub the session runs in (the hook input's cwd,
-# when it has a wakecycle/); otherwise where it always has.
+# when it has a wakecycle/); else in the hub its config names (the session
+# inherits NIGHTWATCH_CONFIG, or WEFT_CONFIG, from wake.sh): that hub's
+# wakecycle/ when it has one, the hub itself otherwise; else, with no hub to
+# name, ~/.nightwatch. Never a path only one house has.
 INPUT=$(cat)
 CWD=$(printf '%s' "$INPUT" | sed -n 's/.*"cwd" *: *"\([^"]*\)".*/\1/p')
-GUARD_LOG="$HOME/origin/weft/wakecycle/precompact-guard.log"
-[ -n "$CWD" ] && [ -d "$CWD/wakecycle" ] && GUARD_LOG="$CWD/wakecycle/precompact-guard.log"
+CFG="${NIGHTWATCH_CONFIG:-${WEFT_CONFIG:-}}"
+if [ -n "$CWD" ] && [ -d "$CWD/wakecycle" ]; then GUARD_DIR="$CWD/wakecycle"
+elif [ -n "$CFG" ] && [ -d "$(dirname "$CFG")/wakecycle" ]; then GUARD_DIR="$(dirname "$CFG")/wakecycle"
+elif [ -n "$CFG" ] && [ -d "$(dirname "$CFG")" ]; then GUARD_DIR="$(dirname "$CFG")"
+else GUARD_DIR="$HOME/.nightwatch"; mkdir -p "$GUARD_DIR" 2>/dev/null; fi
+GUARD_LOG="$GUARD_DIR/precompact-guard.log"
 printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$INPUT" >> "$GUARD_LOG" 2>/dev/null || true
 # The sleep.mjs it names is the one beside this script — the machinery the
 # hook was installed from — never a path baked in for one hub. Backslashes
