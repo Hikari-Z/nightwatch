@@ -273,7 +273,7 @@ try {
   // agent's own session, so the event stream carries it too, for the app and
   // for whoever reads the night.
   try {
-    appendFileSync(CFG.paths.events, JSON.stringify({ at: new Date().toISOString(), kind: 'trim-failed', lane, session: sessionId, reason: why.split('\n').pop().slice(0, 300), alarm: true }) + '\n');
+    appendFileSync(CFG.paths.events, JSON.stringify({ at: new Date().toISOString(), kind: 'trim-failed', lane, session: sessionId, cause: why.split('\n').pop().slice(0, 300), alarm: true }) + '\n');
   } catch { /* an event lost, never a fold lost */ }
   process.exit(1);
 }

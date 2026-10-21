@@ -194,7 +194,7 @@ try {
     check('9 no fold row, no archive', lastFold(h) === null && !existsSync(h.archive), lastFold(h));
     const evPath = join(h.root, 'events.jsonl');
     const ev = existsSync(evPath) ? readFileSync(evPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l)).find((e) => e.kind === 'trim-failed') : null;
-    check('9 a trim-failed event carries the reason, flagged as an alarm', ev?.alarm === true && ev?.lane === 'solo' && /lack a uuid or a parentUuid/.test(ev?.reason ?? ''), ev);
+    check('9 a trim-failed event carries the cause, flagged as an alarm', ev?.alarm === true && ev?.lane === 'solo' && /lack a uuid or a parentUuid/.test(ev?.cause ?? ''), ev);
   }
   {
     const h = hub();
