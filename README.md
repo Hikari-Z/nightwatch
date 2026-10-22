@@ -39,7 +39,9 @@ transcript of every folded session is archived in full inside the
 agent's own hub, where no cache cleanup can reach it.
 
 Why it's built this way is `docs/philosophy.md`. How to run it is
-`docs/SETUP.md`.
+`docs/SETUP.md`. What living with it is like (the day's shape, what it
+costs, what you'll see when something goes wrong) is
+`docs/WHAT-TO-EXPECT.md`.
 
 ## The pieces
 
