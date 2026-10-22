@@ -10,7 +10,10 @@
 URL="http://127.0.0.1:7352/${NIGHTWATCH_SKIN:+?skin=$NIGHTWATCH_SKIN}"
 # This script's own gui/ dir, so the server, log and profile come from the
 # tree the script lives in — not a hard-coded path to one machine's old copy.
-HERE="$(cd "$(dirname "$0")" && pwd)"
+# One readlink hop first: invoked through a symlink, $0 is the link, and its
+# dirname would land outside any tree (marginalia's review note).
+SELF="$0"; [ -L "$SELF" ] && SELF="$(readlink "$SELF")"
+HERE="$(cd "$(dirname "$SELF")" && pwd -P)"
 if ! curl -s -m 2 -o /dev/null "http://127.0.0.1:7352/"; then
   NIGHTWATCH_PORT=7352 nohup node "$HERE/server.mjs" \
     >> "$HERE/viewer.log" 2>&1 &
