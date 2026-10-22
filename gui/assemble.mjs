@@ -500,7 +500,7 @@ export function assemble(cfg, io, range = '8h') {
             at: [ff.at, hm(ff.at)],
             title: ff.kind === 'trim-failed' ? 'Fold refused' : 'Emergency fold failed',
             cause: ff.kind === 'trim-failed'
-              ? `The trimmer refused to write the folded transcript, so the fold didn't happen and the session is still whole. Its reason: ${foldCause(ff.cause)} A Claude Code update that changed the transcript format is the usual suspect, and the next fold will likely be refused the same way until someone looks.`
+              ? `The trimmer refused to write the folded transcript; the session is still whole, unfolded. ${foldCause(ff.cause)} Usually a Claude Code update that changed the transcript format.`
               : `The nightshift's emergency fold for this agent exited ${ff.exit ?? 'with an error'}${ff.error ? ` (${ff.error})` : ''}, so the session is still unfolded. The log says why.`,
             fixes: [
               ['log', 'show-log', 'Show log', 'Open the nightshift log at this failure'],
