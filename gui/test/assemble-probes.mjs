@@ -401,8 +401,7 @@ const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
 }
 
 // ---- trim-failed (10/21): sleep.mjs's refused trim (the output check) is drawn on the lane's night
-// as a red mark whose tip carries the cause. It raises no card or banner: the mark and the event stream
-// are the whole surface for now.
+// as a red mark whose tip carries the cause. The red card for it is the block after this one.
 {
   const events = [
     JSON.stringify({ at: iso(60e3), kind: 'daemon-alive', armed: ['fable'] }),
@@ -412,6 +411,49 @@ const usageLine = (id, agoMs, ctxTokens, outTokens) => JSON.stringify({
   const node = assemble(cfg, io, '8h').NIGHT.fable?.find((n) => /Fold skipped/.test(n[4]));
   check('trim-failed draws a failed mark on the lane night, with its cause in the tip',
     node?.[0] === 'wake-failed' && node?.[1] === 'failed' && /not in the tail/.test(node?.[4] ?? ''), JSON.stringify(node ?? null));
+}
+
+// ---- a fold that didn't happen (10/21, the banner after #30): a refused trim (trim-failed) or a
+// failed emergency fold (orphan-fold-failed) is a red card on its lane and puts the head in alarm;
+// a later fold, a successful orphan fold or a wake ends it; the lane keeps its stage.
+{
+  const ev = (rows) => [JSON.stringify({ at: iso(60e3), kind: 'daemon-alive', armed: ['fable'] }), ...rows.map((r) => JSON.stringify(r))].join('\n');
+  const io = (events) => ({
+    readText: (p) => p === '/ev' ? events : p === '/armed' ? 'fable' : null,
+    readDir: () => [], stat: () => null, readTail: () => null, livePids: () => [], psCommand: () => null, now: () => NOW,
+  });
+  const refused = { at: iso(40 * 60e3), kind: 'trim-failed', lane: 'fable', session: 's-1', alarm: true, cause: 'trim: OUTPUT CHECK FAILED, nothing written. 1 kept entries point at a parent that is not in the tail: a resume would load only the turns after the gap' };
+  let s = assemble(cfg, io(ev([refused])), '8h');
+  let L = s.LANES.find((x) => x.id === 'fable');
+  check('a refused trim raises the lane\'s red card, its reason without the trimmer\'s prefix',
+    L?.alert?.kind === 'trim-failed' && L.alert.title === 'Fold refused' && /not in the tail/.test(L.alert.cause) && !/OUTPUT CHECK FAILED/.test(L.alert.cause) && !L.alert.level && L.alert.at[0] === refused.at,
+    JSON.stringify(L?.alert ?? null));
+  check('a refused trim puts the head in alarm', s.DAEMON.phase === 'alarm', `phase=${s.DAEMON.phase}`);
+  for (const [kind, extra] of [['folded', { tail: 't' }], ['orphan-fold-done', {}], ['fold-forced', {}], ['wake-confirmed', {}]]) {
+    s = assemble(cfg, io(ev([refused, { at: iso(20 * 60e3), kind, lane: 'fable', ...extra }])), '8h');
+    L = s.LANES.find((x) => x.id === 'fable');
+    // A successful orphan fold leaves the lane orphaned, which is an alarm of its own (an unauthored fold).
+    const phaseOk = kind === 'orphan-fold-done' ? L?.state === 'orphaned' : s.DAEMON.phase !== 'alarm';
+    check(`a later ${kind} ends the refused-fold card${kind === 'orphan-fold-done' ? ' (the lane reads orphaned)' : ' and the alarm'}`, L?.alert == null && phaseOk, JSON.stringify([L?.alert ?? null, L?.state, s.DAEMON.phase]));
+  }
+  s = assemble(cfg, io(ev([{ at: iso(25 * 3600e3), kind: 'trim-failed', lane: 'fable', alarm: true, cause: 'x' }])), '8h');
+  check('a refusal more than a day old no longer shows (the next bell raises it again)', s.LANES.find((x) => x.id === 'fable')?.alert == null, JSON.stringify(s.LANES[0]?.alert ?? null));
+  const orphan = { at: iso(10 * 60e3), kind: 'orphan-fold-failed', lane: 'fable', exit: 1, alarm: true };
+  L = assemble(cfg, io(ev([refused, orphan])), '8h').LANES.find((x) => x.id === 'fable');
+  check('a refused trim then its failed orphan fold make one card, the newest',
+    L?.alert?.kind === 'orphan-fold-failed' && L.alert.title === 'Emergency fold failed' && /exited 1/.test(L.alert.cause), JSON.stringify(L?.alert ?? null));
+  L = assemble(cfg, io(ev([refused, { at: iso(5 * 60e3), kind: 'wake-failed', lane: 'fable', cause: 'checkpoint missing', alarm: true }])), '8h').LANES.find((x) => x.id === 'fable');
+  check('wake-failed outranks the refused-fold card', L?.alert?.kind === 'wake-failed', JSON.stringify(L?.alert?.kind ?? null));
+  // On a live lane the refusal comes after the bell: the card keeps the belled stage, with the red card on it.
+  const REG = 'dddddddd-4444-4444-4444-444444444444';
+  const live = (lines) => ({
+    readText: (p) => p === '/ev' ? ev(lines) : p === '/armed' ? 'fable' : p === `/wc/lane.${REG}` ? JSON.stringify({ lane: 'fable', pid: 300 }) : null,
+    readDir: (p) => p === '/wc' ? [`lane.${REG}`] : [],
+    stat: (p) => p.startsWith('/wc/') ? { size: 1, mtimeMs: NOW - 3600e3 } : null,
+    readTail: () => null, livePids: () => [300], psCommand: () => null, now: () => NOW,
+  });
+  L = assemble({ ...cfg, paths: { ...cfg.paths, wakecycle: '/wc' } }, live([{ at: iso(5 * 60e3), kind: 'bell-rung', lane: 'fable', session: REG }, { ...refused, at: iso(2 * 60e3), session: REG }]), '8h').LANES.find((x) => x.id === 'fable');
+  check('a refused fold leaves a live lane belled, with the red card', L?.state === 'belled' && L?.alert?.kind === 'trim-failed', JSON.stringify([L?.state, L?.alert?.kind ?? null]));
 }
 
 console.log(failures === 0 ? 'PROBES CLEAN' : `PROBES: ${failures} failure(s)`);

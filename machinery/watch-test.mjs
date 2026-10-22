@@ -430,6 +430,42 @@ check("midday: a stale request from an ended session doesn't silence the next on
   rmSync(win, { recursive: true, force: true });
 }
 
+// A fold that didn't happen (10/21): a refused trim (trim-failed, sleep.mjs) or a failed emergency
+// fold (orphan-fold-failed, nightshift) is told once per lane per episode, read from the event stream
+// on from where the watch stopped. A hub of its own: no sessions, so nothing else notifies.
+{
+  const ff = join(root, 'foldfail');
+  mkdirSync(join(ff, 'wakecycle'), { recursive: true });
+  const ffCfg = join(ff, 'nightwatch.config.json');
+  writeFileSync(ffCfg, JSON.stringify({
+    weftRoot: ff, persona: { name: 'Lark' }, lanes: { fable: { targetTokens: 250000 }, opus: { targetTokens: 250000 } },
+    notify: { macos: false, command: recorder }, paths: { transcripts: join(ff, 'projects'), sessions: join(ff, 'sessions') },
+  }));
+  mkdirSync(join(ff, 'projects')); mkdirSync(join(ff, 'sessions'));
+  const ffEvents = join(ff, 'events.jsonl');
+  const add = (e) => appendFileSync(ffEvents, JSON.stringify({ at: iso(Date.now()), ...e }) + '\n');
+  const told = () => { const before = lines(SENT).length; tick(ffCfg); return lines(SENT).slice(before); };
+  add({ kind: 'trim-failed', lane: 'fable', alarm: true, cause: 'from before the watch first read' });
+  check('fold failure: the first read starts at the end, so nothing old is told', told().length, 0);
+  add({ kind: 'trim-failed', lane: 'fable', session: 's-f1', alarm: true, cause: 'trim: OUTPUT CHECK FAILED, nothing written. 1 kept entries point at a parent that is not in the tail' });
+  let sent = told();
+  check('fold failure: a refused trim is told once, as itself', sent.map((m) => [m.kind, m.lane, m.title]), [['trim-failed', 'fable', 'Fold refused']]);
+  add({ kind: 'orphan-fold-failed', lane: 'fable', exit: 1, alarm: true });
+  check('fold failure: the orphan fold failing on the same trim is the same episode, not told again', told().length, 0);
+  add({ kind: 'orphan-fold-failed', lane: 'opus', exit: 1, alarm: true });
+  sent = told();
+  check('fold failure: another lane\'s failure is its own episode', sent.map((m) => [m.kind, m.lane, m.title]), [['orphan-fold-failed', 'opus', 'Emergency fold failed']]);
+  add({ kind: 'folded', lane: 'fable', tail: 't' });
+  add({ kind: 'trim-failed', lane: 'fable', alarm: true, cause: 'x' });
+  check('fold failure: after a good fold, the next refusal is told', told().map((m) => m.lane), ['fable']);
+  appendFileSync(ffEvents, JSON.stringify({ at: iso(Date.now()), kind: 'trim-failed', lane: 'opus' }).slice(0, 20));
+  check('fold failure: a line still being written waits for its end', told().length, 0);
+  appendFileSync(ffEvents, JSON.stringify({ at: iso(Date.now()), kind: 'trim-failed', lane: 'opus' }).slice(20) + '\n');
+  check('fold failure: and is read whole once it ends (opus is still in its episode, so nothing new)', told().length, 0);
+  writeFileSync(ffEvents, JSON.stringify({ at: iso(Date.now()), kind: 'orphan-fold-done', lane: 'opus' }) + '\n' + JSON.stringify({ at: iso(Date.now()), kind: 'trim-failed', lane: 'opus', alarm: true, cause: 'y' }) + '\n');
+  check('fold failure: a stream that shrank is read from its start', told().map((m) => m.lane), ['opus']);
+}
+
 // A passing run leaves nothing behind; a failing one keeps its scratch hub
 // to look at (Ra, 10/11: tests clean up after themselves).
 if (fail) console.log(`${pass} passed, ${fail} failed  (scratch kept: ${root})`);

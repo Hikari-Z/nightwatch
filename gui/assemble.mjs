@@ -289,7 +289,17 @@ const STUCK_CARD = {
 };
 // Lane-tagged events that report on a session rather than move it through
 // the bell → fold → close → wake cycle.
-const NOT_LIFECYCLE = new Set(['stuck', 'stuck-cleared', 'context-high', 'context-high-cleared', 'spiral-alarm', 'wake-cost', 'orphan-fold-deferred']);
+// The events that mean a fold didn't happen; each draws the lane's red card.
+const FOLD_FAILED = new Set(['trim-failed', 'orphan-fold-failed']);
+// trim.mjs's refusal, as sleep.mjs records it: "trim: OUTPUT CHECK FAILED,
+// nothing written. <problems>." Only the problems are news to the reader.
+const foldCause = (c) => {
+  const s = String(c ?? '').replace(/^trim: OUTPUT CHECK FAILED, nothing written\.\s*/, '').trim();
+  return s ? (/[.!?]$/.test(s) ? s : `${s}.`) : 'no reason was recorded.';
+};
+// A failed fold is a report on the fold, not a move: the lane is where it
+// was (still belled, still unfolded), and its red card says the rest.
+const NOT_LIFECYCLE = new Set(['trim-failed', 'orphan-fold-failed', 'stuck', 'stuck-cleared', 'context-high', 'context-high-cleared', 'spiral-alarm', 'wake-cost', 'orphan-fold-deferred']);
 const KIND_MAP = { 'fold-requested': 'bell', 'fold-request-met': 'fold', 'fold-forced': 'fold', 'bell-rung': 'bell', folded: 'fold', 'panel-closed': 'close', 'wake-launched': 'launch', 'wake-exec': 'launch', 'wake-confirmed': 'wake', 'wake-failed': 'wake-failed', 'already-awake': 'wake', 'stale-receipt': 'wake-failed', 'orphan-fold-done': 'fold', 'orphan-fold-failed': 'wake-failed', 'trim-failed': 'wake-failed', 'daemon-up': 'heartbeat', 'daemon-alive': 'heartbeat', 'daemon-down': 'wake-failed', 'bell-failed': 'wake-failed', 'spiral-alarm': 'wake-failed', stuck: 'wake-failed', 'stuck-cleared': 'wake', 'context-high': 'context', 'dead-wake': 'wake-failed', 'untrusted-lane-match': 'launch', 'bell-unwatched': 'bell', 'segment-due': 'context', 'l3-due': 'fold' };
 const TIP = { 'fold-requested': 'Fold requested (bell + deadline)', 'fold-request-met': 'Fold request met — refreshing', 'fold-forced': 'Fold FORCED at deadline — refreshing', 'bell-rung': 'Bell rung (spool note)', folded: 'Folded', 'panel-closed': 'Panel closed, slept and quiet', 'wake-launched': 'Wake launched', 'wake-exec': 'Wake reached exec', 'wake-confirmed': 'Wake confirmed (registry)', 'wake-failed': 'Wake failed', 'already-awake': 'Already awake', 'stale-receipt': 'Stale sleep receipt', 'orphan-fold-done': 'Orphan fold', 'orphan-fold-failed': 'Orphan fold FAILED', 'trim-failed': 'Fold skipped: the output check refused the tail', 'daemon-up': 'Nightshift up', 'daemon-alive': 'Nightshift alive', 'daemon-down': 'Nightshift DOWN', 'bell-failed': 'Bell FAILED', 'spiral-alarm': 'API error spiral', stuck: 'Stuck', 'stuck-cleared': 'Recovered', 'context-high': 'Context high', 'dead-wake': 'Dead wake: too full to answer, folded from the last session that ran', 'untrusted-lane-match': 'Wake launched anyway: an unregistered panel reads as this lane', 'bell-unwatched': 'Bell rung with no tracked watcher listening; the orphan fold is the floor' };
 
@@ -469,6 +479,35 @@ export function assemble(cfg, io, range = '8h') {
           ['log', 'show-log', 'Show log', 'Open the nightshift log at this failure'],
         ],
       };
+    }
+    // A fold that didn't happen (10/21, the banner after #30): sleep.mjs's
+    // output check refused the trimmed transcript (trim-failed), or the
+    // nightshift's emergency fold failed (orphan-fold-failed, which a refused
+    // trim also causes: the orphan path re-runs the same trim). The session is
+    // whole and unfolded, nothing retries until the next bell, and a person
+    // has to look, so it's red. A later fold, a successful orphan fold or a
+    // wake into a new session ends it; so does a day, since the next bell
+    // raises it again if the cause is still there. wake-failed outranks.
+    if (!alert) {
+      let iFail = -1;
+      for (let i = laneEvents.length - 1; i >= 0; i--) if (FOLD_FAILED.has(laneEvents[i].kind)) { iFail = i; break; }
+      if (iFail !== -1) {
+        const ff = laneEvents[iFail];
+        const ended = laneEvents.slice(iFail + 1).some((e) => ['folded', 'orphan-fold-done', 'fold-forced', 'wake-confirmed'].includes(e.kind));
+        if (!ended && nowMs - Date.parse(ff.at) < 24 * 3600_000) {
+          alert = {
+            kind: ff.kind,
+            at: [ff.at, hm(ff.at)],
+            title: ff.kind === 'trim-failed' ? 'Fold refused' : 'Emergency fold failed',
+            cause: ff.kind === 'trim-failed'
+              ? `The trimmer refused to write the folded transcript, so the fold didn't happen and the session is still whole. Its reason: ${foldCause(ff.cause)} A Claude Code update that changed the transcript format is the usual suspect, and the next fold will likely be refused the same way until someone looks.`
+              : `The nightshift's emergency fold for this agent exited ${ff.exit ?? 'with an error'}${ff.error ? ` (${ff.error})` : ''}, so the session is still unfolded. The log says why.`,
+            fixes: [
+              ['log', 'show-log', 'Show log', 'Open the nightshift log at this failure'],
+            ],
+          };
+        }
+      }
     }
     // Spiralwatch's canary card (Ra, 10/7): the latest spiral-alarm event
     // that nothing has ended yet. An episode ends when the session folds,
@@ -655,7 +694,7 @@ export function assemble(cfg, io, range = '8h') {
   const sleepMin = sh * 60 + sm, wakeMin = wh * 60 + wm;
   const inNight = sleepMin <= wakeMin ? nowMin >= sleepMin && nowMin < wakeMin : nowMin >= sleepMin || nowMin < wakeMin;
   const phase = down ? 'down'
-    : LANES.some((L) => L.state === 'failed' || L.state === 'orphaned') ? 'alarm'
+    : LANES.some((L) => L.state === 'failed' || L.state === 'orphaned' || FOLD_FAILED.has(L.alert?.kind)) ? 'alarm'
       : LANES.some((L) => L.state === 'belled') ? 'belled'
         : inNight ? 'night' : 'day';
   const DAEMON = { phase, lastAlive, lastAliveHm: lastAlive ? hm(lastAlive) : null, down };
