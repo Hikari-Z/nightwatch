@@ -493,6 +493,7 @@ export function assemble(cfg, io, range = '8h') {
       for (let i = laneEvents.length - 1; i >= 0; i--) if (FOLD_FAILED.has(laneEvents[i].kind)) { iFail = i; break; }
       if (iFail !== -1) {
         const ff = laneEvents[iFail];
+        // The same ends as the watch's episode (machinery/watch.mjs, FOLD_FAIL_ENDS).
         const ended = laneEvents.slice(iFail + 1).some((e) => ['folded', 'orphan-fold-done', 'fold-forced', 'wake-confirmed'].includes(e.kind));
         if (!ended && nowMs - Date.parse(ff.at) < 24 * 3600_000) {
           alert = {

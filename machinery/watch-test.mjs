@@ -450,14 +450,20 @@ check("midday: a stale request from an ended session doesn't silence the next on
   add({ kind: 'trim-failed', lane: 'fable', session: 's-f1', alarm: true, cause: 'trim: OUTPUT CHECK FAILED, nothing written. 1 kept entries point at a parent that is not in the tail' });
   let sent = told();
   check('fold failure: a refused trim is told once, as itself', sent.map((m) => [m.kind, m.lane, m.title]), [['trim-failed', 'fable', 'Fold refused']]);
+  check('fold failure: the notify command gets trim\'s own reason, without its prefix', sent[0]?.cause, '1 kept entries point at a parent that is not in the tail');
   add({ kind: 'orphan-fold-failed', lane: 'fable', exit: 1, alarm: true });
   check('fold failure: the orphan fold failing on the same trim is the same episode, not told again', told().length, 0);
   add({ kind: 'orphan-fold-failed', lane: 'opus', exit: 1, alarm: true });
   sent = told();
   check('fold failure: another lane\'s failure is its own episode', sent.map((m) => [m.kind, m.lane, m.title]), [['orphan-fold-failed', 'opus', 'Emergency fold failed']]);
+  check('fold failure: an orphan fold\'s cause is its exit', sent[0]?.cause, 'exit 1');
   add({ kind: 'folded', lane: 'fable', tail: 't' });
   add({ kind: 'trim-failed', lane: 'fable', alarm: true, cause: 'x' });
   check('fold failure: after a good fold, the next refusal is told', told().map((m) => m.lane), ['fable']);
+  // A lane rescued by hand (a confirmed wake into a new session) ends its episode as its card ends (Fable's read on #34).
+  add({ kind: 'wake-confirmed', lane: 'fable' });
+  add({ kind: 'trim-failed', lane: 'fable', alarm: true, cause: 'w' });
+  check('fold failure: after a confirmed wake, the next refusal is told', told().map((m) => m.lane), ['fable']);
   // opus's episode ends first, so the half-written failure is new news and must be told once it's whole
   // (read early, it would be skipped as unparseable and lost: the offset moves past it).
   add({ kind: 'orphan-fold-done', lane: 'opus' });

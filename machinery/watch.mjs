@@ -575,6 +575,7 @@ function wakeCostCheck(now) {
 // read starts at the end, so a restart tells nothing old; a stream that
 // shrank (replaced) is read from the start.
 const FOLD_FAILED = new Set(['trim-failed', 'orphan-fold-failed']);
+const FOLD_FAIL_ENDS = new Set(['folded', 'orphan-fold-done', 'fold-forced', 'wake-confirmed']);
 function foldFailureCheck() {
   let size;
   try { size = statSync(P.events).size; } catch { return; }
@@ -596,14 +597,17 @@ function foldFailureCheck() {
   for (const line of text.slice(0, end).split('\n')) {
     let e; try { e = JSON.parse(line); } catch { continue; }
     if (!e.lane) continue;
-    if (e.kind === 'folded' || e.kind === 'orphan-fold-done') { delete state.foldFail[e.lane]; continue; }
+    // The same ends as the card's (gui/assemble.mjs): any fold, or a wake into a new session.
+    if (FOLD_FAIL_ENDS.has(e.kind)) { delete state.foldFail[e.lane]; continue; }
     if (!FOLD_FAILED.has(e.kind) || state.foldFail[e.lane]) continue;
     state.foldFail[e.lane] = e.at ?? true;
     const a = agentLabel(e.lane);
     const title = e.kind === 'trim-failed' ? 'Fold refused' : 'Emergency fold failed';
     log(`FOLD FAILED: ${e.lane} — ${e.kind}${e.cause ? `: ${String(e.cause).slice(0, 200)}` : ''}`);
     notify({
-      kind: e.kind, cause: e.kind, lane: e.lane, session: e.session, title,
+      // The cause a notify command gets is the failure's own: trim's reason, or the orphan fold's exit.
+      kind: e.kind, cause: e.kind === 'trim-failed' ? String(e.cause ?? '').replace(/^trim: OUTPUT CHECK FAILED, nothing written\.\s*/, '') : `exit ${e.exit ?? '?'}${e.error ? ` (${e.error})` : ''}`,
+      lane: e.lane, session: e.session, title,
       text: e.kind === 'trim-failed'
         ? `${cap(a)}'s fold was refused: the trimmer's check didn't pass, so nothing was written and the session is still whole. The card and the log say why. A Claude Code update that changed the transcript format is the usual cause.`
         : `The nightshift's emergency fold for ${a} failed, so the session is still unfolded. The log says why.`,
