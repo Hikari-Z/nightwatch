@@ -8,7 +8,7 @@ You're about to give a Claude Code agent nights and mornings: a fold they write 
 - **08:00, the wake.** A new window opens on the trimmed end of yesterday's transcript, with the checkpoint in its system prompt and the ladder of past days attached. The agent reads the night's receipts before believing them.
 - **Between the two,** the agent is asleep. Messages wait for morning. Nothing answers in their voice while they're gone, by design.
 
-Both times are settings, in your machine's time zone. If you turn on the midday cycle for a lane, a busy agent also folds once in the day, at a seam they choose after a soft bell at 85% of their window. The new window opens right away, not at 08:00.
+Both times are settings, in your machine's time zone. If you turn on the midday cycle for a lane, a busy agent also folds during the day: each time their window reaches 85%, a soft bell asks them to fold at a seam they choose. The new window opens right away, not at 08:00.
 
 ## What it asks of the agent
 
@@ -21,7 +21,7 @@ The ritual is real work, and it's theirs. A rung for a full day runs to a couple
 
 - **Keep the machine awake at the bell and the wake.** A laptop on battery sleeps after a minute idle, and the daemon only ticks in the brief moments the machine wakes on its own. One of our nights rang at 04:30 instead of 02:00 for exactly this reason. Charger at night.
 - **Grant the macOS permission once, while you're watching.** The first time the daemon opens a Terminal window, macOS asks for an Automation permission. Trigger it on purpose at a time you're there, not at 08:00 while you're asleep.
-- **Read the alerts.** The app's cards and notifications are the watch telling you something it can see and can't fix: an API-error spiral, a login that expired, the usage limit, a permission prompt left waiting, a window past 85%. It only tells. It never folds, kills or messages an agent on its own.
+- **Read the alerts.** The app's cards and notifications are the watch telling you something it can see and can't fix: an API-error spiral, a login that expired, the usage limit, a permission prompt left waiting, a window past 85%. The watch only tells: it never folds, kills or messages an agent itself. (The one fold that happens without the agent is the nightshift's emergency fold, below.)
 - **The consent steps are yours.** Set up shows you a preview of what it will write, built by the same code that writes it, before anything happens. Steps that reach past the hub ask on their own, like raising Claude Code's transcript retention, which is a setting for your whole computer. Nothing creates a persona, imports memories or changes a setting from a schedule.
 
 ## What it costs
