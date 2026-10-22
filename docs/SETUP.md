@@ -170,7 +170,9 @@ hub's live agents and notices the states that stop an agent without
 anyone seeing: an API-error spiral, "Prompt is too long", an expired
 login, the usage limit, no network, a reply cut off by the machine
 sleeping, repeated auto-mode classifier denials, a context window past
-85%, and a permission prompt left waiting. It only tells; it never
+85%, and a permission prompt left waiting. It also tells you when a fold
+didn't happen: the trimmer refused to write a folded transcript, or the
+nightshift's emergency fold failed. It only tells; it never
 folds, kills or messages an agent. Each state is told once when it
 starts and cleared when it ends, and a restart repeats nothing.
 
@@ -179,7 +181,8 @@ Every alert lands in the app as a card. Beyond that, the config decides:
 - `notify.macos` (default `true`): a Notification Center banner.
 - `notify.command`: an executable (run directly, no shell) for anything
   else: a chat DM, a pager, a log shipper. It gets the message on
-  stdin, and `NIGHTWATCH_ALERT_KIND` (`spiral-alarm` or `stuck`),
+  stdin, and `NIGHTWATCH_ALERT_KIND` (`spiral-alarm`, `stuck`, `context-high`,
+  `trim-failed` or `orphan-fold-failed`),
   `NIGHTWATCH_ALERT_CAUSE`, `NIGHTWATCH_ALERT_LANE`,
   `NIGHTWATCH_ALERT_SESSION`, `NIGHTWATCH_ALERT_TITLE` and
   `NIGHTWATCH_PERSONA` in its environment. A failing command is logged

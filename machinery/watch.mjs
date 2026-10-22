@@ -112,7 +112,7 @@ function notify(alert) {
         env: {
           ...process.env,
           NIGHTWATCH_ALERT_KIND: alert.kind, NIGHTWATCH_ALERT_CAUSE: alert.cause ?? '',
-          NIGHTWATCH_ALERT_LANE: alert.lane, NIGHTWATCH_ALERT_SESSION: alert.session,
+          NIGHTWATCH_ALERT_LANE: alert.lane, NIGHTWATCH_ALERT_SESSION: alert.session ?? '',
           NIGHTWATCH_ALERT_TITLE: alert.title, NIGHTWATCH_PERSONA: CFG.persona?.name ?? '',
         },
       });
@@ -123,7 +123,7 @@ function notify(alert) {
     child.on('error', (e) => { clearTimeout(timer); log(`notify command failed: ${e.message}`); resolve(); });
     child.on('close', (code) => {
       clearTimeout(timer);
-      log(code === 0 ? `notified (${alert.kind}${alert.cause ? `: ${alert.cause}` : ''}) for ${alert.session.slice(0, 8)}…`
+      log(code === 0 ? `notified (${alert.kind}${alert.cause ? `: ${alert.cause}` : ''}) for ${alert.session ? `${alert.session.slice(0, 8)}…` : alert.lane}`
         : `notify command exited ${code}${err ? `: ${err.trim().slice(0, 200)}` : ''}; the event card still stands`);
       resolve();
     });
@@ -215,7 +215,8 @@ function windowFor(lane, model) {
 // ── state ────────────────────────────────────────────────────────────────
 // active: `${sid}\u0000${cause}` → episode key; spiral: sid → last alert ms;
 // costed: tails whose wake cost is recorded; costSeen: tail → woken transcript mtime last read.
-let state = { active: {}, spiral: {}, midday: {}, due: { seg: {}, l3: null }, costed: [], costSeen: {} };
+// eventsAt: how far into events.jsonl the fold-failure check has read; foldFail: lane → the failure it told.
+let state = { active: {}, spiral: {}, midday: {}, due: { seg: {}, l3: null }, costed: [], costSeen: {}, eventsAt: null, foldFail: {} };
 try { state = { ...state, ...JSON.parse(readFileSync(P.watchState, 'utf8')) }; } catch { /* first run */ }
 function saveState() {
   try { writeFileSync(P.watchState + '.tmp', JSON.stringify(state)); renameSync(P.watchState + '.tmp', P.watchState); }
@@ -565,6 +566,55 @@ function wakeCostCheck(now) {
   state.costed = state.costed.slice(-200);
 }
 
+// A fold that didn't happen (10/21): sleep.mjs's refused trim (trim-failed,
+// #30) and the nightshift's failed emergency fold (orphan-fold-failed) are
+// written to the event stream by processes that can't notify anyone. The
+// watch reads the stream on from where it stopped and tells each lane's
+// failure once: a refused trim and the orphan fold that then fails on the
+// same trim are one episode, which the lane's next good fold ends. The first
+// read starts at the end, so a restart tells nothing old; a stream that
+// shrank (replaced) is read from the start.
+const FOLD_FAILED = new Set(['trim-failed', 'orphan-fold-failed']);
+const FOLD_FAIL_ENDS = new Set(['folded', 'orphan-fold-done', 'fold-forced', 'wake-confirmed']);
+function foldFailureCheck() {
+  let size;
+  try { size = statSync(P.events).size; } catch { return; }
+  if (state.eventsAt === null || state.eventsAt === undefined) { state.eventsAt = size; return; }
+  if (size < state.eventsAt) state.eventsAt = 0;
+  if (size === state.eventsAt) return;
+  const fd = openSync(P.events, 'r');
+  let text;
+  try {
+    const buf = Buffer.alloc(size - state.eventsAt);
+    readSync(fd, buf, 0, buf.length, state.eventsAt);
+    text = buf.toString('utf8');
+  } finally { closeSync(fd); }
+  // Only whole lines: a line still being written is read next time.
+  const end = text.lastIndexOf('\n') + 1;
+  if (end === 0) return;
+  state.eventsAt += Buffer.byteLength(text.slice(0, end));
+  state.foldFail ??= {};
+  for (const line of text.slice(0, end).split('\n')) {
+    let e; try { e = JSON.parse(line); } catch { continue; }
+    if (!e.lane) continue;
+    // The same ends as the card's (gui/assemble.mjs): any fold, or a wake into a new session.
+    if (FOLD_FAIL_ENDS.has(e.kind)) { delete state.foldFail[e.lane]; continue; }
+    if (!FOLD_FAILED.has(e.kind) || state.foldFail[e.lane]) continue;
+    state.foldFail[e.lane] = e.at ?? true;
+    const a = agentLabel(e.lane);
+    const title = e.kind === 'trim-failed' ? 'Fold refused' : 'Emergency fold failed';
+    log(`FOLD FAILED: ${e.lane} — ${e.kind}${e.cause ? `: ${String(e.cause).slice(0, 200)}` : ''}`);
+    notify({
+      // The cause a notify command gets is the failure's own: trim's reason, or the orphan fold's exit.
+      kind: e.kind, cause: e.kind === 'trim-failed' ? String(e.cause ?? '').replace(/^trim: OUTPUT CHECK FAILED, nothing written\.\s*/, '') : `exit ${e.exit ?? '?'}${e.error ? ` (${e.error})` : ''}`,
+      lane: e.lane, session: e.session, title,
+      text: e.kind === 'trim-failed'
+        ? `${cap(a)}'s fold was refused: the trimmer's check didn't pass, so nothing was written and the session is still whole. The card and the log say why. A Claude Code update that changed the transcript format is the usual cause.`
+        : `The nightshift's emergency fold for ${a} failed, so the session is still unfolded. The log says why.`,
+    });
+  }
+}
+
 function check() {
   const now = Date.now();
   const before = JSON.stringify(state);
@@ -611,6 +661,7 @@ function check() {
   for (const sid of Object.keys(state.due.seg)) if (!liveSids.has(sid)) delete state.due.seg[sid];
   try { l3DueCheck(now); } catch (e) { log(`l3-due check failed: ${e.message}`); }
   try { wakeCostCheck(now); } catch (e) { log(`wake-cost check failed: ${e.message}`); }
+  try { foldFailureCheck(); } catch (e) { log(`fold-failure check failed: ${e.message}`); }
   if (JSON.stringify(state) !== before) saveState();
 }
 
