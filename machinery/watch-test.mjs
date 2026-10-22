@@ -458,10 +458,14 @@ check("midday: a stale request from an ended session doesn't silence the next on
   add({ kind: 'folded', lane: 'fable', tail: 't' });
   add({ kind: 'trim-failed', lane: 'fable', alarm: true, cause: 'x' });
   check('fold failure: after a good fold, the next refusal is told', told().map((m) => m.lane), ['fable']);
-  appendFileSync(ffEvents, JSON.stringify({ at: iso(Date.now()), kind: 'trim-failed', lane: 'opus' }).slice(0, 20));
+  // opus's episode ends first, so the half-written failure is new news and must be told once it's whole
+  // (read early, it would be skipped as unparseable and lost: the offset moves past it).
+  add({ kind: 'orphan-fold-done', lane: 'opus' });
+  const half = JSON.stringify({ at: iso(Date.now()), kind: 'trim-failed', lane: 'opus', alarm: true, cause: 'z' });
+  appendFileSync(ffEvents, half.slice(0, 20));
   check('fold failure: a line still being written waits for its end', told().length, 0);
-  appendFileSync(ffEvents, JSON.stringify({ at: iso(Date.now()), kind: 'trim-failed', lane: 'opus' }).slice(20) + '\n');
-  check('fold failure: and is read whole once it ends (opus is still in its episode, so nothing new)', told().length, 0);
+  appendFileSync(ffEvents, half.slice(20) + '\n');
+  check('fold failure: and is told once it ends', told().map((m) => m.lane), ['opus']);
   writeFileSync(ffEvents, JSON.stringify({ at: iso(Date.now()), kind: 'orphan-fold-done', lane: 'opus' }) + '\n' + JSON.stringify({ at: iso(Date.now()), kind: 'trim-failed', lane: 'opus', alarm: true, cause: 'y' }) + '\n');
   check('fold failure: a stream that shrank is read from its start', told().map((m) => m.lane), ['opus']);
 }
