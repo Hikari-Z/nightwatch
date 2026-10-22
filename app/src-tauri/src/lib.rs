@@ -60,41 +60,199 @@ fn node_version(p: &Path) -> Vec<u64> {
     p.ancestors().nth(2).and_then(|d| d.file_name()).map(|n| n.to_string_lossy().trim_start_matches('v').split('.').map(|x| x.parse().unwrap_or(0)).collect()).unwrap_or_default()
 }
 
-fn server_up() -> bool {
-    TcpStream::connect_timeout(&([127, 0, 0, 1], port()).into(), Duration::from_millis(300)).is_ok()
+fn server_up() -> bool { server_up_at(port()) }
+fn server_up_at(port: u16) -> bool {
+    TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), Duration::from_millis(300)).is_ok()
 }
 
 // Start gui/server.mjs if nothing answers on the port. It outlives the app on
-// purpose: the browser viewer at 7352 keeps working after the app quits.
-fn ensure_server() -> Result<(), String> {
-    if server_up() {
-        return Ok(());
+// purpose: the browser viewer at 7352 keeps working after the app quits. So
+// whatever answers may be running other code than this tree's: this tree
+// before a pull, a tree since removed (WSL, 10/21: a viewer from a deleted
+// worktree answered every page with ENOENT), or another hub's living viewer.
+// The first two are replaced, loudly; the last, and anything that isn't a
+// Nightwatch viewer at all, is never killed: the app says what holds the port.
+fn ensure_server() -> Result<(), String> { ensure_server_at(port(), &repo()) }
+fn ensure_server_at(port: u16, repo: &Path) -> Result<(), String> {
+    let mut replaced: Option<String> = None;
+    if server_up_at(port) {
+        let a = answerer_on(port);
+        let alive = match &a { Answerer::Viewer { root: Some(r), .. } => is_repo(r), _ => false };
+        match judge(&a, repo, newest_code(repo), alive, port) {
+            Verdict::Keep => return Ok(()),
+            Verdict::Refuse(why) => return Err(why),
+            Verdict::Replace(pid, why) => {
+                log::warn!("replacing the viewer server on port {port}: {}; {why}", a.describe());
+                if !stop_server(pid, port) {
+                    return Err(format!("the old viewer server ({}) wouldn't stop, so port {port} is still taken; it was being replaced because {why}", a.describe()));
+                }
+                log::info!("stopped the old viewer server (pid {pid})");
+                replaced = Some(format!("Nightwatch replaced a stale viewer server ({why}), but "));
+            }
+        }
     }
-    let node = find_node().ok_or("node not found (looked in /opt/homebrew/bin, /usr/local/bin, the login shell and ~/.nvm)")?;
+    let said = |e: String| match &replaced { Some(r) => format!("{r}{e}"), None => e };
+    let node = find_node().ok_or_else(|| said("node not found (looked in /opt/homebrew/bin, /usr/local/bin, the login shell and ~/.nvm)".into()))?;
     // A downloaded build on a machine with no hub yet has no tree to find:
     // say how to give it one instead of failing on a file it can't open.
-    if !is_repo(&repo()) {
-        return Err("Nightwatch can't find its source checkout (the viewer and machinery live there). Clone github.com/slimepriestess/nightwatch, set NIGHTWATCH_REPO to that folder for your desktop session (on Linux, a line NIGHTWATCH_REPO=/path/to/nightwatch in ~/.config/environment.d/nightwatch.conf, then log in again), and restart Nightwatch. Once it opens, Set up makes your first hub, and from then on the app finds the checkout through it.".into());
+    if !is_repo(repo) {
+        return Err(said("Nightwatch can't find its source checkout (the viewer and machinery live there). Clone github.com/slimepriestess/nightwatch, set NIGHTWATCH_REPO to that folder for your desktop session (on Linux, a line NIGHTWATCH_REPO=/path/to/nightwatch in ~/.config/environment.d/nightwatch.conf, then log in again), and restart Nightwatch. Once it opens, Set up makes your first hub, and from then on the app finds the checkout through it.".into()));
     }
-    let gui = repo().join("gui"); // the product's own viewer, beside this app in the repo
-    let log = std::fs::OpenOptions::new().create(true).append(true).open(gui.join("viewer.log")).map_err(|e| e.to_string())?;
+    let gui = repo.join("gui"); // the product's own viewer, beside this app in the repo
+    let log = std::fs::OpenOptions::new().create(true).append(true).open(gui.join("viewer.log")).map_err(|e| said(e.to_string()))?;
     Command::new(node)
         .arg(gui.join("server.mjs"))
-        .env("NIGHTWATCH_PORT", port().to_string())
+        .env("NIGHTWATCH_PORT", port.to_string())
         .current_dir(&gui)
         .stdin(Stdio::null())
-        .stdout(log.try_clone().map_err(|e| e.to_string())?)
+        .stdout(log.try_clone().map_err(|e| said(e.to_string()))?)
         .stderr(log)
         .spawn()
-        .map_err(|e| format!("couldn't start the viewer server: {e}"))?;
+        .map_err(|e| said(format!("couldn't start the viewer server: {e}")))?;
     let t = Instant::now();
     while t.elapsed() < Duration::from_secs(10) {
-        if server_up() {
+        if server_up_at(port) {
+            if replaced.is_some() { log::info!("the new viewer server answers on port {port}, from {}", repo.display()); }
             return Ok(());
         }
         std::thread::sleep(Duration::from_millis(200));
     }
-    Err(format!("the viewer server started but never answered on {}", port()))
+    Err(said(format!("the viewer server started but never answered on {port}")))
+}
+
+// What answers on the viewer's port. A viewer since /whoami says who it is;
+// one from before it is known by its command line (the app and the old
+// launcher both start it by absolute path, so the tree is in the argv). A
+// viewer's pid must really be node running a gui/server.mjs before it counts.
+#[derive(Debug, Clone, PartialEq)]
+enum Answerer {
+    Viewer { pid: u32, root: Option<PathBuf>, rev: Option<String>, started: Option<u64> },
+    Other { pid: Option<u32>, cmd: String },
+}
+impl Answerer {
+    fn describe(&self) -> String {
+        match self {
+            Answerer::Viewer { pid, root, rev, started } => format!(
+                "pid {pid}, tree {}, rev {}, {}",
+                root.as_ref().map_or("unknown".into(), |r| r.display().to_string()),
+                rev.as_deref().map_or("unknown", |r| &r[..r.len().min(12)]),
+                if started.is_some() { "answers /whoami" } else { "from before /whoami" }
+            ),
+            Answerer::Other { pid, cmd } => format!("pid {}, {}", pid.map_or("unknown".into(), |p| p.to_string()), if cmd.is_empty() { "command unknown" } else { cmd }),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum Verdict { Keep, Replace(u32, String), Refuse(String) }
+
+// The rule, kept pure for its tests. `alive`: the answering viewer's tree is
+// still a tree on disk. `newest_code`: this tree's newest code file, ms.
+// Replace this tree's own viewer when its code changed after it started (or it
+// predates /whoami, so nobody can tell), and a viewer whose tree is gone.
+// Never kill another living tree's viewer: two hubs sharing a port would
+// otherwise each kill the other's healthy server on every launch (Weft, 10/21).
+fn judge(a: &Answerer, repo: &Path, newest_code: u64, alive: bool, port: u16) -> Verdict {
+    let Answerer::Viewer { pid, root, started, .. } = a else {
+        return Verdict::Refuse(format!("Port {port} is taken by something that isn't a Nightwatch viewer ({}), so the viewer can't start there. Stop it, or give Nightwatch another port with NIGHTWATCH_PORT.", a.describe()));
+    };
+    let Some(root) = root else {
+        return Verdict::Refuse(format!("Port {port} is held by a Nightwatch viewer whose tree can't be told ({}). Quit it (pid {pid}) and reopen Nightwatch.", a.describe()));
+    };
+    if canon(root) == canon(repo) {
+        return match started {
+            Some(s) if *s >= newest_code => Verdict::Keep,
+            Some(_) => Verdict::Replace(*pid, "this tree's code changed after it started".into()),
+            None => Verdict::Replace(*pid, "it predates /whoami, so its code can't be checked".into()),
+        };
+    }
+    if !alive {
+        return Verdict::Replace(*pid, format!("its tree {} is gone", root.display()));
+    }
+    Verdict::Refuse(format!("Port {port} already serves the Nightwatch viewer from {}, and this app runs from {}. Nightwatch won't stop another tree's living viewer: quit that one (pid {pid}), or give one of them its own NIGHTWATCH_PORT.", root.display(), repo.display()))
+}
+
+fn answerer_on(port: u16) -> Answerer {
+    let who = http_get(port, "/whoami")
+        .filter(|(code, _)| *code == 200)
+        .and_then(|(_, body)| serde_json::from_str::<serde_json::Value>(&body).ok())
+        .filter(|j| j.get("nightwatch").and_then(|v| v.as_str()) == Some("viewer"));
+    let pid = match &who {
+        Some(j) => j.get("pid").and_then(|v| v.as_u64()).map(|p| p as u32),
+        None => listener_pid(port),
+    };
+    let Some(pid) = pid else { return Answerer::Other { pid: None, cmd: String::new() } };
+    let cmd = command_of(pid);
+    let Some(argv_root) = viewer_root_in(&cmd) else { return Answerer::Other { pid: Some(pid), cmd } };
+    match who {
+        Some(j) => Answerer::Viewer {
+            pid,
+            root: j.get("root").and_then(|v| v.as_str()).map(PathBuf::from),
+            rev: j.get("rev").and_then(|v| v.as_str()).map(String::from),
+            started: j.get("started").and_then(|v| v.as_u64()),
+        },
+        None => Answerer::Viewer { pid, root: argv_root, rev: None, started: None },
+    }
+}
+
+// A viewer's command line is node running some gui/server.mjs: Some(its tree,
+// when the path is absolute) for a viewer, None for anything else.
+fn viewer_root_in(cmd: &str) -> Option<Option<PathBuf>> {
+    let mut words = cmd.split_whitespace();
+    if !words.next().is_some_and(|w| w.rsplit('/').next() == Some("node")) { return None; }
+    let script = words.find(|w| *w == "server.mjs" || w.ends_with("/gui/server.mjs"))?;
+    Some(script.strip_suffix("/gui/server.mjs").filter(|t| t.starts_with('/')).map(PathBuf::from))
+}
+
+fn command_of(pid: u32) -> String {
+    Command::new("/bin/ps").args(["-p", &pid.to_string(), "-o", "command="]).output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default()
+}
+
+// The pid listening on the port, for a viewer too old to say: lsof (macOS has
+// it; most Linux too), else ss.
+fn listener_pid(port: u16) -> Option<u32> {
+    for lsof in ["/usr/sbin/lsof", "/usr/bin/lsof"] {
+        if !Path::new(lsof).is_file() { continue; }
+        let out = Command::new(lsof).args(["-nP", "-t", &format!("-iTCP:{port}"), "-sTCP:LISTEN"]).output().ok()?;
+        return String::from_utf8_lossy(&out.stdout).lines().next()?.trim().parse().ok();
+    }
+    let out = Command::new("ss").args(["-ltnpH", &format!("sport = :{port}")]).output().ok()?;
+    let s = String::from_utf8_lossy(&out.stdout);
+    s[s.find("pid=")? + 4..].split(|c: char| !c.is_ascii_digit()).next()?.parse().ok()
+}
+
+fn http_get(port: u16, path: &str) -> Option<(u16, String)> {
+    use std::io::{Read, Write};
+    let mut s = TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), Duration::from_millis(300)).ok()?;
+    s.set_read_timeout(Some(Duration::from_secs(2))).ok()?;
+    write!(s, "GET {path} HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").ok()?;
+    let mut buf = Vec::new();
+    s.read_to_end(&mut buf).ok()?;
+    let text = String::from_utf8_lossy(&buf);
+    let (head, body) = text.split_once("\r\n\r\n")?;
+    Some((head.split_whitespace().nth(1)?.parse().ok()?, body.to_string()))
+}
+
+// The newest code file the viewer loads (gui's and machinery's modules), in
+// ms since the epoch: a server that started before it runs older code.
+fn newest_code(repo: &Path) -> u64 {
+    ["gui", "machinery"].iter().filter_map(|d| std::fs::read_dir(repo.join(d)).ok()).flatten().flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "mjs"))
+        .filter_map(|e| e.metadata().and_then(|m| m.modified()).ok())
+        .filter_map(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64).max().unwrap_or(0)
+}
+
+// Stop a viewer and wait for its port to free.
+fn stop_server(pid: u32, port: u16) -> bool {
+    let _ = Command::new("/bin/kill").arg(pid.to_string()).status();
+    let t = Instant::now();
+    while t.elapsed() < Duration::from_secs(5) {
+        if !server_up_at(port) { return true; }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    false
 }
 
 // Bring the window back from hidden or minimized, covering the screen first,
@@ -1425,5 +1583,177 @@ mod rehearsal_tests {
         assert!(after.check_lane(Some("fable")).unwrap_err().contains("isn't one of"));
         println!("terminal-state: {:?}", lane_terminal(&after, Some(&lane), "state"));
         assert!(hub_among(Some("/tmp"), vec![root.clone()]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod viewer_tests {
+    use super::*;
+    const REPO: &str = "/trees/ours";
+    fn viewer(root: Option<&str>, started: Option<u64>) -> Answerer {
+        Answerer::Viewer { pid: 41, root: root.map(PathBuf::from), rev: Some("688ed376f2a8".into()), started }
+    }
+    fn replaced(v: Verdict) -> bool { matches!(v, Verdict::Replace(41, _)) }
+    fn refused_naming(v: Verdict, needles: &[&str]) -> bool {
+        match v { Verdict::Refuse(m) => needles.iter().all(|n| m.contains(n)), _ => false }
+    }
+
+    #[test]
+    fn our_trees_viewer_is_kept_until_its_code_changes() {
+        let r = Path::new(REPO);
+        assert_eq!(judge(&viewer(Some(REPO), Some(2000)), r, 1000, true, 7352), Verdict::Keep);
+        assert_eq!(judge(&viewer(Some(REPO), Some(2000)), r, 2000, true, 7352), Verdict::Keep, "started the same ms");
+        assert!(replaced(judge(&viewer(Some(REPO), Some(2000)), r, 3000, true, 7352)), "a pull after it started");
+        assert!(replaced(judge(&viewer(Some(REPO), None), r, 0, true, 7352)), "from before /whoami");
+    }
+
+    // The removed worktree (WSL, 10/21) is replaced; another living tree's
+    // viewer never is (two hubs on one port would kill each other's, Weft).
+    #[test]
+    fn a_gone_tree_is_replaced_and_a_living_one_is_refused() {
+        let r = Path::new(REPO);
+        assert!(replaced(judge(&viewer(Some("/trees/removed"), Some(9)), r, 5, false, 7352)));
+        assert!(replaced(judge(&viewer(Some("/trees/removed"), None), r, 5, false, 7352)));
+        assert!(refused_naming(judge(&viewer(Some("/trees/theirs"), Some(9)), r, 5, true, 7352), &["/trees/theirs", REPO, "pid 41", "7352"]));
+        assert!(refused_naming(judge(&viewer(None, None), r, 5, true, 7352), &["pid 41"]), "a viewer whose tree can't be told");
+    }
+
+    #[test]
+    fn a_stranger_on_the_port_is_never_killed() {
+        let a = Answerer::Other { pid: Some(77), cmd: "python3 -m http.server 7352".into() };
+        assert!(refused_naming(judge(&a, Path::new(REPO), 0, false, 7352), &["isn't a Nightwatch viewer", "http.server"]));
+        assert!(refused_naming(judge(&Answerer::Other { pid: None, cmd: String::new() }, Path::new(REPO), 0, false, 7352), &["command unknown"]));
+    }
+
+    #[test]
+    fn a_viewer_is_known_by_its_command_line() {
+        assert_eq!(viewer_root_in("/usr/bin/node /home/t/nw/gui/server.mjs"), Some(Some(PathBuf::from("/home/t/nw"))));
+        assert_eq!(viewer_root_in("node server.mjs"), Some(None), "started by hand inside gui/: a viewer, tree unknown");
+        assert_eq!(viewer_root_in("/usr/bin/node /srv/app/server.mjs"), None, "some other server.mjs");
+        assert_eq!(viewer_root_in("/usr/bin/python3 /home/t/nw/gui/server.mjs"), None);
+        assert_eq!(viewer_root_in(""), None);
+    }
+
+    // End to end on a spare port, with fake viewers in scratch trees: real
+    // processes, the real /whoami and command-line checks, the real kill.
+    const FAKE: &str = r#"import { createServer } from 'node:http';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+const root = realpathSync(join(dirname(fileURLToPath(import.meta.url)), '..'));
+const started = Date.now();
+const legacy = process.env.FAKE_LEGACY === '1';
+createServer((q, r) => {
+  if (q.url === '/whoami' && !legacy) { r.end(JSON.stringify({ nightwatch: 'viewer', root, rev: null, started, pid: process.pid })); return; }
+  r.writeHead(404); r.end();
+}).listen(Number(process.env.NIGHTWATCH_PORT), '127.0.0.1');
+"#;
+    fn fake_tree(t: &Path, name: &str) -> PathBuf {
+        let tree = t.join(name);
+        std::fs::create_dir_all(tree.join("gui")).unwrap();
+        std::fs::create_dir_all(tree.join("machinery")).unwrap();
+        std::fs::write(tree.join("gui/server.mjs"), FAKE).unwrap();
+        std::fs::write(tree.join("machinery/nightshift.mjs"), "").unwrap();
+        canon(&tree)
+    }
+    fn spare_port() -> u16 { std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port() }
+    fn start(node: &Path, script: &Path, port: u16, legacy: bool) -> std::process::Child {
+        let mut c = Command::new(node);
+        c.arg(script).env("NIGHTWATCH_PORT", port.to_string()).stdout(Stdio::null()).stderr(Stdio::null());
+        if legacy { c.env("FAKE_LEGACY", "1"); }
+        let child = c.spawn().unwrap();
+        let t = Instant::now();
+        while !server_up_at(port) && t.elapsed() < Duration::from_secs(10) { std::thread::sleep(Duration::from_millis(50)); }
+        child
+    }
+    fn whoami_root(port: u16) -> Option<String> {
+        let (_, body) = http_get(port, "/whoami")?;
+        serde_json::from_str::<serde_json::Value>(&body).ok()?.get("root")?.as_str().map(String::from)
+    }
+    // The fakes are this test's children, so a stopped one lingers as a zombie
+    // until reaped: ask the child, not kill -0.
+    fn running(c: &mut std::process::Child) -> bool {
+        let t = Instant::now();
+        while t.elapsed() < Duration::from_secs(2) {
+            if c.try_wait().unwrap().is_some() { return false; }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        true
+    }
+    fn touch_later(f: &Path) {
+        std::fs::File::options().write(true).open(f).unwrap()
+            .set_modified(std::time::SystemTime::now() + Duration::from_secs(5)).unwrap();
+    }
+    fn reap(mut c: std::process::Child) { let _ = c.kill(); let _ = c.wait(); }
+    // The servers ensure_server_at starts aren't this test's children: stop
+    // whatever still listens on the test's ports, even when an assert panics.
+    struct Cleanup { ports: Vec<u16>, dir: PathBuf }
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            for p in &self.ports {
+                if let Some(pid) = listener_pid(*p) { if viewer_root_in(&command_of(pid)).is_some() || command_of(pid).contains("stranger.mjs") { let _ = Command::new("/bin/kill").arg(pid.to_string()).status(); } }
+            }
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    #[test]
+    fn end_to_end_replace_only_what_is_ours_and_stale() {
+        let Some(node) = find_node() else { eprintln!("SKIP: no node"); return };
+        let t = std::env::temp_dir().join(format!("nw-viewer-e2e-{}", std::process::id()));
+        let ours = fake_tree(&t, "ours");
+        let ours_s = ours.display().to_string();
+        let ports: Vec<u16> = (0..5).map(|_| spare_port()).collect();
+        let _cleanup = Cleanup { ports: ports.clone(), dir: t.clone() };
+
+        // 1. Our own fresh viewer: kept, same process.
+        let port = ports[0];
+        let mut fresh = start(&node, &ours.join("gui/server.mjs"), port, false);
+        assert_eq!(ensure_server_at(port, &ours), Ok(()));
+        assert!(running(&mut fresh), "a fresh viewer of our tree is kept");
+        // 2. The tree changes under it (a pull): replaced by a new one.
+        touch_later(&ours.join("machinery/nightshift.mjs"));
+        assert_eq!(ensure_server_at(port, &ours), Ok(()));
+        assert!(!running(&mut fresh), "the stale viewer was stopped");
+        assert_eq!(whoami_root(port).as_deref(), Some(ours_s.as_str()));
+        reap(fresh);
+
+        // 3. A viewer from a tree since removed (the 10/21 case): replaced.
+        let port = ports[1];
+        let gone = fake_tree(&t, "gone");
+        let mut stale = start(&node, &gone.join("gui/server.mjs"), port, false);
+        std::fs::remove_dir_all(&gone).unwrap();
+        assert_eq!(ensure_server_at(port, &ours), Ok(()));
+        assert!(!running(&mut stale), "the gone tree's viewer was stopped");
+        assert_eq!(whoami_root(port).as_deref(), Some(ours_s.as_str()));
+        reap(stale);
+
+        // 4. Another living tree's viewer: refused by name, left running.
+        let port = ports[2];
+        let theirs = fake_tree(&t, "theirs");
+        let mut other = start(&node, &theirs.join("gui/server.mjs"), port, false);
+        let e = ensure_server_at(port, &ours).unwrap_err();
+        assert!(e.contains(&theirs.display().to_string()) && e.contains(&ours_s), "{e}");
+        assert!(running(&mut other), "another hub's viewer is never killed");
+        reap(other);
+
+        // 5. A viewer from before /whoami in our tree: found by its port and
+        // command line, replaced.
+        let port = ports[3];
+        let mut legacy = start(&node, &ours.join("gui/server.mjs"), port, true);
+        assert_eq!(ensure_server_at(port, &ours), Ok(()));
+        assert!(!running(&mut legacy), "the legacy viewer was stopped");
+        assert_eq!(whoami_root(port).as_deref(), Some(ours_s.as_str()), "the new one answers /whoami");
+        reap(legacy);
+
+        // 6. A stranger on the port: refused, left running.
+        let port = ports[4];
+        let stranger = t.join("stranger.mjs");
+        std::fs::write(&stranger, FAKE.replace("const legacy = process.env.FAKE_LEGACY === '1';", "const legacy = true;").replace("realpathSync(join(dirname(fileURLToPath(import.meta.url)), '..'))", "'/'")).unwrap();
+        let mut s = start(&node, &stranger, port, true);
+        let e = ensure_server_at(port, &ours).unwrap_err();
+        assert!(e.contains("isn't a Nightwatch viewer"), "{e}");
+        assert!(running(&mut s), "a stranger is never killed");
+        reap(s);
     }
 }
