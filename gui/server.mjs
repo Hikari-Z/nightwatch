@@ -11,10 +11,10 @@
 // file is only the node io, the skins list, and http. Writes nothing but
 // gui/snapshot.json (a debugging/parity artifact). Actions in the page go
 // through the app's NW_HOST seam, never through here.
-import { readFileSync, readdirSync, statSync, existsSync, writeFileSync, openSync, readSync, closeSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync, writeFileSync, openSync, readSync, closeSync, realpathSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hublessConfig, loadConfigFrom, loadConfigOrNone } from '../machinery/config.mjs';
 import { stateKey, assemble } from './assemble.mjs';
@@ -34,6 +34,30 @@ const CFG = loadConfigOrNone() ?? hublessConfig();
 let cfgPort;
 try { cfgPort = CFG.viewer?.port; } catch { /* config unreadable: fall through */ }
 const PORT = Number(process.env.NIGHTWATCH_PORT ?? cfgPort ?? 7352);
+
+// Who this server is, for the app's /whoami check. The server outlives the
+// app on purpose, so the one answering on the port can be running code from
+// another tree, a removed one, or this tree before a pull. The app compares
+// `started` against the newest code file on disk and replaces a stale server
+// (WSL, 10/21: a viewer from a deleted worktree answered ENOENT). The rev is
+// for the receipt only, read from .git's files: no git binary to spawn, so a
+// Mac without developer tools never gets an install dialog from the viewer.
+const ROOT = realpathSync(join(HERE, '..'));
+const STARTED = Date.now();
+function gitRev(root) {
+  try {
+    let git = join(root, '.git');
+    if (statSync(git).isFile()) git = resolve(root, readFileSync(git, 'utf8').match(/^gitdir: (.+)$/m)[1].trim());
+    const head = readFileSync(join(git, 'HEAD'), 'utf8').trim();
+    if (!head.startsWith('ref: ')) return head;
+    const ref = head.slice(5);
+    const common = existsSync(join(git, 'commondir')) ? resolve(git, readFileSync(join(git, 'commondir'), 'utf8').trim()) : git;
+    for (const d of [git, common]) { try { return readFileSync(join(d, ref), 'utf8').trim(); } catch { /* packed */ } }
+    const line = readFileSync(join(common, 'packed-refs'), 'utf8').split('\n').find((l) => l.endsWith(` ${ref}`));
+    return line ? line.split(' ')[0] : null;
+  } catch { return null; }
+}
+const WHOAMI = JSON.stringify({ nightwatch: 'viewer', root: ROOT, rev: gitRev(ROOT), started: STARTED, pid: process.pid });
 
 // ---------------------------------------------------------------- node io
 // The io contract assemble.mjs documents; the Tauri shell implements the
@@ -126,6 +150,11 @@ function snapshotAll(range) {
 const server = createServer((req, res) => {
   try {
     const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
+    if (url.pathname === '/whoami') {
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.end(WHOAMI);
+      return;
+    }
     if (url.pathname === '/key') {
       res.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' });
       res.end(keyAll());
