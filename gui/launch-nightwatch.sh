@@ -8,14 +8,17 @@
 # skin in the URL would override that on every launch. NIGHTWATCH_SKIN still
 # forces one when set.
 URL="http://127.0.0.1:7352/${NIGHTWATCH_SKIN:+?skin=$NIGHTWATCH_SKIN}"
+# This script's own gui/ dir, so the server, log and profile come from the
+# tree the script lives in — not a hard-coded path to one machine's old copy.
+HERE="$(cd "$(dirname "$0")" && pwd)"
 if ! curl -s -m 2 -o /dev/null "http://127.0.0.1:7352/"; then
-  NIGHTWATCH_PORT=7352 nohup node "$HOME/origin/weft/gui/server.mjs" \
-    >> "$HOME/origin/weft/gui/viewer.log" 2>&1 &
+  NIGHTWATCH_PORT=7352 nohup node "$HERE/server.mjs" \
+    >> "$HERE/viewer.log" 2>&1 &
   for i in $(seq 1 20); do
     curl -s -m 1 -o /dev/null "http://127.0.0.1:7352/" && break
     sleep 0.5
   done
 fi
 exec "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-  --app="$URL" --window-size=1100,1000 --user-data-dir="$HOME/origin/weft/gui/.chrome-profile" \
+  --app="$URL" --window-size=1100,1000 --user-data-dir="$HERE/.chrome-profile" \
   >/dev/null 2>&1
