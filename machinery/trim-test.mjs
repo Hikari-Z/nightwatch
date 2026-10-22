@@ -211,6 +211,21 @@ try {
   check('isMeta renamed, cut stays on the prompt: refused (wrapper rides in the tail unmarked)', refused(run(build({ order: 'late', metaKey: 'meta' })), /not marked isMeta/), '');
   check('isMeta renamed, cut lands ON the caveat: refused (the repro that moved the cut)', refused(run(build({ order: 'near', metaKey: 'meta' })), /not marked isMeta/), '');
 
+  // `usage` renamed: the stale figure would travel (the 10/8 refusal). The check
+  // looks for the token FIELDS as numeric keys on a kept assistant entry, never
+  // for the word `usage` and never in text.
+  const renameUsage = (to) => (rows) => { const m = rows.at(-1).message; m[to] = m.usage; delete m.usage; };
+  check('usage renamed inside the message: refused, nothing written', refused(run(build({ order: 'late', mutate: renameUsage('token_usage') })), /token-usage record/), '');
+  check('usage moved to a top-level key of the entry: refused', refused(run(build({ order: 'late', mutate: (rows) => { const e = rows.at(-1); e.tokenUsage = e.message.usage; delete e.message.usage; } })), /token-usage record/), '');
+  const naming = run(build({ order: 'late', mutate: (rows) => {
+    // text and tool results that NAME the fields, and a user-side object that carries them as keys: all normal here.
+    rows.at(-1).message.content[0].text = 'the trimmer strips input_tokens and cache_read_input_tokens from message.usage';
+    const tr = rows.find((e) => Array.isArray(e.message?.content) && e.message.content[0]?.type === 'tool_result');
+    tr.message.content[0].content = 'usage: {"cache_read_input_tokens": 937000, "input_tokens": 10}';
+    tr.toolUseResult = { input_tokens: 5, cache_read_input_tokens: 937000 };
+  } }));
+  check('text and tool results that name the token fields pass (keys, not text; user entries are not scanned)', naming.r.status === 0 && naming.wrote === 1, `${naming.r.status} ${naming.r.stderr.trim()}`);
+
   const torn = run(build({ order: 'late' }), ['{"type":"user","message":{"cont', 'not json at all']);
   const tornRep = torn.r.status === 0 ? JSON.parse(torn.r.stdout) : {};
   check('torn lines are counted in the report (they reach the fold row)', tornRep.tornLines === 2, JSON.stringify(tornRep.tornLines));

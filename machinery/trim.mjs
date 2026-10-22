@@ -241,9 +241,25 @@ for (let i = cut; i < lines.length; i++) {
 //     9 "response cut" nudges; 0 exceptions), so one without it is drift.
 //     `<local-command-stdout>` is deliberately NOT listed: it is a real
 //     user-role entry with isMeta false (74 of them).
+//  4. `usage` renamed: withoutUsage (above) then strips nothing, and the stale
+//     figure travels, the 10/8 "Prompt is too long" refusal. The check looks
+//     for the token FIELDS, not the key's name: a numeric input_tokens /
+//     cache_read_input_tokens / cache_creation_input_tokens held as an object
+//     key on a kept assistant entry, outside its content, means a usage record
+//     survived under some other key. Keys, not text: transcripts here are full
+//     of message text and tool results that NAME those fields, and user entries
+//     and `content` are never scanned. Measured on this hub's archive (76,327
+//     assistant entries): 0 such carriers outside `usage`. It does not catch a
+//     rename of the inner field names as well.
 // A check that fails exits 1 and writes nothing: a fold skipped loudly beats a
 // tail that resumes wrong silently. The first kept entry may point outside the
 // tail (its parent is the cut); no other entry may.
+const USAGE_FIELDS = ['input_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'];
+function carriesUsage(v, depth = 0) {
+  if (!v || typeof v !== 'object') return false;
+  if (Array.isArray(v)) return depth < 2 && v.slice(0, 5).some((x) => carriesUsage(x, depth + 1));
+  return USAGE_FIELDS.some((k) => typeof v[k] === 'number') || (depth < 2 && Object.values(v).some((x) => carriesUsage(x, depth + 1)));
+}
 const META_WRAPPERS = [/^<local-command-caveat>/, /^Your response above was cut/, /^Another Claude session sent a message/];
 function tailProblems(keptLines) {
   const rows = keptLines.map((l) => JSON.parse(l));
@@ -256,6 +272,11 @@ function tailProblems(keptLines) {
   if (holes) problems.push(`${holes} kept entries point at a parent that is not in the tail: a resume would load only the turns after the gap`);
   const drift = rows.filter((e) => e.type === 'user' && typeof e.message?.content === 'string' && e.isMeta !== true && META_WRAPPERS.some((re) => re.test(e.message.content))).length;
   if (drift) problems.push(`${drift} harness-wrapper entries are not marked isMeta: seam detection can no longer tell them from a human prompt`);
+  const staleUsage = rows.filter((e) => e.type === 'assistant' && [
+    ...Object.entries(e.message ?? {}).filter(([k]) => k !== 'content'),
+    ...Object.entries(e).filter(([k]) => k !== 'message' && k !== 'wireToolInputs'),
+  ].some(([, v]) => carriesUsage(v))).length;
+  if (staleUsage) problems.push(`${staleUsage} kept replies still carry a token-usage record under a key the trimmer did not strip: a copied figure makes the resume refuse locally ("Prompt is too long")`);
   return problems;
 }
 const problems = tailProblems(kept);
