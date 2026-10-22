@@ -211,6 +211,32 @@ try {
   check('isMeta renamed, cut stays on the prompt: refused (wrapper rides in the tail unmarked)', refused(run(build({ order: 'late', metaKey: 'meta' })), /not marked isMeta/), '');
   check('isMeta renamed, cut lands ON the caveat: refused (the repro that moved the cut)', refused(run(build({ order: 'near', metaKey: 'meta' })), /not marked isMeta/), '');
 
+  // `usage` renamed: the stale figure would travel (the 10/8 refusal). The check
+  // looks for the token FIELDS as numeric keys on a kept assistant entry, never
+  // for the word `usage` and never in text.
+  const renameUsage = (to) => (rows) => { const m = rows.at(-1).message; m[to] = m.usage; delete m.usage; };
+  check('usage renamed inside the message: refused, nothing written', refused(run(build({ order: 'late', mutate: renameUsage('token_usage') })), /token-usage record/), '');
+  check('usage moved to a top-level key of the entry: refused', refused(run(build({ order: 'late', mutate: (rows) => { const e = rows.at(-1); e.tokenUsage = e.message.usage; delete e.message.usage; } })), /token-usage record/), '');
+  const naming = run(build({ order: 'late', mutate: (rows) => {
+    // Everything below names or even holds the token fields and is normal in this house's transcripts:
+    // text, a tool call whose INPUT has a numeric input_tokens key (an assistant `content` block), a
+    // wireToolInputs copy of it, a plain-text mention in an in-scope field, and a user-side tool result
+    // that carries them as keys. The tool result is the LAST one, so it is inside the kept tail.
+    const reply = rows.at(-1);
+    reply.message.content[0].text = 'the trimmer strips input_tokens and cache_read_input_tokens from message.usage';
+    reply.message.content.push({ type: 'tool_use', id: 'tz', name: 'Calc', input: { input_tokens: 5, cache_read_input_tokens: 937000 } });
+    reply.wireToolInputs = [{ input: { input_tokens: 5 } }];
+    reply.requestNote = 'see cache_read_input_tokens in the docs';
+    const tr = rows.filter((e) => Array.isArray(e.message?.content) && e.message.content[0]?.type === 'tool_result').at(-1);
+    tr.message.content[0].content = 'usage: {"cache_read_input_tokens": 937000, "input_tokens": 10}';
+    tr.toolUseResult = { input_tokens: 5, cache_read_input_tokens: 937000 };
+  } }));
+  check('text, tool inputs, wireToolInputs and user-side results that carry the token fields pass (keys on kept replies outside content only)', naming.r.status === 0 && naming.wrote === 1, `${naming.r.status} ${naming.r.stderr.trim()}`);
+  {
+    const namingOut = readFileSync(JSON.parse(naming.r.stdout).path, 'utf8');
+    check('and that fixture really kept them (not vacuous): the user-side result and the tool call are in the tail', namingOut.includes('"toolUseResult"') && namingOut.includes('"name":"Calc"'), '');
+  }
+
   const torn = run(build({ order: 'late' }), ['{"type":"user","message":{"cont', 'not json at all']);
   const tornRep = torn.r.status === 0 ? JSON.parse(torn.r.stdout) : {};
   check('torn lines are counted in the report (they reach the fold row)', tornRep.tornLines === 2, JSON.stringify(tornRep.tornLines));
