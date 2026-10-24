@@ -110,6 +110,14 @@ try {
   check('no window opened for a refusal', lines(opened).length === 3, `${lines(opened).length} opens`);
 } finally {
   for (const pid of pids) if (pid) { try { process.kill(pid); } catch { /* gone */ } }
+  // Also any viewer a launcher started that the run never saw through
+  // /whoami (one left behind by a launch that timed out, or by a mutant
+  // launcher): every server.mjs under the scratch dir (Weft, #37).
+  const ps = spawnSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' }).stdout ?? '';
+  for (const line of ps.split('\n')) {
+    const m = line.trim().match(/^(\d+)\s+(.*)$/);
+    if (m && m[2].includes(`${scratch}/`) && m[2].includes('/gui/server.mjs')) { try { process.kill(Number(m[1])); } catch { /* gone */ } }
+  }
   other?.kill();
   rmSync(scratch, { recursive: true, force: true });
 }
