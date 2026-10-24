@@ -3,11 +3,12 @@
 // who it is before trusting it, with the app's rule (viewer-judge.mjs). The
 // judge's cases run pure; then the real launch-nightwatch.sh runs against
 // real viewers started from two scratch copies of this tree, on a spare port,
-// with a stand-in for Chrome so no window ever opens.
+// with stand-ins for Chrome and osascript first on PATH, so no window or
+// alert ever opens (a real osascript alert blocks, and outlives the test).
 //
 //   node gui/test/launcher.mjs
 import { spawn, spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, realpathSync, existsSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, realpathSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -42,7 +43,17 @@ check('anything else isn\'t a viewer', viewerRootIn('python3 -m http.server 7352
 // ------------------------------------------------------- the real launcher
 const PORT = 7400 + Math.floor(Math.random() * 80);
 const home = join(scratch, 'home');
-const env = { HOME: home, PATH: `${dirname(process.execPath)}:${process.env.PATH}`, NIGHTWATCH_PORT: String(PORT), NIGHTWATCH_CHROME: '/bin/true' };
+// Stubs that record how they were called and return at once. No system
+// path is assumed (/bin/true isn't on macOS), and since `command -v
+// osascript` finds the stub on Linux too, the Mac-only alert line is tested
+// everywhere.
+const bin = join(scratch, 'bin');
+mkdirSync(bin);
+const alerts = join(scratch, 'alerts.log'), opened = join(scratch, 'chrome.log');
+writeFileSync(join(bin, 'osascript'), `#!/bin/bash\nprintf '%s\\n' "\${@: -1}" >> '${alerts}'\n`, { mode: 0o755 });
+writeFileSync(join(bin, 'chrome'), `#!/bin/bash\nprintf '%s\\n' "$*" >> '${opened}'\n`, { mode: 0o755 });
+const lines = (f) => { try { return readFileSync(f, 'utf8').trim().split('\n').filter(Boolean); } catch { return []; } };
+const env = { HOME: home, PATH: `${bin}:${dirname(process.execPath)}:${process.env.PATH}`, NIGHTWATCH_PORT: String(PORT), NIGHTWATCH_CHROME: join(bin, 'chrome') };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function whoami(port = PORT) {
   for (let i = 0; i < 40; i++) {
@@ -65,6 +76,8 @@ try {
   let r = launch(A);
   let w = await whoami();
   check('A\'s launcher keeps A\'s current viewer', r.status === 0 && w?.pid === w0.pid, `exit ${r.status}, pid ${w?.pid} vs ${w0?.pid}`);
+  const app = lines(opened).at(-1) ?? '';
+  check('it opens the app window on the viewer\'s port', app.includes(`--app=http://127.0.0.1:${PORT}/`) && app.includes(`--user-data-dir=${A}/gui/.chrome-profile`), app);
 
   const later = Date.now() / 1000 + 5;
   utimesSync(join(A, 'gui', 'emitter.mjs'), later, later);
@@ -79,6 +92,7 @@ try {
   w = await whoami();
   check('B\'s launcher refuses A\'s living viewer and exits 1', r.status === 1 && /won't stop another tree's living viewer/.test(r.stderr), `exit ${r.status} ${r.stderr}`);
   check('A\'s viewer is still alive and answering', w?.pid === w1.pid && alive(w1.pid));
+  check('the refusal is shown as an alert, with its text', /won't stop another tree's living viewer/.test(lines(alerts).at(-1) ?? ''), lines(alerts).join(' | '));
 
   rmSync(A, { recursive: true, force: true });
   r = launch(B);
@@ -92,6 +106,8 @@ try {
   await sleep(500);
   r = launch(B, { NIGHTWATCH_PORT: String(OPORT) });
   check('something that isn\'t a viewer is refused, not killed', r.status === 1 && /isn't a Nightwatch viewer/.test(r.stderr) && alive(other.pid), `exit ${r.status} ${r.stderr}`);
+  check('that refusal is alerted too, and only the two refusals were', lines(alerts).length === 2 && /isn't a Nightwatch viewer/.test(lines(alerts)[1]), lines(alerts).join(' | '));
+  check('no window opened for a refusal', lines(opened).length === 3, `${lines(opened).length} opens`);
 } finally {
   for (const pid of pids) if (pid) { try { process.kill(pid); } catch { /* gone */ } }
   other?.kill();
