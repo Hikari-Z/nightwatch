@@ -9,7 +9,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, existsSync } 
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveClaude, parseVersion, seenVersions, claudeVersionLines, realIo, lookupCommand } from './versioncheck.mjs';
+import { resolveClaude, parseVersion, seenVersions, claudeVersionLines, realIo, lookupCommand, flagLines, WAKE_FLAGS } from './versioncheck.mjs';
 import { platformKind } from './platform.mjs';
 
 const MACHINERY = dirname(fileURLToPath(import.meta.url));
@@ -20,6 +20,17 @@ function check(name, fn) {
 }
 
 const scratch0 = tmpdir();
+// A help text shaped like claude's: each flag DEFINED at the start of a line, and also named in prose elsewhere.
+// `omit` removes the definition line but leaves the prose mention (the case a loose match would miss).
+const HELP_LINES = {
+  '--append-system-prompt': '  --append-system-prompt <prompt>       Append a system prompt to the default',
+  '--resume': '  -r, --resume [value]                  Resume a conversation by session ID',
+  '--fork-session': '  --fork-session                        When resuming, create a new session ID',
+  '--model': '  --model <model>                       Model for the current session',
+  '--system-prompt-snapshot': '  --system-prompt-snapshot <on|off>     Record the system prompt once per conversation',
+};
+const HELP = (omit = []) => ['Usage: claude [options]', 'Options:', ...Object.entries(HELP_LINES).filter(([f]) => !omit.includes(f)).map(([, l]) => l),
+  '  --bare                                Minimal mode. Provide context via --append-system-prompt[-file], and see --resume, --model, --fork-session, --system-prompt-snapshot'].join('\n') + '\n';
 const rows = (...vs) => vs.map((v) => JSON.stringify(v === null ? { lane: 'x' } : { lane: 'x', version: v })).join('\n') + '\n';
 const io = (over = {}) => ({
   claudeBin: '/cfg/claude', isExecutable: (p) => p === '/cfg/claude', lookupPath: () => '/usr/bin/claude',
@@ -158,6 +169,42 @@ check('realIo: a failed lookup, or output with no path in it, is null', () => {
   }
 }
 
+// ── the flags wake.sh passes, in claude --help ──
+const flagOne = (over) => { const l = flagLines(io({ runHelp: () => HELP(), ...over })); assert.equal(l.length, 1); return l[0]; };
+check('flags: every flag wake.sh passes is listed: ok, the path and its source named, and the family caveat said', () => {
+  const l = flagOne({});
+  assert.match(l, /^ok {6}/); assert.match(l, /\/cfg\/claude \(via paths\.claudeBin\)/);
+  for (const { flag } of WAKE_FLAGS) assert.ok(l.includes(flag), flag);
+  assert.match(l, /listed as a family/);
+});
+for (const flag of Object.keys(HELP_LINES)) {
+  check(`flags: ${flag} no longer defined in --help is amber and names exactly it, even though prose still mentions it`, () => {
+    const l = flagOne({ runHelp: () => HELP([flag]) });
+    assert.match(l, /^WARN {4}/); assert.match(l, /before 08:00/);
+    const shown = flag === '--append-system-prompt' ? '--append-system-prompt[-file]' : flag;
+    assert.ok(l.includes(`no longer lists ${shown}`), l);
+    // only that flag is named in the "no longer lists ..." part, never the others
+    const namedPart = l.split(', which wake.sh passes')[0];
+    for (const other of WAKE_FLAGS.map((f) => f.flag).filter((f) => f !== shown)) assert.ok(!namedPart.includes(other), `${other} wrongly named in: ${l}`);
+  });
+}
+check('flags: two flags gone are both named', () => {
+  const l = flagOne({ runHelp: () => HELP(['--fork-session', '--model']) });
+  assert.match(l, /^WARN {4}/); assert.match(l, /no longer lists --model, --fork-session|no longer lists --fork-session, --model/);
+});
+check('flags: --append-system-prompt-file need not be its own line (claude does not list it): the family definition is enough', () => {
+  assert.match(flagOne({ runHelp: () => HELP() }), /^ok {6}/);
+});
+check('flags: help that cannot be read is amber, not ok', () => {
+  for (const out of [null, '']) assert.match(flagOne({ runHelp: () => out }), /^WARN {4}.*could not read/);
+});
+check('flags: no claude to ask gives no line (the version lines already said so)', () => {
+  assert.deepEqual(flagLines(io({ isExecutable: () => false, lookupPath: () => null, runHelp: () => HELP() })), []);
+});
+check('flags: never red', () => {
+  for (const c of [{}, { runHelp: () => null }, { runHelp: () => HELP(Object.keys(HELP_LINES)) }]) assert.doesNotMatch(flagOne(c), /^(MISSING|BAD)/);
+});
+
 // ── real I/O ──
 const scratch = mkdtempSync(join(tmpdir(), 'nw-versioncheck-'));
 const stub = (name, body) => { const f = join(scratch, name); writeFileSync(f, `#!/bin/sh\n${body}\n`); chmodSync(f, 0o755); return f; };
@@ -168,6 +215,11 @@ check('realIo runs the binary it is given and reads its stdout', () => {
 check('realIo: a binary that exits nonzero reads as no output', () => {
   const s = stub('claude-bad', 'echo "9.9.9 (Claude Code)"; exit 3');
   assert.equal(realIo({ claudeBin: s, wakeCostsPath: join(scratch, 'none') }).runVersion(s), null);
+});
+check('realIo.runHelp reads a binary\'s --help; a nonzero exit or empty output is null', () => {
+  const ok = stub('claude-help-ok', 'echo "  --system-prompt-snapshot <on|off>  x"'); const bad = stub('claude-help-bad', 'echo "x"; exit 2'); const empty = stub('claude-help-empty', 'exit 0');
+  const r = realIo({ claudeBin: ok, wakeCostsPath: join(scratch, 'none') });
+  assert.match(r.runHelp(ok), /system-prompt-snapshot/); assert.equal(r.runHelp(bad), null); assert.equal(r.runHelp(empty), null);
 });
 check('realIo: isExecutable is false for a missing file and for a file without the bit', () => {
   const r = realIo({ claudeBin: '/x', wakeCostsPath: join(scratch, 'none') });
@@ -183,11 +235,11 @@ check('realIo: a missing wake-costs file reads as empty', () => {
 // window's shell would do. On macOS that is an interactive login zsh, so a throwaway ZDOTDIR/.zshrc puts the
 // stub dir first on PATH; on Linux and WSL the lookup prefixes the configured claude's own directory, so the
 // stub sits there. Either way the stub is not on the child's PATH, so only the fall-through can find it.
-function preflightLines(wakeCostsText, claudeBinOk = true, { fallThrough = false } = {}) {
+function preflightLines(wakeCostsText, claudeBinOk = true, { fallThrough = false, omit = [] } = {}) {
   const hub = mkdtempSync(join(tmpdir(), 'nw-vc-hub-'));
   try {
     for (const d of ['wakecycle', 'ladder', 'projects', 'sessions']) mkdirSync(join(hub, d), { recursive: true });
-    const s = stub('claude-hub', 'echo "2.1.310 (Claude Code)"');
+    const s = stub('claude-hub', `case "$1" in --help) cat <<'NW_HELP_EOF'\n${HELP(omit)}NW_HELP_EOF\n;; *) echo "2.1.310 (Claude Code)";; esac`);
     writeFileSync(join(hub, 'checkpoint.md'), '# checkpoint\n');
     writeFileSync(join(hub, 'wakecycle', 'nightshift.armed'), ''); // preflight reads it unguarded; empty = disarmed
     writeFileSync(join(hub, 'ladder', 'wake-costs.jsonl'), wakeCostsText);
@@ -216,6 +268,14 @@ check('preflight carries the check: an unseen version is amber and the stub path
   const l = r.lines.find((x) => /^\w+\s+claude /.test(x)); assert.ok(l, r.lines.join('\n'));
   assert.match(l, /^WARN/); assert.match(l, /claude-hub \(via paths\.claudeBin\)/); assert.match(l, /woken: 2\.1\.309/);
   assert.ok(r.lines.some((x) => /preflight complete/.test(x)), 'the rest of the preflight still runs');
+});
+check('preflight carries the flag check: a --help that lists them is ok, naming the stub; one missing a flag is amber and names it', () => {
+  const ok = preflightLines(rows('2.1.310'));
+  assert.ok(ok.lines.some((x) => /^ok {6}claude .*claude-hub.*`--help` still lists the flags/.test(x)), ok.lines.join('\n'));
+  const gone = preflightLines(rows('2.1.310'), true, { omit: ['--system-prompt-snapshot'] });
+  assert.equal(gone.code, 0, gone.err);
+  assert.ok(gone.lines.some((x) => /^WARN {4}claude .*no longer lists --system-prompt-snapshot/.test(x)), gone.lines.join('\n'));
+  assert.ok(!gone.lines.some((x) => /^(MISSING|BAD)/.test(x) && /claude/.test(x)), 'never red');
 });
 check('preflight: a version that has woken is ok; no baseline is a note', () => {
   assert.match(preflightLines(rows('2.1.310')).lines.find((x) => /claude 2\.1\.310/.test(x)), /^ok/);
