@@ -5,11 +5,11 @@
 // Each check goes red when the behaviour it names is reverted.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveClaude, parseVersion, seenVersions, claudeVersionLines, realIo } from './versioncheck.mjs';
+import { resolveClaude, parseVersion, seenVersions, claudeVersionLines, realIo, lookupCommand } from './versioncheck.mjs';
 
 const MACHINERY = dirname(fileURLToPath(import.meta.url));
 let pass = 0, fail = 0;
@@ -18,6 +18,7 @@ function check(name, fn) {
   catch (e) { fail++; console.log(`  \x1b[31m✗\x1b[0m ${name}\n    ${e.message}`); }
 }
 
+const scratch0 = tmpdir();
 const rows = (...vs) => vs.map((v) => JSON.stringify(v === null ? { lane: 'x' } : { lane: 'x', version: v })).join('\n') + '\n';
 const io = (over = {}) => ({
   claudeBin: '/cfg/claude', isExecutable: (p) => p === '/cfg/claude', lookupPath: () => '/usr/bin/claude',
@@ -74,6 +75,8 @@ check('no wake row carries a version yet: neutral, not amber', () => {
 check('the path found on PATH is named as such', () => {
   const l = one({ isExecutable: () => false });
   assert.match(l, /\/usr\/bin\/claude \(via PATH\)/);
+  const withLabel = one({ isExecutable: () => false, lookupLabel: 'looked up by `zsh -ilc`, the shell the wake window runs' });
+  assert.match(withLabel, /\(via PATH; looked up by `zsh -ilc`/, 'who looked is said, so the line never implies more than it has');
 });
 check('no claude anywhere is amber and names where it looked', () => {
   const l = one({ isExecutable: () => false, lookupPath: () => null });
@@ -87,6 +90,62 @@ check('never red: no case produces MISSING or BAD', () => {
   const cases = [{}, { wakeCostsText: '' }, { wakeCostsText: rows('1.0.0') }, { runVersion: () => null }, { isExecutable: () => false, lookupPath: () => null }, { runVersion: () => 'x' }];
   for (const c of cases) assert.doesNotMatch(one(c), /^(MISSING|BAD)/);
 });
+
+// ── which shell looks (Opus's measurement, 10/25: sh -lc and zsh -lc find the old
+//    Homebrew cask, only an interactive login shell finds the live claude) ──
+check('darwin looks as Terminal\'s window does: the user\'s shell, interactive login (-ilc)', () => {
+  const c = lookupCommand({ kind: 'darwin', shell: '/bin/zsh' });
+  assert.equal(c.bin, '/bin/zsh'); assert.deepEqual(c.args, ['-ilc', 'command -v claude']); assert.match(c.label, /-ilc/);
+  assert.equal(lookupCommand({ kind: 'darwin', shell: '/opt/homebrew/bin/fish' }).bin, '/opt/homebrew/bin/fish');
+});
+check('darwin without a usable $SHELL falls back to zsh, still -ilc', () => {
+  for (const shell of [undefined, '', 'zsh']) { const c = lookupCommand({ kind: 'darwin', shell }); assert.equal(c.bin, '/bin/zsh', String(shell)); assert.equal(c.args[0], '-ilc'); }
+});
+check('linux and wsl look as the window does: sh -lc with the node and configured-claude directories first', () => {
+  for (const kind of ['linux', 'wsl']) {
+    const c = lookupCommand({ kind, nodePath: '/home/u/.nvm/bin/node', claudeBin: '/home/u/.local/bin/claude' });
+    assert.equal(c.bin, '/bin/sh'); assert.equal(c.args[0], '-lc');
+    assert.match(c.args[1], /^PATH="\/home\/u\/\.nvm\/bin:\/home\/u\/\.local\/bin:\$PATH"; command -v claude$/); assert.match(c.label, /sh -lc/);
+  }
+});
+check('an unknown platform says it is only Doctor\'s shell, and never claims the window\'s', () => {
+  const c = lookupCommand({ kind: 'plan9' }); assert.match(c.label, /Doctor's shell/); assert.doesNotMatch(c.label, /as the wake window runs/);
+});
+check('realIo actually spawns the interactive login form on darwin (not what a stubbed lookupPath would hide)', () => {
+  const calls = [];
+  const r = realIo({ claudeBin: '/x', wakeCostsPath: join(scratch0, 'none'), kind: 'darwin', shell: '/bin/zsh', spawn: (bin, args) => { calls.push([bin, args]); return { status: 0, stdout: 'rc noise\n/etc/zshrc: loaded\n/opt/found/claude\n' }; } });
+  assert.equal(r.lookupPath(), '/opt/found/claude', 'rc noise is skipped; the last path line wins');
+  assert.deepEqual(calls, [['/bin/zsh', ['-ilc', 'command -v claude']]]);
+  assert.match(r.lookupLabel, /-ilc/);
+});
+check('realIo: a failed lookup, or output with no path in it, is null', () => {
+  const mk = (out) => realIo({ claudeBin: '/x', wakeCostsPath: join(scratch0, 'none'), kind: 'darwin', shell: '/bin/zsh', spawn: () => out });
+  assert.equal(mk({ status: 1, stdout: '/a/claude\n' }).lookupPath(), null);
+  assert.equal(mk({ status: 0, stdout: 'claude not found\n' }).lookupPath(), null);
+  assert.equal(mk({ status: 0, stdout: '' }).lookupPath(), null);
+});
+{
+  // The real thing, hermetic: a throwaway ZDOTDIR whose .zshrc puts a stub claude first on PATH.
+  // An interactive login zsh reads .zshrc; `zsh -lc` does not. The control proves this can tell them apart.
+  const haveZsh = existsSync('/bin/zsh');
+  if (!haveZsh) console.log('  - skipped: the real-shell check needs /bin/zsh');
+  else {
+    const zd = mkdtempSync(join(tmpdir(), 'nw-zdot-')); const bind = join(zd, 'bin'); mkdirSync(bind);
+    const fake = join(bind, 'claude'); writeFileSync(fake, '#!/bin/sh\necho "0.0.1 (Claude Code)"\n'); chmodSync(fake, 0o755);
+    writeFileSync(join(zd, '.zshrc'), `export PATH="${bind}:$PATH"\n`);
+    const saved = process.env.ZDOTDIR; process.env.ZDOTDIR = zd;
+    try {
+      check('the real interactive login zsh reads .zshrc and finds the claude put there', () => {
+        const r = realIo({ claudeBin: '/x', wakeCostsPath: join(scratch0, 'none'), kind: 'darwin', shell: '/bin/zsh' });
+        assert.equal(r.lookupPath(), fake);
+      });
+      check('control: a non-interactive login zsh (-lc) does NOT find it, so the check can tell the shells apart', () => {
+        const c = spawnSync('/bin/zsh', ['-lc', 'command -v claude'], { encoding: 'utf8', timeout: 5000 });
+        assert.notEqual(String(c.stdout).trim().split('\n').pop(), fake);
+      });
+    } finally { if (saved === undefined) delete process.env.ZDOTDIR; else process.env.ZDOTDIR = saved; rmSync(zd, { recursive: true, force: true }); }
+  }
+}
 
 // ── real I/O ──
 const scratch = mkdtempSync(join(tmpdir(), 'nw-versioncheck-'));
