@@ -49,8 +49,10 @@
  * request at or past watch.wakeCostWarn of the lane's window (default 0.5; 0
  * turns it off) also emits one amber `wake-cost-high` event, never a banner.
  * The row also carries `headMatch`/`headRef` where the woken session's recorded
- * system prompt could be compared with the head (see headWitness), and an amber
- * `head-not-in-prompt` event under watch.headMatchWarn. The row also carries `version`, the Claude Code version that woke (from the
+ * system prompt could be compared with the head (see headWitness), `headFresh`/`headDisc`
+ * for the lines that were not already in the previous wake's prompt (the only ones that
+ * tell fresh from stale), and an amber `head-not-in-prompt` event when `headFresh` is
+ * under watch.headMatchWarn. The row also carries `version`, the Claude Code version that woke (from the
  * reply's own `version`); the first wake by a version no earlier row has seen
  * emits one amber `claude-version-new` event.
  *
@@ -62,7 +64,7 @@
  * measures from real usage, and a headless relay pass the house retired) and
  * the cwd-based lane guess (the registry is the only attribution).
  */
-import { readFileSync, readdirSync, statSync, appendFileSync, writeFileSync, renameSync, mkdirSync, openSync, readSync, closeSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, appendFileSync, writeFileSync, renameSync, mkdirSync, openSync, readSync, closeSync, existsSync } from 'node:fs';
 import { notifyBanner } from './platform.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
@@ -545,8 +547,26 @@ const lineShare = (ref, sys) => {
   const lines = ref.split('\n').filter((l) => l.trim());
   return lines.length ? Math.round((lines.filter((l) => sys.includes(l)).length / lines.length) * 1000) / 1000 : null;
 };
+// A stale prompt IS the previous wake's own prompt (measured 10/25: a resume+fork launched with new text,
+// snapshot on, records the old). So a head's lines that were already in that prompt cannot tell fresh from
+// stale, and a quiet day (a dark lane, a zero-turn day) leaves most of the checkpoint unchanged: scoring all
+// the lines let a stale prompt clear 0.9 on exactly the day nobody looks (Opus, 10/25: 0.68 of 10/20's lines
+// were already in 10/19's checkpoint). Only the DISCRIMINATING lines count: those of today's head absent from
+// the previous prompt. Fewer than this many and nothing is claimed.
+const MIN_DISCRIMINATING = 5;
+/** The prompt the folded (previous) session was sent when it woke: its own first api-request-shape. */
+function previousPrompt(source) {
+  const id = String(source ?? '').replace(/^jsonl:/, '');
+  if (!id) return null;
+  for (const dir of [P.transcripts, P.transcriptArchive]) {
+    if (!dir) continue;
+    const f = join(dir, `${id}.jsonl`);
+    if (existsSync(f)) { const s = systemOf(f, id); if (s) return s.text; }
+  }
+  return null;
+}
 /** What the wake's head should have been against what the session sent. Pure of state. */
-function headWitness({ wokenPath, sid, lane, tail, foldAt }) {
+function headWitness({ wokenPath, sid, lane, tail, foldAt, source }) {
   const shape = systemOf(wokenPath, sid);
   if (!shape) return { status: 'none' };
   // The head wake.sh saved when it launched, if it is this wake's (written after the fold,
@@ -567,7 +587,16 @@ function headWitness({ wokenPath, sid, lane, tail, foldAt }) {
     } catch { return { status: 'skipped', why: 'no saved head and no readable receipt' }; }
   }
   const share = lineShare(ref, shape.text);
-  return share === null ? { status: 'skipped', why: 'the head is empty' } : { status: 'measured', share, ref: refKind, version: shape.version };
+  if (share === null) return { status: 'skipped', why: 'the head is empty' };
+  // fresh: the share of the discriminating lines found in what was sent; null when it cannot be told.
+  let fresh = null, disc = null;
+  const prev = previousPrompt(source);
+  if (prev !== null) {
+    const d = ref.split('\n').filter((l) => l.trim() && !prev.includes(l));
+    disc = d.length;
+    if (d.length >= MIN_DISCRIMINATING) fresh = Math.round((d.filter((l) => shape.text.includes(l)).length / d.length) * 1000) / 1000;
+  }
+  return { status: 'measured', share, fresh, disc, ref: refKind, version: shape.version };
 }
 
 function wakeCostCheck(now) {
@@ -612,8 +641,8 @@ function wakeCostCheck(now) {
     if (!first) continue; // no real reply yet (or a dead wake: deadwake.mjs's business)
     let lane = null;
     try { lane = JSON.parse(readFileSync(woken.file, 'utf8')).lane ?? null; } catch {}
-    const witness = headWitness({ wokenPath, sid: woken.sid, lane, tail: row.tail, foldAt });
-    const record = { at: first.at, lane, tail: row.tail, session: woken.sid, source: row.source ?? null, estTokens: row.est_tokens ?? null, firstRequestTokens: first.tokens, ...(first.version ? { version: first.version } : {}), ...(witness.status === 'measured' ? { headMatch: witness.share, headRef: witness.ref } : {}) };
+    const witness = headWitness({ wokenPath, sid: woken.sid, lane, tail: row.tail, foldAt, source: row.source });
+    const record = { at: first.at, lane, tail: row.tail, session: woken.sid, source: row.source ?? null, estTokens: row.est_tokens ?? null, firstRequestTokens: first.tokens, ...(first.version ? { version: first.version } : {}), ...(witness.status === 'measured' ? { headMatch: witness.share, headRef: witness.ref, ...(witness.fresh !== null ? { headFresh: witness.fresh } : {}), ...(witness.disc !== null ? { headDisc: witness.disc } : {}) } : {}) };
     // The version that WOKE on the folded tail is the one that has to read its
     // format, so the row is the receipt that this version woke clean (the first
     // real reply came back). A version no earlier row has seen is told once,
@@ -629,9 +658,13 @@ function wakeCostCheck(now) {
     emit({ ...record, kind: 'wake-cost' });
     if (witness.status === 'measured') {
       const warn = Wn().headMatchWarn; // 0 is off: a share is never negative, so nothing is under it
-      if (witness.share < warn) {
-        emit({ at: first.at, kind: 'head-not-in-prompt', lane, session: woken.sid, share: witness.share, ref: witness.ref, warnAt: warn, alarm: false });
-        log(`HEAD NOT IN PROMPT: ${lane ?? '?'} (${woken.sid.slice(0, 8)}…) sent a system prompt carrying ${Math.round(witness.share * 100)}% of the ${witness.ref === 'saved-head' ? 'head wake.sh built' : 'checkpoint'} (warns under ${Math.round(warn * 100)}%): the snapshot flag may have stopped working`);
+      if (witness.fresh === null) {
+        // Nothing to tell fresh from stale: most of the head was already in the previous prompt (or there is no
+        // previous prompt to compare). Claim nothing; the full share is on the row for forensics.
+        log(`wake head not scored for ${lane ?? '?'} (${woken.sid.slice(0, 8)}…): ${witness.disc === null ? 'no previous prompt to compare against' : `only ${witness.disc} lines differ from the previous wake's prompt (needs ${MIN_DISCRIMINATING})`}`);
+      } else if (witness.fresh < warn) {
+        emit({ at: first.at, kind: 'head-not-in-prompt', lane, session: woken.sid, share: witness.fresh, shareAll: witness.share, discriminating: witness.disc, ref: witness.ref, warnAt: warn, alarm: false });
+        log(`HEAD NOT IN PROMPT: ${lane ?? '?'} (${woken.sid.slice(0, 8)}…) sent a system prompt carrying ${Math.round(witness.fresh * 100)}% of the ${witness.disc} lines of the ${witness.ref === 'saved-head' ? 'head wake.sh built' : 'checkpoint'} that were not in the previous wake's prompt (warns under ${Math.round(warn * 100)}%): the snapshot flag may have stopped working`);
       }
     } else if (witness.status === 'none') {
       const v = first.version ?? '?';
