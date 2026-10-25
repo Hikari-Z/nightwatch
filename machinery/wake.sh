@@ -225,6 +225,14 @@ MODEL="$(node "$WAKECYCLE_DIR/config.mjs" get "lanes.$LANE.model" 2>/dev/null)" 
 # registry pid is written by claude's own SessionStart hook.
 STDERR_CAP="$STATE_DIR/last-wake.$LANE.stderr"
 LAUNCHED_AT=$(date +%s)
+# Keep the head this wake built (the checkpoint plus the duties above) beside the
+# receipt, so the watch can check that the woken session's recorded system prompt
+# really carries it: `--system-prompt-snapshot off` is what puts it there, and a
+# flag that stopped working would otherwise show nowhere. BEST EFFORT AND UNABLE
+# TO STOP THE LAUNCH (the `|| true`, under set -e): a temp file and a rename, so
+# the watch never reads half a head. A failure only means that wake is unwitnessed.
+{ cp "$HEAD" "$STATE_DIR/last-head.$LANE.tmp.$$" && mv -f "$STATE_DIR/last-head.$LANE.tmp.$$" "$STATE_DIR/last-head.$LANE"; } 2>/dev/null \
+  || rm -f "$STATE_DIR/last-head.$LANE.tmp.$$" 2>/dev/null || true
 set +e
 set -- --append-system-prompt-file "$HEAD" --system-prompt-snapshot off
 [ -n "$MODEL" ] && set -- --model "$MODEL" "$@"

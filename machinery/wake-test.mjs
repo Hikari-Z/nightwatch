@@ -99,5 +99,42 @@ check('the PreCompact guard blocks with valid JSON naming the sleep.mjs beside i
   assert.doesNotMatch(j.reason, /origin\/weft/);
 });
 
+// The saved head (item 2 of the compatibility guard): wake.sh keeps the head it built beside the
+// receipt so the watch can check the woken session's recorded system prompt against it. Best
+// effort, atomic, and unable to stop the launch.
+import { readdirSync, mkdirSync as mkdirSyncSh } from 'node:fs';
+check('a wake saves the head it built: the checkpoint plus the duties, byte for byte what claude was given', () => {
+  const hub = scratchHub({ firstWake: true });
+  try {
+    const r = runWake(hub);
+    assert.equal(r.status, 0, `wake.sh exited ${r.status}: ${r.stdout}${r.stderr}`);
+    const kept = readFileSync(join(hub, 'wakecycle', 'last-head.main'), 'utf8');
+    assert.equal(kept, readFileSync(join(hub, 'head.copy'), 'utf8'), 'the saved head is the head claude was given');
+    assert.ok(kept.startsWith('# checkpoint\n'), 'it starts with the checkpoint'); assert.match(kept, /## Standing wake duties/);
+    assert.deepEqual(readdirSync(join(hub, 'wakecycle')).filter((f) => f.includes('.tmp.')), [], 'no half-written copy is left beside it');
+  } finally { rmSync(hub, { recursive: true, force: true }); }
+});
+function runWakeBehind(hub, shimDir) {
+  return spawnSync('sh', [join(MACHINERY, 'wake.sh'), 'main'], {
+    env: { ...process.env, WEFT_CONFIG: join(hub, 'nightwatch.config.json'), PATH: `${shimDir}:${dirname(process.execPath)}:/usr/bin:/bin` },
+    encoding: 'utf8', timeout: 30000,
+  });
+}
+for (const [what, shim] of [['cp', 'case "$*" in *last-head*) exit 1;; esac\nexec /bin/cp "$@"'], ['mv', 'case "$*" in *last-head*) exit 1;; esac\nexec /bin/mv "$@"']]) {
+  check(`a failing ${what} of the saved head cannot stop the launch: claude still starts, and no half copy is left`, () => {
+    const hub = scratchHub({ firstWake: true });
+    try {
+      mkdirSyncSh(join(hub, 'shim'), { recursive: true });
+      writeFileSync(join(hub, 'shim', what), `#!/bin/sh\n${shim}\n`); chmodSync(join(hub, 'shim', what), 0o755);
+      const r = runWakeBehind(hub, join(hub, 'shim'));
+      assert.equal(r.status, 0, `wake.sh exited ${r.status}: ${r.stdout}${r.stderr}`);
+      assert.ok(existsSync(join(hub, 'claude.argv')), 'claude was launched');
+      assert.match(readFileSync(join(hub, 'nightshift.log'), 'utf8'), /wake receipt: main lane reached exec/);
+      assert.ok(!existsSync(join(hub, 'wakecycle', 'last-head.main')), 'nothing was saved');
+      assert.deepEqual(readdirSync(join(hub, 'wakecycle')).filter((f) => f.includes('.tmp.')), [], 'and no temp file was left behind');
+    } finally { rmSync(hub, { recursive: true, force: true }); }
+  });
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
