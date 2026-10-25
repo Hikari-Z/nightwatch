@@ -244,5 +244,34 @@ try {
   rmSync(dir5, { recursive: true, force: true });
 }
 
+// claudeVersion: the newest version Claude Code stamped on a kept entry (the
+// writer of the tail). Junk is not a version, an unstamped file reports none.
+{
+  const dirV = mkdtempSync(join(tmpdir(), 'trim-test-ver-'));
+  const SIDV = '77777777-2222-3333-4444-555555555555';
+  const mk = (versions, { target = 200000, bulk = false } = {}) => {
+    const rowsV = versions.map((v, i) => ({
+      parentUuid: i ? `x${i - 1}` : null, uuid: `x${i}`, sessionId: SIDV, timestamp: `2026-10-25T10:${String(i).padStart(2, '0')}:00.000Z`,
+      ...(i % 2 === 0 ? { type: 'user', message: { role: 'user', content: `prompt ${i}` } } : { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: bulk && i >= 3 ? 'the long morning of ordinary prose work '.repeat(1_000) : `reply ${i}` }] } }),
+      ...(v === undefined ? {} : { version: v }),
+    }));
+    const f = join(dirV, `${SIDV}.jsonl`);
+    writeFileSync(f, rowsV.map((r) => JSON.stringify(r)).join('\n') + '\n');
+    const r = spawnSync(process.execPath, [join(HERE, 'trim.mjs'), f, '--target-tokens', String(target), '--dry'], { encoding: 'utf8' });
+    return r.status === 0 ? JSON.parse(r.stdout) : { exit: r.status, err: r.stderr.trim().split('\n').pop() };
+  };
+  const stamped = mk(['2.1.308', '2.1.309', undefined, '2.1.310', 'latest']);
+  check('claudeVersion is the newest valid version on a kept entry (a trailing junk value is skipped)', stamped.claudeVersion === '2.1.310', JSON.stringify(stamped.claudeVersion ?? stamped));
+  const none = mk([undefined, undefined, undefined, undefined]);
+  check('an unstamped file reports no claudeVersion at all', none.keptEntries > 0 && !('claudeVersion' in none), JSON.stringify(none));
+  const onlyJunk = mk(['latest', 7, '', null]);
+  check('only junk values report none', onlyJunk.keptEntries > 0 && !('claudeVersion' in onlyJunk), JSON.stringify(onlyJunk));
+  // Only the kept tail's writer counts: a version stamped before the cut is gone with it.
+  const cutOff = mk(['2.1.300', undefined, undefined, undefined], { target: 5_000, bulk: true });
+  check('(the fixture really cuts the stamped entries off: 2 of 4 kept)', cutOff.keptEntries === 2 && cutOff.totalEntries === 4, JSON.stringify({ k: cutOff.keptEntries, t: cutOff.totalEntries }));
+  check('a version only on entries before the cut is not the tail\'s writer', !('claudeVersion' in cutOff), JSON.stringify(cutOff.claudeVersion));
+  rmSync(dirV, { recursive: true, force: true });
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nall pass');
 process.exit(fails ? 1 : 0);

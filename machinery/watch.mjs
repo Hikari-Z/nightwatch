@@ -48,6 +48,9 @@
  * the trimmer's estimate against what the harness actually sent. A first
  * request at or past watch.wakeCostWarn of the lane's window (default 0.5; 0
  * turns it off) also emits one amber `wake-cost-high` event, never a banner.
+ * The row also carries `version`, the Claude Code version that woke (from the
+ * reply's own `version`); the first wake by a version no earlier row has seen
+ * emits one amber `claude-version-new` event.
  *
  * Run: NIGHTWATCH_CONFIG=<hub config> node watch.mjs [--once]
  *
@@ -553,14 +556,29 @@ function wakeCostCheck(now) {
       let e; try { e = JSON.parse(l); } catch { continue; }
       if (e.type !== 'assistant' || copied.has(e.uuid) || e.isApiErrorMessage) continue;
       const t = usageTokens(e.message?.usage);
-      if (t > 0) { first = { at: e.timestamp, tokens: t, model: e.message?.model }; break; }
+      if (t > 0) { first = { at: e.timestamp, tokens: t, model: e.message?.model, version: typeof e.version === 'string' ? e.version : null }; break; }
     }
     if (!first) continue; // no real reply yet (or a dead wake: deadwake.mjs's business)
     let lane = null;
     try { lane = JSON.parse(readFileSync(woken.file, 'utf8')).lane ?? null; } catch {}
-    const record = { at: first.at, lane, tail: row.tail, session: woken.sid, source: row.source ?? null, estTokens: row.est_tokens ?? null, firstRequestTokens: first.tokens };
+    const record = { at: first.at, lane, tail: row.tail, session: woken.sid, source: row.source ?? null, estTokens: row.est_tokens ?? null, firstRequestTokens: first.tokens, ...(first.version ? { version: first.version } : {}) };
+    // The version that WOKE on the folded tail is the one that has to read its
+    // format, so the row is the receipt that this version woke clean (the first
+    // real reply came back). A version no earlier row has seen is told once,
+    // amber, after the fact: the output check stays the gate. The first version
+    // ever recorded only seeds the baseline. Newness is set membership, never a
+    // comparison with the last row (a rollback is not new); `previous` is only
+    // a label for "what ran last". A wake that dies before a real reply leaves
+    // no row, so its version stays unseen and the next clean wake on it fires:
+    // "woke clean" is the meaning.
+    let seenVersions = [];
+    try { seenVersions = readFileSync(P.wakeCosts, 'utf8').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l).version; } catch { return null; } }).filter(Boolean); } catch {}
     try { appendFileSync(P.wakeCosts, JSON.stringify(record) + '\n'); } catch (e) { log(`wake-cost write failed: ${e.message}`); continue; }
     emit({ ...record, kind: 'wake-cost' });
+    if (first.version && seenVersions.length && !seenVersions.includes(first.version)) {
+      emit({ at: first.at, kind: 'claude-version-new', lane, session: woken.sid, version: first.version, previous: seenVersions.at(-1), alarm: false });
+      log(`CLAUDE VERSION NEW: ${lane ?? '?'} woke on ${first.version}, first time a wake has run it (last recorded: ${seenVersions.at(-1)})`);
+    }
     // The estimate and the harness part ways by the ladder, the system prompt and
     // the checkpoint, which the fold doesn't count and which grow every day
     // (first requests ran 168k on 10/18 and 319k on 10/24 while the folds got
