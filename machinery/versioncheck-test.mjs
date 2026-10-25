@@ -253,6 +253,10 @@ check('node: a job at or above the floor is ok, one below is amber, each naming 
   assert.match(l[0], /^ok {6}node: the nightshift job runs on node 22\.21\.1 \(\/n\/node22, from a\.plist\), at or above the 22 floor/);
   assert.match(l[1], /^WARN {4}node: the watch job runs on node 20\.20\.2 \(\/n\/node20, from b\.plist\), below the 22 floor CI certifies; it runs, but nothing certifies/);
 });
+check('node: lines come out nightshift first, then watch, whatever order the directory lists them in', () => {
+  const l = nodeLines(nio({ readdir: () => ['b.plist', 'a.plist'] }));
+  assert.match(l[0], /the nightshift job/); assert.match(l[1], /the watch job/);
+});
 check('node: the floor boundary: 21.9.9 is amber, 22.0.0 and 23.1.0 are ok', () => {
   const at = (v) => nodeLines(nio({ readdir: () => ['a.plist'], runNode: () => `v${v}\n` }))[0];
   assert.match(at('21.9.9'), /^WARN/); assert.match(at('22.0.0'), /^ok/); assert.match(at('23.1.0'), /^ok/);
