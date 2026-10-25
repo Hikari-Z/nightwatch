@@ -294,7 +294,7 @@ try {
   const f = join(dirI, `${SIDI}.jsonl`);
   writeFileSync(f, rowsI.map((r) => JSON.stringify(r)).join('\n') + '\n');
   const run = (budget) => {
-    const r = spawnSync(process.execPath, [join(HERE, 'trim.mjs'), f, '--target-tokens', '2000000', ...(budget === undefined ? [] : ['--image-budget-bytes', String(budget)])], { encoding: 'utf8' });
+    const r = spawnSync(process.execPath, [join(HERE, 'trim.mjs'), f, '--target-tokens', '2000000', ...(budget === undefined ? [] : String(budget).startsWith('=') ? [`--image-budget-bytes${budget}`] : ['--image-budget-bytes', String(budget)])], { encoding: 'utf8' });
     if (r.status !== 0) return { exit: r.status, err: r.stderr.trim() };
     const rep = JSON.parse(r.stdout);
     const tail = readFileSync(rep.path, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
@@ -315,8 +315,37 @@ try {
   check('under the budget nothing is touched and nothing is reported', JSON.stringify(all.sent) === '["A","B","C"]' && !('imagesStripped' in all.rep), JSON.stringify(all.sent));
   const none = run(0);
   check('a budget of 0 keeps no image', JSON.stringify(none.sent) === '[]' && none.rep.imagesStripped.count === 3, JSON.stringify(none.sent));
+  // The placeholder's SHAPE, where the API reads it: a text block with non-empty text, in the tool_result's
+  // own content array. A block with the words under any other key would pass a search of the string and be
+  // refused by the API on every request of the woken session (the second reader's surviving mutant, 10/25).
+  const placed = d.tail.flatMap((e) => (Array.isArray(e.message?.content) ? e.message.content : []))
+    .filter((b) => b?.type === 'tool_result' && Array.isArray(b.content)).flatMap((b) => b.content);
+  check('a replaced image is a text block with text, inside the tool_result\'s content', placed.filter((b) => b.type === 'text' && /^\[image removed at fold/.test(b.text ?? '')).length === 2 && placed.every((b) => b.type === 'image' || (b.type === 'text' && typeof b.text === 'string' && b.text.length > 0)), JSON.stringify(placed.map((b) => Object.keys(b))));
+  check('the estimate drops with the pixels it no longer carries', d.rep.estTokens < all.rep.estTokens, `${d.rep.estTokens} vs ${all.rep.estTokens}`);
+  const eq = run('=500000');
+  check('the --image-budget-bytes=N spelling is honoured', Array.isArray(eq.sent) && eq.sent.length === 0 && eq.rep.imagesStripped.count === 3, JSON.stringify(eq.sent ?? eq));
   const bad = run('lots');
   check('a budget that is not a number is refused (exit 2)', bad.exit === 2 && /image-budget-bytes/.test(bad.err), JSON.stringify(bad));
+  // Within one entry the later block is the newer: two images in one tool_result, the budget exactly one
+  // image's size (<= keeps an exact fit). And the greedy fill: a newest image bigger than the budget goes,
+  // an older smaller one that fits stays.
+  const one = (blocks, budget) => {
+    const SIDO = '44444444-5555-6666-7777-888888888888';
+    const r0 = [
+      { parentUuid: null, uuid: 'o1', sessionId: SIDO, timestamp: '2026-10-25T23:00:00.000Z', type: 'user', message: { role: 'user', content: 'look' } },
+      ...blocks.map((content, n) => ({ parentUuid: `o${n + 1}`, uuid: `o${n + 2}`, sessionId: SIDO, timestamp: `2026-10-25T23:0${n + 1}:00.000Z`, type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `t${n}`, content }] } })),
+    ];
+    const fo = join(dirI, `${SIDO}.jsonl`);
+    writeFileSync(fo, r0.map((r) => JSON.stringify(r)).join('\n') + '\n');
+    const r = spawnSync(process.execPath, [join(HERE, 'trim.mjs'), fo, '--target-tokens', '2000000', '--image-budget-bytes', String(budget)], { encoding: 'utf8' });
+    const rep = JSON.parse(r.stdout);
+    const tail = readFileSync(rep.path, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    rmSync(rep.path, { force: true });
+    return tail.flatMap((e) => JSON.stringify(e.message?.content ?? '').match(/"data":"([A-Z])/g)?.map((m) => m.slice(-1)) ?? []);
+  };
+  check('two images in one tool_result: the later one is kept, and an exact fit counts as fitting', JSON.stringify(one([[img('D', 300), img('E', 300)]], 300_000)) === '["E"]', JSON.stringify(one([[img('D', 300), img('E', 300)]], 300_000)));
+  check('one byte short of an image, it goes', JSON.stringify(one([[img('E', 300)]], 299_999)) === '[]');
+  check('greedy: an oversized newest image goes and an older one that fits stays', JSON.stringify(one([[img('F', 200)], [img('G', 900)]], 500_000)) === '["F"]', JSON.stringify(one([[img('F', 200)], [img('G', 900)]], 500_000)));
   rmSync(dirI, { recursive: true, force: true });
 }
 

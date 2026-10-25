@@ -39,8 +39,11 @@ const args = process.argv.slice(2);
 const src = args.find((a) => !a.startsWith('--'));
 const target = Number((args.find((a) => a.startsWith('--target-tokens')) ?? '').split('=')[1] || args[args.indexOf('--target-tokens') + 1] || 250_000);
 const dry = args.includes('--dry');
+// Both spellings, as --target-tokens takes them: `--image-budget-bytes N` and `--image-budget-bytes=N`.
+const imgEq = args.find((a) => a.startsWith('--image-budget-bytes='));
 const imgArg = args.indexOf('--image-budget-bytes');
-const IMAGE_BUDGET = imgArg >= 0 ? Number(args[imgArg + 1]) : 1_000_000;
+const IMAGE_BUDGET = imgEq !== undefined ? Number(imgEq.split('=')[1] === '' ? NaN : imgEq.split('=')[1])
+  : imgArg >= 0 ? Number(args[imgArg + 1] === '' || args[imgArg + 1] === undefined ? NaN : args[imgArg + 1]) : 1_000_000;
 if (!Number.isFinite(IMAGE_BUDGET) || IMAGE_BUDGET < 0) { console.error('trim: --image-budget-bytes takes a number of bytes, 0 or more'); process.exit(2); }
 if (!src) {
   console.error('usage: trim.mjs <session-id-or-path> [--target-tokens N] [--dry]');
@@ -241,6 +244,8 @@ for (let i = cut; i < lines.length; i++) {
 // carried the same weight into the wake. So the kept tail holds the NEWEST images up to IMAGE_BUDGET bytes
 // of base64 and replaces each older one with a line of text saying what was there. The words around an
 // image survive; only its pixels go. Newest first, because a recent screenshot is the likeliest to matter.
+// The fill is greedy, on purpose: an image bigger than what's left of the budget goes, and an older one that
+// still fits stays, so one oversized photo can't push every smaller, older screenshot out with it.
 const isImg = (b) => b && typeof b === 'object' && b.type === 'image' && typeof b.source?.data === 'string';
 const imagePlaceholder = (b) => ({ type: 'text', text: `[image removed at fold: ${b.source.media_type ?? 'image'}, ${Math.round(b.source.data.length / 1024)} KB of base64; a fold keeps only the newest images, ${Math.round(IMAGE_BUDGET / 1e6 * 10) / 10} MB in all]` });
 let imageBytes = 0;
