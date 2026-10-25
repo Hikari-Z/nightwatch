@@ -20,8 +20,8 @@
  * Usage: node trim.mjs <session-id-or-path> [--target-tokens 250000] [--dry]
  * Prints JSON: { newSessionId, path, keptEntries, totalEntries, estTokens,
  *               targetTokens, cutAt, cutPrompt, overshoot?, claudeVersion? }
- * claudeVersion is the newest `version` Claude Code stamped on a kept entry,
- * the version that WROTE the tail (the one that wakes on it is recorded by
+ * claudeVersion is the `version` on the LAST kept entry that carries one (the
+ * last-written, not a semver max), the version that WROTE the tail (the one that wakes on it is recorded by
  * the watch, in the wake-cost row). Absent when no kept entry carries one.
  * overshoot (fix 5, 10/9) appears when reaching back to a human prompt carried
  * the kept estimate past OVERSHOOT × target: { ratio, extendedEntries,
@@ -308,6 +308,7 @@ if (overshoot) {
 }
 
 const cutEntry = entries[cut];
+// Last-written, not the semver max: a session resumed under an older build says so.
 const writerVersion = entries.slice(cut).reverse().find((e) => typeof e?.version === 'string' && /^\d+\.\d+\.\d+/.test(e.version))?.version ?? null;
 const report = {
   newSessionId: newId,

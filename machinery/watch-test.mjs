@@ -231,6 +231,13 @@ wakeWith('t-v5', 'w-v5', 'opus', 'claude-opus-5-5', 100_000, 100_000);
 tick();
 check('and not again for the same version, nor for a reply with no version', newOnes(), ['2.1.310<-2.1.309']);
 check('a reply with no version leaves the row without the key', lines(join(root, 'ladder', 'wake-costs.jsonl')).filter((r) => r.tail === 't-v5').map((r) => 'version' in r), [false]);
+// Newness is set membership, never a comparison with the last row: a version
+// seen earlier but not last coming back (a rollback, an older cask on PATH) is
+// not new. Rows are now 2.1.309, 2.1.309, 2.1.310, 2.1.310, (none).
+wakeWith('t-v6', 'w-v6', 'opus', 'claude-opus-5-5', 100_000, 100_000, '2.1.309');
+tick();
+check('a version seen earlier, but not last, coming back raises nothing (a rollback)', newOnes(), ['2.1.310<-2.1.309']);
+check('and its row still lands with the version that woke', versions().includes('t-v6:2.1.309'), true);
 check('and no version event ever sent a notification', lines(SENT).some((m) => JSON.stringify(m).includes('claude-version')), false);
 // A lane's own contextWindow outranks the model's (Opus's note on #39: windowFor
 // is old code, and nothing pinned this branch of it). 250k is 25% of 1M and

@@ -566,7 +566,11 @@ function wakeCostCheck(now) {
     // format, so the row is the receipt that this version woke clean (the first
     // real reply came back). A version no earlier row has seen is told once,
     // amber, after the fact: the output check stays the gate. The first version
-    // ever recorded only seeds the baseline.
+    // ever recorded only seeds the baseline. Newness is set membership, never a
+    // comparison with the last row (a rollback is not new); `previous` is only
+    // a label for "what ran last". A wake that dies before a real reply leaves
+    // no row, so its version stays unseen and the next clean wake on it fires:
+    // "woke clean" is the meaning.
     let seenVersions = [];
     try { seenVersions = readFileSync(P.wakeCosts, 'utf8').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l).version; } catch { return null; } }).filter(Boolean); } catch {}
     try { appendFileSync(P.wakeCosts, JSON.stringify(record) + '\n'); } catch (e) { log(`wake-cost write failed: ${e.message}`); continue; }
