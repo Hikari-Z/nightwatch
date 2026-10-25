@@ -15,7 +15,7 @@ URL="http://127.0.0.1:7352/${NIGHTWATCH_SKIN:+?skin=$NIGHTWATCH_SKIN}"
 SELF="$0"; [ -L "$SELF" ] && SELF="$(readlink "$SELF")"
 HERE="$(cd "$(dirname "$SELF")" && pwd -P)"
 if ! curl -s -m 2 -o /dev/null "http://127.0.0.1:7352/"; then
-  NIGHTWATCH_PORT=7352 nohup node "$HERE/server.mjs" \
+  NIGHTWATCH_PORT=7352 nohup "${NIGHTWATCH_NODE:-node}" "$HERE/server.mjs" \
     >> "$HERE/viewer.log" 2>&1 &
   for i in $(seq 1 20); do
     curl -s -m 1 -o /dev/null "http://127.0.0.1:7352/" && break

@@ -287,8 +287,12 @@ function transcriptQuietMs(sessionId) {
 // The midday cycle's bells (Ra, 10/12) are this same ritual with their own
 // framing: why it rang (the context level), that the lane reopens at once
 // instead of at the wake hour, and for the urgent tier, the deadline.
+// The command names THIS daemon's node (its process.execPath, which the launchd plist or systemd unit pins),
+// not a bare `node`: an agent's shell can find a different one (10/25: Homebrew's Node 20 while the daemons
+// ran 22), and sleep.mjs spawns trim.mjs with its own node, so the whole fold runs on whatever starts it.
+const SLEEP_CMD = (lane, sessionId) => `${CFG_FILE ? `NIGHTWATCH_CONFIG="${CFG_FILE}" ` : ''}"${process.execPath}" "${join(MACHINERY_DIR, 'sleep.mjs')}" --lane ${lane} --session ${sessionId}`;
 function middayNote(lane, sessionId, midday) {
-  const cmd = `${CFG_FILE ? `NIGHTWATCH_CONFIG="${CFG_FILE}" ` : ''}node "${join(MACHINERY_DIR, 'sleep.mjs')}" --lane ${lane} --session ${sessionId}`;
+  const cmd = SLEEP_CMD(lane, sessionId);
   const level = `the ${lane} lane's context is at ${Math.round(midday.pct * 100)}% of its window`;
   const urgent = midday.tier === 'urgent';
   return (
@@ -306,7 +310,7 @@ function ritualNote(lane, sessionId) {
   return (
     `[nightshift] Sleep-bell for the ${lane} lane: it's the end of the day. When the current work ` +
     `reaches its seam, run the ritual, IN THIS ORDER — write today's rung into the ladder (format and laws: templates/rung.md beside this machinery), run \`` +
-    `${CFG_FILE ? `NIGHTWATCH_CONFIG="${CFG_FILE}" ` : ''}node "${join(MACHINERY_DIR, 'sleep.mjs')}" --lane ${lane} --session ${sessionId}\`, THEN rewrite the checkpoint ` +
+    `${SLEEP_CMD(lane, sessionId)}\`, THEN rewrite the checkpoint ` +
     `(fold receipt first: a crash between rung and fold costs the night; a crash ` +
     `after the fold costs only a stale lane section, and the wake reads the live ` +
     `checkpoint later). Close any background shells or watchers you left running — ` +
@@ -1463,7 +1467,10 @@ async function rehearse() {
     check('infra-filter', 'a render is real work', !INFRA_PROCESS.test('node render.mjs --frames 0-8160'));
     check('infra-filter', 'a hand-started daemon is real work', !INFRA_PROCESS.test('node /Users/x/nightwatch/machinery/nightshift.mjs'));
     check('bell-note', 'names the belled session explicitly', note.includes('--session sid-12345678-abcd'), note.slice(0, 200));
-    check('bell-note', 'quotes the machinery sleep.mjs path', note.includes(`node "${join(MACHINERY_DIR, 'sleep.mjs')}"`));
+    check('bell-note', 'quotes the machinery sleep.mjs path, run by this daemon\'s own node', note.includes(`"${process.execPath}" "${join(MACHINERY_DIR, 'sleep.mjs')}"`));
+    check('bell-note', 'never a bare node an agent\'s shell would resolve (10/25)', !/(^|[\s`])node "/.test(note), note);
+    const mid = middayNote('main', 'sid-12345678-abcd', { pct: 0.86, tier: 'soft' });
+    check('bell-note', 'the midday note runs the same daemon node', mid.includes(`"${process.execPath}" "${join(MACHINERY_DIR, 'sleep.mjs')}"`) && !/(^|[\s`])node "/.test(mid), mid);
     check('bell-note', 'carries this hub\'s config when one exists', !CFG_FILE || note.includes(`NIGHTWATCH_CONFIG="${CFG_FILE}"`));
     // (A 'never names another house' negative was dropped: under Weft's
     // sealed layout MACHINERY_DIR legitimately IS weft/wakecycle, so the
@@ -1475,7 +1482,9 @@ async function rehearse() {
 
 function tick() { tickWith(io); }
 
-if (process.argv.includes("--rehearse")) { await rehearse(); process.exit(0); }
+// The exit carries rehearse()'s own status: a bare exit(0) here overrode its exitCode = 1, so a failing
+// rehearsal exited 0 and CI's rehearsal step could never go red (found 10/25; since 10/7).
+if (process.argv.includes("--rehearse")) { await rehearse(); process.exit(process.exitCode ?? 0); }
 
 // --arm <lane> | --disarm <lane> | --armed: the app's Nightly toggle and the
 // per-lane "Nightshift folds and wakes this lane" box. Reads tolerate every
