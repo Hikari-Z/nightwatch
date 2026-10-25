@@ -100,9 +100,20 @@ export const TMUX_SUMMON =
  *  prefix only reorders PATH (review on #1: it put /opt/homebrew/bin, with a
  *  stale cask claude, ahead of the live one), so the command passes through. */
 export function withToolPath(shellCommand, { nodePath = process.execPath, claudeBin, kind = platformKind() } = {}) {
-  if (kind === 'darwin') return shellCommand;
+  const cmd = withNode(shellCommand, { nodePath });
+  if (kind === 'darwin') return cmd;
   const dirs = [...new Set([dirname(nodePath), ...(claudeBin ? [dirname(claudeBin)] : [])])];
-  return `PATH="${dirs.join(':')}:$PATH" ${shellCommand}`;
+  return `PATH="${dirs.join(':')}:$PATH" ${cmd}`;
+}
+
+/** The daemon's own node (its process.execPath, which the launchd plist or systemd unit pins) handed
+ *  to the window by name, on every platform: the scripts run "$NIGHTWATCH_NODE" when it's set, so the
+ *  window doesn't depend on its shell's PATH (10/25: Terminal's PATH found Homebrew's Node 20 while the
+ *  daemon ran 22) and PATH isn't reordered for claude (the darwin lesson above). wake.sh exports it, so
+ *  the claude it launches, that session's hooks and its agent shells inherit the same node. Pure. */
+export function withNode(shellCommand, { nodePath = process.execPath } = {}) {
+  const q = String(nodePath).replace(/["\\$`]/g, '\\$&');
+  return `NIGHTWATCH_NODE="${q}" ${shellCommand}`;
 }
 
 /** On WSL, the summons crosses the interop chain as one file path instead of

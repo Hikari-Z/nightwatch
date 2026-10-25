@@ -55,11 +55,14 @@ try {
   check('an inherited name ("constructor") is refused, nothing launched', inherited.status === 2 && launched() === '', `status ${inherited.status}: ${inherited.stdout}${inherited.stderr}`);
 
   // A live session the registry attributes to main: a process whose command
-  // name is claude (a copy of sleep), its status file, and the registry entry.
+  // name is claude, its status file, and the registry entry. The process is a
+  // copy of this test's own node, idling: a copy of /bin/sleep is SIGKILLed at
+  // launch on macOS (platform-binary signing, exit 137, measured 10/25), so the
+  // check raced its death and failed or passed by timing.
   const fakeClaude = join(hub, 'bin', 'claude');
-  copyFileSync('/bin/sleep', fakeClaude);
+  copyFileSync(process.execPath, fakeClaude);
   chmodSync(fakeClaude, 0o755);
-  const up = spawn(fakeClaude, ['60'], { stdio: 'ignore' });
+  const up = spawn(fakeClaude, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore' });
   try {
     writeFileSync(join(home, '.claude', 'sessions', `${up.pid}.json`), JSON.stringify({ pid: up.pid, sessionId: 'sess-up', kind: 'interactive' }));
     writeFileSync(join(hub, 'wakecycle', 'lane.sess-up'), JSON.stringify({ lane: 'main' }));

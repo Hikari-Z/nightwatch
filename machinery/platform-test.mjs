@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
   platformKind, summonWindowArgv, summonWindow, writeSummonScript, summonArgvFor, daemonJob, registryDir, registryFile,
-  bannerArgv, notifyBanner, closeTtyArgv, withToolPath, TMUX_SUMMON,
+  bannerArgv, notifyBanner, closeTtyArgv, withToolPath, withNode, TMUX_SUMMON,
 } from './platform.mjs';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync } from 'node:fs';
@@ -133,9 +133,9 @@ check('the tmux summons really opens a window, then a second lane joins the same
   }
 });
 check('withToolPath prefixes the daemon node dir, and claude\'s when distinct', () => {
-  assert.equal(withToolPath('sh w.sh main', { nodePath: '/n/bin/node', kind: 'linux' }), 'PATH="/n/bin:$PATH" sh w.sh main');
-  assert.equal(withToolPath('x', { nodePath: '/n/bin/node', claudeBin: '/c/bin/claude', kind: 'wsl' }), 'PATH="/n/bin:/c/bin:$PATH" x');
-  assert.equal(withToolPath('x', { nodePath: '/n/bin/node', claudeBin: '/n/bin/claude', kind: 'linux' }), 'PATH="/n/bin:$PATH" x');
+  assert.equal(withToolPath('sh w.sh main', { nodePath: '/n/bin/node', kind: 'linux' }), 'PATH="/n/bin:$PATH" NIGHTWATCH_NODE="/n/bin/node" sh w.sh main');
+  assert.equal(withToolPath('x', { nodePath: '/n/bin/node', claudeBin: '/c/bin/claude', kind: 'wsl' }), 'PATH="/n/bin:/c/bin:$PATH" NIGHTWATCH_NODE="/n/bin/node" x');
+  assert.equal(withToolPath('x', { nodePath: '/n/bin/node', claudeBin: '/n/bin/claude', kind: 'linux' }), 'PATH="/n/bin:$PATH" NIGHTWATCH_NODE="/n/bin/node" x');
 });
 check('withToolPath keeps a summons runnable when the login shell has no node', () => {
   // The bug it fixes: sh -lc under nvm finds no node. Run the prefixed
@@ -143,12 +143,25 @@ check('withToolPath keeps a summons runnable when the login shell has no node', 
   const out = execFileSync('/bin/sh', ['-c', withToolPath('node -e "console.log(1+1)"', { kind: 'linux' })], { env: { PATH: '/usr/bin:/bin' }, encoding: 'utf8' });
   assert.equal(out.trim(), '2');
 });
-check('withToolPath leaves darwin alone: the wake command is main\'s, byte for byte', () => {
+check('withToolPath leaves darwin\'s PATH alone: only the daemon\'s node is named (10/25)', () => {
+  // #1's lesson stands: prefixing PATH on darwin put /opt/homebrew/bin (a stale cask claude) first. The node
+  // travels by name instead, so the command is main's plus NIGHTWATCH_NODE and nothing reorders PATH.
   const cmd = 'WEFT_CONFIG="/h/weft.config.json" sh "/m/wake.sh" main';
-  assert.equal(withToolPath(cmd, { nodePath: '/opt/homebrew/bin/node', claudeBin: '/u/.local/bin/claude', kind: 'darwin' }), cmd);
+  const out = withToolPath(cmd, { nodePath: '/u/.local/node22/bin/node', claudeBin: '/u/.local/bin/claude', kind: 'darwin' });
+  assert.equal(out, `NIGHTWATCH_NODE="/u/.local/node22/bin/node" ${cmd}`);
+  assert.doesNotMatch(out, /PATH=/);
   assert.deepEqual(
-    summonWindowArgv({ title: 'main', shellCommand: withToolPath(cmd, { claudeBin: '/u/.local/bin/claude', kind: 'darwin' }) }, 'darwin'),
-    summonWindowArgv({ title: 'main', shellCommand: cmd }, 'darwin'));
+    summonWindowArgv({ title: 'main', shellCommand: out }, 'darwin'),
+    summonWindowArgv({ title: 'main', shellCommand: withNode(cmd, { nodePath: '/u/.local/node22/bin/node' }) }, 'darwin'));
+});
+check('withNode hands a shell the exact node path, however it is spelled', () => {
+  // Through a real sh, read by a CHILD as wake.sh reads it (the prefix sets the child's environment; the
+  // same command line's own $NIGHTWATCH_NODE would expand before it): spaces, quotes, $ and backticks arrive
+  // as written, never expanded.
+  const odd = '/a b/"q"/$HOME/`x`/node';
+  const out = execFileSync('/bin/sh', ['-c', withNode(`/bin/sh -c 'printf %s "$NIGHTWATCH_NODE"'`, { nodePath: odd })], { encoding: 'utf8' });
+  assert.equal(out, odd);
+  assert.equal(withNode('x', { nodePath: '/n/node' }), 'NIGHTWATCH_NODE="/n/node" x');
 });
 check('activate: false drops only the focus steal (the app-driven wake)', () => {
   const argv = summonWindowArgv({ title: 'm', shellCommand: 'c', activate: false }, 'darwin');

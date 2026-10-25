@@ -15,9 +15,11 @@
 # harness timeout (the usual 2h background cap) just means re-arm.
 set -e
 MACHINERY_DIR="$(cd "$(dirname "$0")" && pwd)"
+# The node wake.sh exported for this session (the daemon's), else the shell's.
+NODE="${NIGHTWATCH_NODE:-node}"
 LANE="$1"
 [ -n "$LANE" ] || { echo "usage: bell-watcher.sh <lane>"; exit 2; }
-SPOOL_BASE="$(node "$MACHINERY_DIR/config.mjs" get paths.spool)" || {
+SPOOL_BASE="$("$NODE" "$MACHINERY_DIR/config.mjs" get paths.spool)" || {
   echo "bell-watcher: hub config unreadable (set NIGHTWATCH_CONFIG to the hub's config file)"; exit 3; }
 SPOOL="$SPOOL_BASE/$LANE"
 mkdir -p "$SPOOL"
@@ -29,7 +31,7 @@ mkdir -p "$SPOOL"
 # The arm's mark is stamped BEFORE that listing, and anything newer than it
 # counts as fresh, so a note landing in the arm's first instant is listed
 # and wakes it too: a duplicate, never a silent wait (Fable's tie-break).
-DUE_BASE="$(node "$MACHINERY_DIR/config.mjs" get paths.due)" || DUE_BASE=""
+DUE_BASE="$("$NODE" "$MACHINERY_DIR/config.mjs" get paths.due)" || DUE_BASE=""
 DUE=""
 if [ -n "$DUE_BASE" ] && [ "$DUE_BASE" != "null" ]; then
   DUE="$DUE_BASE/$LANE"
