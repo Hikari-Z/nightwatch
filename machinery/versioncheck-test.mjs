@@ -276,7 +276,8 @@ check('node: an unknown platform says it cannot tell, neutrally', () => {
 });
 check('node: a job found through a symlinked machinery directory still matches (realpath on both sides)', () => {
   const l = nodeLines(nio({ readdir: () => ['a.plist'], realpath: (p) => p.replace('/link/', '/hub/machinery/'), readPlist: () => ['/n/node22', '/link/nightshift.mjs'], machineryDir: M, ...{} }));
-  assert.equal(l.length, 1, 'the symlinked path matched only because both sides go through realpath');
+  assert.equal(l.length, 1);
+  assert.match(l[0], /^ok {6}node: the nightshift job runs on node 22/, 'the symlinked path matched only because both sides go through realpath (a single "no job" note would also be one line)');
 });
 check('node: never red', () => {
   for (const o of [{}, { runNode: () => null }, { readdir: () => [] }, { kind: 'plan9' }]) for (const l of nodeLines(nio(o))) assert.doesNotMatch(l, /^(MISSING|BAD)/);
