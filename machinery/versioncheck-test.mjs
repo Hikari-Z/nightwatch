@@ -5,7 +5,7 @@
 // Each check goes red when the behaviour it names is reverted.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -186,6 +186,34 @@ for (const flag of Object.keys(HELP_LINES)) {
     // only that flag is named in the "no longer lists ..." part, never the others
     const namedPart = l.split(', which wake.sh passes')[0];
     for (const other of WAKE_FLAGS.map((f) => f.flag).filter((f) => f !== shown)) assert.ok(!namedPart.includes(other), `${other} wrongly named in: ${l}`);
+  });
+}
+// The fixture that matters: the REAL claude --help (2.1.310), because its description text wraps onto
+// continuation lines indented ~40 that name flags too. A hand-written help cannot contain what fooled the first
+// version of this check (Opus, 10/25: deleting each flag's definition line from this file left --resume and
+// --append-system-prompt "seen" through `^\s+`).
+const REAL_HELP = readFileSync(join(MACHINERY, 'testdata', 'claude-help-2.1.310.txt'), 'utf8');
+const baseOf = (flag) => flag.replace('[-file]', '');
+const optionColumn = (flag) => new RegExp(`^ {1,6}(?:-\\w, )?${baseOf(flag).replace(/[-]/g, '\\-')}(?![\\w-])`);
+const withoutDefinition = (help, flag) => help.split('\n').filter((l) => !optionColumn(flag).test(l)).join('\n');
+check('flags: the real 2.1.310 help lists all five (ok)', () => {
+  assert.match(flagOne({ runHelp: () => REAL_HELP }), /^ok {6}/);
+});
+check('flags: the fixture really contains deeply indented continuation lines naming --resume and --append-system-prompt (not vacuous)', () => {
+  for (const flag of ['--resume', '--append-system-prompt']) {
+    assert.ok(REAL_HELP.split('\n').some((l) => /^ {30,}/.test(l) && l.includes(flag)), `no deep line names ${flag}`);
+    assert.equal(REAL_HELP.split('\n').filter((l) => optionColumn(flag).test(l)).length, 1, `${flag} should have exactly one definition line`);
+  }
+});
+for (const { flag } of WAKE_FLAGS) {
+  check(`flags: on the REAL help with ${flag}'s definition line deleted, exactly that flag is reported missing`, () => {
+    const cut = withoutDefinition(REAL_HELP, flag);
+    assert.notEqual(cut, REAL_HELP, 'a definition line was removed');
+    const l = flagOne({ runHelp: () => cut });
+    assert.match(l, /^WARN {4}/);
+    const namedPart = l.split(', which wake.sh passes')[0];
+    assert.ok(namedPart.includes(`no longer lists ${flag}`), l);
+    for (const other of WAKE_FLAGS.map((f) => f.flag).filter((f) => f !== flag)) assert.ok(!namedPart.includes(other), `${other} wrongly named in: ${l}`);
   });
 }
 check('flags: two flags gone are both named', () => {

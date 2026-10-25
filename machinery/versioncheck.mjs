@@ -108,11 +108,14 @@ export function claudeVersionLines(io) {
  * 10/25 on 2.1.310 against a working install), so a naive "is every flag listed" would WARN on a healthy
  * machine. It is checked as the family name, and the line says so.
  *
- * A flag counts only where it is DEFINED, at the start of a help line (optionally after a short alias, as in
- * `-r, --resume [value]`): `--resume` is named five times in prose in that help, so a loose match would stay
- * green after the flag itself was removed.
+ * A flag counts only where it is DEFINED: in the option column, which commander indents by 2 (optionally
+ * after a short alias, as in `-r, --resume [value]`). Description text wraps onto continuation lines indented
+ * by ~40, and those name flags too: on the real 2.1.310 help `--resume` leads continuation lines at 37 and 79
+ * and `--append-system-prompt` at 56 and 240, so "any leading whitespace" stayed green for those two after
+ * the flag itself was removed (Opus found it by deleting each definition line from the real help). Up to 6
+ * columns tolerates a small format shift; a larger one makes the check WARN, which is the loud direction.
  */
-const defined = (flag) => new RegExp(`^\\s+(?:-\\w, )?${flag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`, 'm');
+const defined = (flag) => new RegExp(`^ {1,6}(?:-\\w, )?${flag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`, 'm');
 export const WAKE_FLAGS = [
   { flag: '--system-prompt-snapshot', re: defined('--system-prompt-snapshot') },
   { flag: '--resume', re: defined('--resume') },
