@@ -628,8 +628,8 @@ function wakeCostCheck(now) {
     try { appendFileSync(P.wakeCosts, JSON.stringify(record) + '\n'); } catch (e) { log(`wake-cost write failed: ${e.message}`); continue; }
     emit({ ...record, kind: 'wake-cost' });
     if (witness.status === 'measured') {
-      const warn = Wn().headMatchWarn;
-      if (warn > 0 && witness.share < warn) {
+      const warn = Wn().headMatchWarn; // 0 is off: a share is never negative, so nothing is under it
+      if (witness.share < warn) {
         emit({ at: first.at, kind: 'head-not-in-prompt', lane, session: woken.sid, share: witness.share, ref: witness.ref, warnAt: warn, alarm: false });
         log(`HEAD NOT IN PROMPT: ${lane ?? '?'} (${woken.sid.slice(0, 8)}…) sent a system prompt carrying ${Math.round(witness.share * 100)}% of the ${witness.ref === 'saved-head' ? 'head wake.sh built' : 'checkpoint'} (warns under ${Math.round(warn * 100)}%): the snapshot flag may have stopped working`);
       }
