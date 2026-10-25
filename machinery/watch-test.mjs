@@ -194,6 +194,20 @@ check('a model with no known window raises nothing, however big', highs.some((e)
 tick();
 check('a second tick raises nothing twice', lines(EVENTS).filter((e) => e.kind === 'wake-cost-high').length, highs.length);
 check('every wake still lands its wake-cost row', ['t-hi:520000', 't-edge:499999', 't-haiku:120000', 't-unk:900000'].every((c) => lines(join(root, 'ladder', 'wake-costs.jsonl')).map((r) => `${r.tail}:${r.firstRequestTokens}`).includes(c)), true);
+// The edge and the knob. Exactly on the share warns (>=); the share is the
+// config's, hot per tick; 0 turns the warning off; and it never sends a banner.
+const cfgWarn = (name, wakeCostWarn) => { const f = join(root, `${name}.config.json`); writeFileSync(f, JSON.stringify({ ...JSON.parse(readFileSync(CONFIG, 'utf8')), watch: { ...(JSON.parse(readFileSync(CONFIG, 'utf8')).watch ?? {}), wakeCostWarn } })); return f; };
+wakeWith('t-bound', 'w-bound', 'opus', 'claude-opus-5-5', 500_000, 200_000);
+tick();
+check('exactly on the share warns', lines(EVENTS).filter((e) => e.kind === 'wake-cost-high' && e.session === 'w-bound').map((e) => e.ratio), [0.5]);
+wakeWith('t-cfg', 'w-cfg', 'opus', 'claude-opus-5-5', 350_000, 200_000);
+tick(cfgWarn('warn30', 0.3));
+check("the share is the config's: 35% warns at 0.3 and records the share it used", lines(EVENTS).filter((e) => e.kind === 'wake-cost-high' && e.session === 'w-cfg').map((e) => [e.ratio, e.warnAt]), [[0.35, 0.3]]);
+wakeWith('t-off', 'w-off', 'opus', 'claude-opus-5-5', 900_000, 200_000);
+tick(cfgWarn('warn0', 0));
+check('wakeCostWarn 0 turns it off (90% of the window, nothing)', lines(EVENTS).some((e) => e.kind === 'wake-cost-high' && e.session === 'w-off'), false);
+check('the row still lands with the warning off', lines(join(root, 'ladder', 'wake-costs.jsonl')).some((r) => r.tail === 't-off'), true);
+check('and no wake-cost warning ever sent a notification', lines(SENT).some((m) => JSON.stringify(m).includes('wake-cost')), false);
 
 // An unnamed single-agent hub reads "the main agent"; a failing command never
 // costs the event card.
