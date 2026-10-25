@@ -32,6 +32,7 @@ import { fileURLToPath } from 'node:url';
 
 import { configEnv, loadConfig, reloadConfig, switchboardLane } from './config.mjs';
 import { cannotAnswer } from './deadwake.mjs';
+import { claudeVersionLines, realIo as claudeVersionIo } from './versioncheck.mjs';
 
 const HOME = homedir();
 
@@ -1730,6 +1731,9 @@ if (process.argv.includes('--preflight')) {
   }
   const live = liveSessions();
   console.log(`live sessions: ${live.length ? live.map((s) => `${String(s.sessionId).slice(0, 8)}…→${laneOf(s.sessionId) ?? '?'}`).join(', ') : '(none)'}`);
+  // Added 10/25 (lines only; the frozen vocabulary above stays): the version wake.sh
+  // would run, against the versions that have woken on a folded tail. Amber, never red.
+  for (const line of claudeVersionLines(claudeVersionIo({ claudeBin: CFG.paths.claudeBin, wakeCostsPath: CFG.paths.wakeCosts }))) console.log(line);
   tickWith(preflightIo);
   console.log('preflight complete — nothing was touched.');
   process.exit(0);
