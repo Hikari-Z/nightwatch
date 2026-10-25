@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveClaude, parseVersion, seenVersions, claudeVersionLines, realIo, lookupCommand } from './versioncheck.mjs';
+import { platformKind } from './platform.mjs';
 
 const MACHINERY = dirname(fileURLToPath(import.meta.url));
 let pass = 0, fail = 0;
@@ -178,7 +179,11 @@ check('realIo: a missing wake-costs file reads as empty', () => {
 });
 
 // ── the wiring: the nightshift's own --preflight ──
-function preflightLines(wakeCostsText, claudeBinOk = true) {
+// fallThrough: the configured claude is MISSING and a stub `claude` is findable only by the lookup the wake
+// window's shell would do. On macOS that is an interactive login zsh, so a throwaway ZDOTDIR/.zshrc puts the
+// stub dir first on PATH; on Linux and WSL the lookup prefixes the configured claude's own directory, so the
+// stub sits there. Either way the stub is not on the child's PATH, so only the fall-through can find it.
+function preflightLines(wakeCostsText, claudeBinOk = true, { fallThrough = false } = {}) {
   const hub = mkdtempSync(join(tmpdir(), 'nw-vc-hub-'));
   try {
     for (const d of ['wakecycle', 'ladder', 'projects', 'sessions']) mkdirSync(join(hub, d), { recursive: true });
@@ -186,13 +191,23 @@ function preflightLines(wakeCostsText, claudeBinOk = true) {
     writeFileSync(join(hub, 'checkpoint.md'), '# checkpoint\n');
     writeFileSync(join(hub, 'wakecycle', 'nightshift.armed'), ''); // preflight reads it unguarded; empty = disarmed
     writeFileSync(join(hub, 'ladder', 'wake-costs.jsonl'), wakeCostsText);
+    let claudeBin = claudeBinOk ? s : join(hub, 'no-such-claude'); let found = null; const extraEnv = {};
+    if (fallThrough) {
+      const bin = join(hub, 'stubbin'); mkdirSync(bin);
+      found = join(bin, 'claude'); writeFileSync(found, '#!/bin/sh\necho "2.1.310 (Claude Code)"\n'); chmodSync(found, 0o755);
+      claudeBin = join(bin, 'claude-missing'); // not there: wake.sh would fall through; on linux/wsl its directory is prefixed onto the lookup's PATH
+      if (platformKind() === 'darwin') {
+        const zd = join(hub, 'zdot'); mkdirSync(zd); writeFileSync(join(zd, '.zshrc'), `export PATH="${bin}:$PATH"\n`);
+        extraEnv.ZDOTDIR = zd; extraEnv.SHELL = '/bin/zsh';
+      }
+    }
     const cfg = { weftRoot: hub, defaultLane: 'main', lanes: { main: { targetTokens: 250000 } }, notify: { macos: false },
-      paths: { workdir: hub, machinery: MACHINERY, transcripts: join(hub, 'projects'), sessions: join(hub, 'sessions'), claudeBin: claudeBinOk ? s : join(hub, 'no-such-claude') } };
+      paths: { workdir: hub, machinery: MACHINERY, transcripts: join(hub, 'projects'), sessions: join(hub, 'sessions'), claudeBin } };
     writeFileSync(join(hub, 'nightwatch.config.json'), JSON.stringify(cfg));
-    const env = { ...process.env, WEFT_CONFIG: join(hub, 'nightwatch.config.json'), PATH: `${dirname(process.execPath)}:/usr/bin:/bin` };
+    const env = { ...process.env, ...extraEnv, WEFT_CONFIG: join(hub, 'nightwatch.config.json'), PATH: `${dirname(process.execPath)}:/usr/bin:/bin` };
     for (const k of ['NIGHTWATCH_CONFIG', 'WEFT_LANE', 'NIGHTWATCH_LANE']) delete env[k];
     const r = spawnSync(process.execPath, [join(MACHINERY, 'nightshift.mjs'), '--preflight'], { env, encoding: 'utf8', timeout: 60000 });
-    return { code: r.status, lines: r.stdout.split('\n'), err: r.stderr, stub: s };
+    return { code: r.status, lines: r.stdout.split('\n'), err: r.stderr, stub: s, found };
   } finally { rmSync(hub, { recursive: true, force: true }); }
 }
 check('preflight carries the check: an unseen version is amber and the stub path is named', () => {
@@ -206,13 +221,21 @@ check('preflight: a version that has woken is ok; no baseline is a note', () => 
   assert.match(preflightLines(rows('2.1.310')).lines.find((x) => /claude 2\.1\.310/.test(x)), /^ok/);
   assert.match(preflightLines('').lines.find((x) => /claude 2\.1\.310/.test(x)), /^note/);
 });
-check('preflight: a configured claude that is missing falls through to PATH, and says so', () => {
+check('preflight: a configured claude that is missing is never reported as the binary, and the line says what was found', () => {
+  // Machine-independent and NOT the fall-through test (Opus, 10/25: this passes with the fall-through removed):
+  // a box with a claude on PATH says "via PATH"; one without (the CI runner) says none was found.
   const r = preflightLines(rows('2.1.310'), false);
   assert.equal(r.code, 0, r.err);
-  // Machine-independent: a box with a claude on PATH says "via PATH"; one without (the CI runner)
-  // says no paths.claudeBin and none on PATH. Either way it is a Doctor line about claude.
   const l = r.lines.find((x) => /^(ok|WARN|note)\s+claude/.test(x));
-  assert.ok(l && /via PATH|no paths\.claudeBin/.test(l), r.lines.join('\n'));
+  assert.ok(l && /via PATH|no paths\.claudeBin/.test(l) && !/via paths\.claudeBin/.test(l), r.lines.join('\n'));
+});
+if (platformKind() === 'darwin' && !existsSync('/bin/zsh')) console.log('  - skipped: the fall-through wiring check needs /bin/zsh on macOS');
+else check('preflight: a missing configured claude falls through to the claude the wake window\'s shell finds, on every machine, and the line names it', () => {
+  const r = preflightLines(rows('2.1.310'), false, { fallThrough: true });
+  assert.equal(r.code, 0, r.err);
+  const l = r.lines.find((x) => /^(ok|WARN|note)\s+claude/.test(x));
+  assert.ok(l, r.lines.join('\n'));
+  assert.ok(l.startsWith('ok') && l.includes(`claude 2.1.310 ${r.found} (via PATH`), l);
 });
 
 rmSync(scratch, { recursive: true, force: true });
