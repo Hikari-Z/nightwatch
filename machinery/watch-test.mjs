@@ -6,7 +6,7 @@
 //
 // Written by: claude-opus-5-5, 2026-10-09 (cases from weft's stuck-test.mjs, 10/8)
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, existsSync, chmodSync, rmSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, existsSync, chmodSync, rmSync, utimesSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -239,6 +239,71 @@ tick();
 check('a version seen earlier, but not last, coming back raises nothing (a rollback)', newOnes(), ['2.1.310<-2.1.309']);
 check('and its row still lands with the version that woke', versions().includes('t-v6:2.1.309'), true);
 check('and no version event ever sent a notification', lines(SENT).some((m) => JSON.stringify(m).includes('claude-version')), false);
+
+// The head witness: the woken session's own api-request-shape holds the system blocks as sent; the
+// head wake.sh saved (or, failing that, the receipt's checkpoint) should be in them, line for line.
+// Everything below uses its own lane ("sonnet") so it leaves the earlier cases' files alone.
+const HEADFILE = join(dirs.wakecycle, 'last-head.sonnet');
+const RECEIPT = join(dirs.wakecycle, 'next-wake.sonnet.json');
+const CPFILE = join(root, 'checkpoint-sonnet.md');
+const headText = (n) => Array.from({ length: n }, (_, i) => `head line ${i + 1}: a distinct sentence of the checkpoint`).join('\n') + '\n';
+const setMtime = (f, msAgo) => utimesSync(f, new Date(now - msAgo), new Date(now - msAgo));
+const shapeEntry = (sid, text, atMs = now - 25 * 60_000) => ({ type: 'api-request-shape', sessionId: sid, timestamp: iso(atMs), version: '2.1.310', shapeHash: `h-${sid}`, shape: { system: [{ type: 'text', text: 'You are Claude Code' }, { type: 'text', text }], tools: [] } });
+const headCase = (id, { system, shapeSid, head, headAgoMin, receipt, cp, cpAgoMin }) => {
+  for (const f of [HEADFILE, RECEIPT, CPFILE]) rmSync(f, { force: true });
+  const t = `t-hw-${id}`, w = `w-hw-${id}`;
+  const te = [{ type: 'user', uuid: `${t}-u1`, timestamp: iso(now - 3 * 3600_000), message: { role: 'user', content: t } }];
+  write(t, te);
+  write(w, [...te, ...(system === undefined ? [] : [shapeEntry(shapeSid ?? w, system)]),
+    { type: 'assistant', uuid: `${w}-a1`, timestamp: iso(now - 20 * 60_000), message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'text', text: 'up' }], usage: { input_tokens: 1, cache_read_input_tokens: 99_999 } }, version: '2.1.310' }]);
+  writeFileSync(join(dirs.wakecycle, `lane.${w}`), JSON.stringify({ lane: 'sonnet' }));
+  fold(t, 100_000);
+  if (head !== undefined) { writeFileSync(HEADFILE, head); setMtime(HEADFILE, headAgoMin * 60_000); }
+  if (cp !== undefined) { writeFileSync(CPFILE, cp); setMtime(CPFILE, cpAgoMin * 60_000); }
+  if (receipt) writeFileSync(RECEIPT, JSON.stringify({ lane: 'sonnet', sessionId: receipt === 'this' ? t : 'some-later-tail', ...(cp !== undefined ? { checkpoint: CPFILE } : {}) }));
+  return { t, w };
+};
+const rowOf = (t) => lines(join(root, 'ladder', 'wake-costs.jsonl')).find((r) => r.tail === t);
+const headEvents = (w) => lines(EVENTS).filter((e) => e.kind === 'head-not-in-prompt' && e.session === w);
+const H = headText(10);
+
+let c = headCase('exact', { system: `boilerplate\n${H}\nmore`, head: H, headAgoMin: 30 }); tick();
+check('the head wake.sh saved is in the prompt: recorded as 1 against the saved head, and quiet', [rowOf(c.t)?.headMatch, rowOf(c.t)?.headRef, headEvents(c.w).length], [1, 'saved-head', 0]);
+
+c = headCase('stale', { system: 'a stale prompt from the previous wake: nothing of today\'s head', head: H, headAgoMin: 30 }); tick();
+check('a prompt without the head: recorded as 0, and told once, amber, naming the share and the reference',
+  [rowOf(c.t)?.headMatch, headEvents(c.w).map(({ share, ref, warnAt, alarm, lane }) => ({ share, ref, warnAt, alarm, lane }))],
+  [0, [{ share: 0, ref: 'saved-head', warnAt: 0.9, alarm: false, lane: 'sonnet' }]]);
+
+const nine = H.split('\n').slice(0, 9).join('\n'), eight = H.split('\n').slice(0, 8).join('\n');
+c = headCase('edge9', { system: nine, head: H, headAgoMin: 30 }); tick();
+check('exactly on the threshold (9 of 10 lines) is quiet', [rowOf(c.t)?.headMatch, headEvents(c.w).length], [0.9, 0]);
+c = headCase('edge8', { system: eight, head: H, headAgoMin: 30 }); tick();
+check('under it (8 of 10) is told, with the share it measured', [rowOf(c.t)?.headMatch, headEvents(c.w).map((e) => e.share)], [0.8, [0.8]]);
+
+c = headCase('noshape', { head: H, headAgoMin: 30 }); tick();
+check('no api-request-shape: no witness, so nothing is recorded or told (never "stale")', [rowOf(c.t) !== undefined, rowOf(c.t) && 'headMatch' in rowOf(c.t), headEvents(c.w).length], [true, false, 0]);
+
+c = headCase('othersess', { system: 'unrelated', shapeSid: 'some-other-session', head: H, headAgoMin: 30 }); tick();
+check("another session's shape entry (copied with a forked tail) is not this session's witness", [rowOf(c.t) && 'headMatch' in rowOf(c.t), headEvents(c.w).length], [false, 0]);
+
+c = headCase('later', { system: `x\n${H}`, head: headText(3), headAgoMin: 10, receipt: 'this', cp: H, cpAgoMin: 300 }); tick();
+check("a saved head written after the first request is a later wake's: the receipt's checkpoint is the reference instead",
+  [rowOf(c.t)?.headMatch, rowOf(c.t)?.headRef, headEvents(c.w).length], [1, 'checkpoint', 0]);
+
+c = headCase('predates', { system: `x\n${H}`, head: headText(3), headAgoMin: 300, receipt: 'this', cp: H, cpAgoMin: 300 }); tick();
+check("a saved head older than the fold is the previous wake's: not used", [rowOf(c.t)?.headRef, headEvents(c.w).length], ['checkpoint', 0]);
+
+c = headCase('edited', { system: 'unrelated', head: headText(3), headAgoMin: 10, receipt: 'this', cp: H, cpAgoMin: 5 }); tick();
+check('a checkpoint edited after the first request cannot convict: skipped, nothing recorded or told', [rowOf(c.t) && 'headMatch' in rowOf(c.t), headEvents(c.w).length], [false, 0]);
+
+c = headCase('moved', { system: 'unrelated', receipt: 'later', cp: H, cpAgoMin: 300 }); tick();
+check('a receipt that has moved on to a later tail, and no saved head: skipped', [rowOf(c.t) && 'headMatch' in rowOf(c.t), headEvents(c.w).length], [false, 0]);
+
+const cfgHeadOff = (() => { const cj = JSON.parse(readFileSync(CONFIG, 'utf8')); const f = join(root, 'headoff.config.json'); writeFileSync(f, JSON.stringify({ ...cj, watch: { ...(cj.watch ?? {}), headMatchWarn: 0 } })); return f; })();
+c = headCase('off', { system: 'unrelated', head: H, headAgoMin: 30 }); tick(cfgHeadOff);
+check('headMatchWarn 0 turns the event off, and the share is still recorded', [rowOf(c.t)?.headMatch, headEvents(c.w).length], [0, 0]);
+check('no head witness event ever sent a notification', lines(SENT).some((m) => JSON.stringify(m).includes('head-not-in-prompt')), false);
 // A lane's own contextWindow outranks the model's (Opus's note on #39: windowFor
 // is old code, and nothing pinned this branch of it). 250k is 25% of 1M and
 // stays quiet; with the lane pinned to 400k it is 62.5% and warns, naming 400k.
