@@ -80,6 +80,10 @@ export const DEFAULTS = {
     // banner): the ladder and system prompt the fold can't trim keep growing.
     // 0 turns it off.
     wakeCostWarn: 0.5,
+    // A woken session whose recorded system prompt carries less than this share of
+    // the checkpoint's lines is told (amber): the snapshot flag may have stopped
+    // working. 0 turns the event off (the share is still recorded).
+    headMatchWarn: 0.9,
     // TRANSITIONAL (Ra, 10/12), not policy: amber is the agent's normal
     // operating stream and never needs the keeper, so amber alerts don't
     // notify. While the house is still being built, a lane WITHOUT the midday
