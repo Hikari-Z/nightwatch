@@ -7,7 +7,8 @@
  * kept tail as a NEW session file (fresh uuid) in the same project directory.
  * Delete-only: whole JSONL entries are kept or dropped, nothing inside an
  * entry is rewritten except the session id itself, each reply's recorded
- * token `usage` (see STALE USAGE), and, where a dropped harness entry sat
+ * token `usage` (see STALE USAGE), images past the fold's image budget (see
+ * IMAGE BUDGET), and, where a dropped harness entry sat
  * mid-chain, its children's parentUuid (see HARNESS_LOADED). The original is never
  * touched. `claude --resume <new-id> --fork-session` loads the copy as
  * native turns (tested 2026-09-27: 1,058/1,987 entries, 29 s load, texture
@@ -17,7 +18,7 @@
  * knows as little of it as possible on purpose. If the format shifts, the
  * next wake breaks loudly here rather than corrupting anything.
  *
- * Usage: node trim.mjs <session-id-or-path> [--target-tokens 250000] [--dry]
+ * Usage: node trim.mjs <session-id-or-path> [--target-tokens 250000] [--image-budget-bytes 1000000] [--dry]
  * Prints JSON: { newSessionId, path, keptEntries, totalEntries, estTokens,
  *               targetTokens, cutAt, cutPrompt, overshoot?, claudeVersion? }
  * claudeVersion is the `version` on the LAST kept entry that carries one (the
@@ -38,6 +39,9 @@ const args = process.argv.slice(2);
 const src = args.find((a) => !a.startsWith('--'));
 const target = Number((args.find((a) => a.startsWith('--target-tokens')) ?? '').split('=')[1] || args[args.indexOf('--target-tokens') + 1] || 250_000);
 const dry = args.includes('--dry');
+const imgArg = args.indexOf('--image-budget-bytes');
+const IMAGE_BUDGET = imgArg >= 0 ? Number(args[imgArg + 1]) : 1_000_000;
+if (!Number.isFinite(IMAGE_BUDGET) || IMAGE_BUDGET < 0) { console.error('trim: --image-budget-bytes takes a number of bytes, 0 or more'); process.exit(2); }
 if (!src) {
   console.error('usage: trim.mjs <session-id-or-path> [--target-tokens N] [--dry]');
   process.exit(2);
@@ -231,6 +235,51 @@ for (let i = cut; i < lines.length; i++) {
   if (!isResumeInert(e)) keptEst += estLine(line);
 }
 
+// IMAGE BUDGET (10/25): every image a kept entry carries is sent again with every request the woken
+// session makes, as base64. Thirty photos read in one afternoon (~19 MB) left the fable lane's session
+// failing every request with "Unable to connect to API (EPROTO)", and a fold that kept them would have
+// carried the same weight into the wake. So the kept tail holds the NEWEST images up to IMAGE_BUDGET bytes
+// of base64 and replaces each older one with a line of text saying what was there. The words around an
+// image survive; only its pixels go. Newest first, because a recent screenshot is the likeliest to matter.
+const isImg = (b) => b && typeof b === 'object' && b.type === 'image' && typeof b.source?.data === 'string';
+const imagePlaceholder = (b) => ({ type: 'text', text: `[image removed at fold: ${b.source.media_type ?? 'image'}, ${Math.round(b.source.data.length / 1024)} KB of base64; a fold keeps only the newest images, ${Math.round(IMAGE_BUDGET / 1e6 * 10) / 10} MB in all]` });
+let imageBytes = 0;
+const imagesStripped = { count: 0, bytes: 0 };
+for (let k = kept.length - 1; k >= 0; k--) {
+  if (!kept[k].includes('"image"')) continue; // cheap filter: no image block, nothing to weigh
+  let e; try { e = JSON.parse(kept[k]); } catch { continue; }
+  // The request log (api-request-blob and kin) is never sent on resume: its copies neither count against
+  // the budget nor take a place in it (a log copy once used up the whole budget and a real image went).
+  if (isResumeInert(e)) continue;
+  const content = e?.message?.content;
+  if (!Array.isArray(content)) continue;
+  let changed = false;
+  // Within an entry, also newest last: walk its blocks (and a tool_result's inner blocks) from the end.
+  const weigh = (arr) => {
+    for (let j = arr.length - 1; j >= 0; j--) {
+      const b = arr[j];
+      if (b?.type === 'tool_result' && Array.isArray(b.content)) { weigh(b.content); continue; }
+      if (!isImg(b)) continue;
+      if (imageBytes + b.source.data.length <= IMAGE_BUDGET) { imageBytes += b.source.data.length; continue; }
+      imagesStripped.count++; imagesStripped.bytes += b.source.data.length;
+      arr[j] = imagePlaceholder(b);
+      changed = true;
+    }
+  };
+  weigh(content);
+  if (!changed) continue;
+  // The harness's own copy of a Read result (toolUseResult.file.base64) is not sent, but it is this
+  // entry's record of the same pixels: it goes with them, so the kept file doesn't carry what was removed.
+  if (e.toolUseResult?.type === 'image' && typeof e.toolUseResult.file?.base64 === 'string') {
+    e = { ...e, toolUseResult: { ...e.toolUseResult, file: { ...e.toolUseResult.file, base64: '' } } };
+  }
+  kept[k] = JSON.stringify(e);
+}
+if (imagesStripped.count) {
+  keptEst = 0;
+  for (const l of kept) { let e = null; try { e = JSON.parse(l); } catch {} if (!isResumeInert(e)) keptEst += estLine(l); }
+}
+
 // OUTPUT CHECK (10/21): the cut above is made by fields this script does not
 // own, so it checks the tail it just built against the shape a resume needs,
 // and refuses to write one that fails. Three silent failures, each reproduced
@@ -323,6 +372,7 @@ const report = {
   tornLines: torn,
   relinked,
   usageStripped,
+  ...(imagesStripped.count ? { imagesStripped } : {}),
   cutAt: cutEntry?.timestamp ?? null,
   cutPrompt: String(cutEntry?.message?.content ?? '').slice(0, 120),
 };
