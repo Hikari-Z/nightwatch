@@ -168,6 +168,47 @@ const costs2 = lines(join(root, 'ladder', 'wake-costs.jsonl')).map((c) => `${c.t
 check('a 600KB first entry is still costed', costs2.includes('t-big:170005'), true);
 check("an old fold still named by a wake receipt is costed; a replaced one isn't", [costs2.includes('t-held:99007'), costs2.some((c) => c.startsWith('t-stale'))], [true, false]);
 
+// Wake cost high: a first request at or past watch.wakeCostWarn (default 0.5)
+// of the lane's window is one amber event, never a notification. The window
+// is the model's (1M for ours, 200k for haiku), unknown models have none.
+check('a wake well under the warn share raises nothing (t-good: 205,799 of 1M)', lines(EVENTS).filter((e) => e.kind === 'wake-cost-high').length, 0);
+const wakeWith = (t, w, lane, model, tokens, estimate) => {
+  const te = [{ type: 'user', uuid: `${t}-u1`, timestamp: iso(now - 3 * 3600_000), message: { role: 'user', content: t } }];
+  write(t, te);
+  write(w, [...te, { type: 'assistant', uuid: `${w}-a1`, timestamp: iso(now - 20 * 60_000), message: { role: 'assistant', model, content: [{ type: 'text', text: 'up' }], usage: { input_tokens: 1, cache_read_input_tokens: tokens - 1 } } }]);
+  writeFileSync(join(dirs.wakecycle, `lane.${w}`), JSON.stringify({ lane }));
+  fold(t, estimate);
+};
+wakeWith('t-hi', 'w-hi', 'opus', 'claude-opus-5-5', 520_000, 200_000);
+wakeWith('t-edge', 'w-edge', 'fable', 'claude-fable-5-1', 499_999, 200_000);
+wakeWith('t-haiku', 'w-haiku', 'fable', 'claude-haiku-4-5', 120_000, 100_000);
+wakeWith('t-unk', 'w-unk', 'sonnet', 'some-future-model', 900_000, 200_000);
+tick();
+const highs = lines(EVENTS).filter((e) => e.kind === 'wake-cost-high');
+check('over the share: one event naming the request, the window and the share, amber',
+  highs.filter((e) => e.session === 'w-hi').map(({ lane, firstRequestTokens, window, ratio, warnAt, alarm }) => ({ lane, firstRequestTokens, window, ratio, warnAt, alarm })),
+  [{ lane: 'opus', firstRequestTokens: 520_000, window: 1_000_000, ratio: 0.52, warnAt: 0.5, alarm: false }]);
+check('just under the share raises nothing', highs.some((e) => e.session === 'w-edge'), false);
+check("the share is of the model's own window (haiku: 120k of 200k)", highs.filter((e) => e.session === 'w-haiku').map((e) => e.ratio), [0.6]);
+check('a model with no known window raises nothing, however big', highs.some((e) => e.session === 'w-unk'), false);
+tick();
+check('a second tick raises nothing twice', lines(EVENTS).filter((e) => e.kind === 'wake-cost-high').length, highs.length);
+check('every wake still lands its wake-cost row', ['t-hi:520000', 't-edge:499999', 't-haiku:120000', 't-unk:900000'].every((c) => lines(join(root, 'ladder', 'wake-costs.jsonl')).map((r) => `${r.tail}:${r.firstRequestTokens}`).includes(c)), true);
+// The edge and the knob. Exactly on the share warns (>=); the share is the
+// config's, hot per tick; 0 turns the warning off; and it never sends a banner.
+const cfgWarn = (name, wakeCostWarn) => { const f = join(root, `${name}.config.json`); writeFileSync(f, JSON.stringify({ ...JSON.parse(readFileSync(CONFIG, 'utf8')), watch: { ...(JSON.parse(readFileSync(CONFIG, 'utf8')).watch ?? {}), wakeCostWarn } })); return f; };
+wakeWith('t-bound', 'w-bound', 'opus', 'claude-opus-5-5', 500_000, 200_000);
+tick();
+check('exactly on the share warns', lines(EVENTS).filter((e) => e.kind === 'wake-cost-high' && e.session === 'w-bound').map((e) => e.ratio), [0.5]);
+wakeWith('t-cfg', 'w-cfg', 'opus', 'claude-opus-5-5', 350_000, 200_000);
+tick(cfgWarn('warn30', 0.3));
+check("the share is the config's: 35% warns at 0.3 and records the share it used", lines(EVENTS).filter((e) => e.kind === 'wake-cost-high' && e.session === 'w-cfg').map((e) => [e.ratio, e.warnAt]), [[0.35, 0.3]]);
+wakeWith('t-off', 'w-off', 'opus', 'claude-opus-5-5', 900_000, 200_000);
+tick(cfgWarn('warn0', 0));
+check('wakeCostWarn 0 turns it off (90% of the window, nothing)', lines(EVENTS).some((e) => e.kind === 'wake-cost-high' && e.session === 'w-off'), false);
+check('the row still lands with the warning off', lines(join(root, 'ladder', 'wake-costs.jsonl')).some((r) => r.tail === 't-off'), true);
+check('and no wake-cost warning ever sent a notification', lines(SENT).some((m) => JSON.stringify(m).includes('wake-cost')), false);
+
 // An unnamed single-agent hub reads "the main agent"; a failing command never
 // costs the event card.
 const solo = join(root, 'solo');

@@ -45,7 +45,9 @@
  * records that session's first real request beside the fold's estimate: one
  * row in paths.wakeCosts and one `wake-cost` event, fields {at, lane, tail,
  * session, source, estTokens, firstRequestTokens}. Every night then measures
- * the trimmer's estimate against what the harness actually sent.
+ * the trimmer's estimate against what the harness actually sent. A first
+ * request at or past watch.wakeCostWarn of the lane's window (default 0.5; 0
+ * turns it off) also emits one amber `wake-cost-high` event, never a banner.
  *
  * Run: NIGHTWATCH_CONFIG=<hub config> node watch.mjs [--once]
  *
@@ -551,7 +553,7 @@ function wakeCostCheck(now) {
       let e; try { e = JSON.parse(l); } catch { continue; }
       if (e.type !== 'assistant' || copied.has(e.uuid) || e.isApiErrorMessage) continue;
       const t = usageTokens(e.message?.usage);
-      if (t > 0) { first = { at: e.timestamp, tokens: t }; break; }
+      if (t > 0) { first = { at: e.timestamp, tokens: t, model: e.message?.model }; break; }
     }
     if (!first) continue; // no real reply yet (or a dead wake: deadwake.mjs's business)
     let lane = null;
@@ -559,6 +561,19 @@ function wakeCostCheck(now) {
     const record = { at: first.at, lane, tail: row.tail, session: woken.sid, source: row.source ?? null, estTokens: row.est_tokens ?? null, firstRequestTokens: first.tokens };
     try { appendFileSync(P.wakeCosts, JSON.stringify(record) + '\n'); } catch (e) { log(`wake-cost write failed: ${e.message}`); continue; }
     emit({ ...record, kind: 'wake-cost' });
+    // The estimate and the harness part ways by the ladder, the system prompt and
+    // the checkpoint, which the fold doesn't count and which grow every day
+    // (first requests ran 168k on 10/18 and 319k on 10/24 while the folds got
+    // smaller). So the warning is on the request itself against the window: a
+    // wake that already costs wakeCostWarn of it leaves the agent that much less
+    // before the midday bell. Amber, never a notification: an early heads-up for
+    // the L3 fold or a smaller ladder, not an emergency.
+    const wakeWindow = windowFor(lane, first.model);
+    const warn = Wn().wakeCostWarn;
+    if (wakeWindow && warn > 0 && first.tokens / wakeWindow >= warn) {
+      emit({ at: first.at, kind: 'wake-cost-high', lane, session: woken.sid, firstRequestTokens: first.tokens, window: wakeWindow, ratio: Math.round((first.tokens / wakeWindow) * 1000) / 1000, warnAt: warn, alarm: false });
+      log(`WAKE COST HIGH: ${lane ?? '?'} first request ${first.tokens} is ${Math.round((first.tokens / wakeWindow) * 100)}% of its ${wakeWindow} window (warns at ${Math.round(warn * 100)}%)`);
+    }
     log(`WAKE COST: ${lane ?? '?'} woke from ${row.tail.slice(0, 8)}… as ${woken.sid.slice(0, 8)}…: first request ${first.tokens} tokens, fold estimated ${row.est_tokens ?? '?'}`);
     state.costed.push(row.tail);
     delete state.costSeen[row.tail];
