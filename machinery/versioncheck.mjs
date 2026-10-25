@@ -102,6 +102,47 @@ export function claudeVersionLines(io) {
   return [`WARN    claude ${installed} ${where} has not woken on a folded tail yet (woken: ${seen.join(', ')}); not a fault, the output check is the gate`];
 }
 
+/**
+ * The flags wake.sh passes, and how `claude --help` lists each. Not every flag is its own line there:
+ * `--append-system-prompt-file` appears only as `--append-system-prompt[-file]` in the --bare text (checked
+ * 10/25 on 2.1.310 against a working install), so a naive "is every flag listed" would WARN on a healthy
+ * machine. It is checked as the family name, and the line says so.
+ *
+ * A flag counts only where it is DEFINED: in the option column, which commander indents by 2 (optionally
+ * after a short alias, as in `-r, --resume [value]`). Description text wraps onto continuation lines indented
+ * by ~40, and those name flags too: on the real 2.1.310 help `--resume` leads continuation lines at 37 and 79
+ * and `--append-system-prompt` at 56 and 240, so "any leading whitespace" stayed green for those two after
+ * the flag itself was removed (Opus found it by deleting each definition line from the real help). Up to 6
+ * columns tolerates a small format shift; a larger one makes the check WARN, which is the loud direction.
+ */
+const defined = (flag) => new RegExp(`^ {1,6}(?:-\\w, )?${flag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`, 'm');
+export const WAKE_FLAGS = [
+  { flag: '--system-prompt-snapshot', re: defined('--system-prompt-snapshot') },
+  { flag: '--resume', re: defined('--resume') },
+  { flag: '--fork-session', re: defined('--fork-session') },
+  { flag: '--model', re: defined('--model') },
+  { flag: '--append-system-prompt[-file]', re: defined('--append-system-prompt') },
+];
+
+/**
+ * Does the claude wake.sh would run still list the flags it passes? Offline (`--help` calls no API), so it
+ * warns BEFORE 08:00 about a flag that would otherwise show up as WAKE FAILED after the launch. Amber, never
+ * red; and a flag listed but ignored is not seen here at all (the head witness, in the watch, is that check).
+ * io: the resolveClaude inputs plus runHelp(path) → stdout | null.
+ */
+export function flagLines(io) {
+  const bin = resolveClaude(io);
+  if (!bin.path) return []; // claudeVersionLines already said claude could not be found
+  const where = `${bin.path} (via ${bin.via}${bin.via === 'PATH' && io.lookupLabel ? `; ${io.lookupLabel}` : ''})`;
+  const help = io.runHelp(bin.path);
+  if (!help) return [`WARN    claude ${where}: could not read \`--help\`, so the flags wake.sh passes were not checked`];
+  const missing = WAKE_FLAGS.filter(({ re }) => !re.test(help)).map(({ flag }) => flag);
+  if (missing.length) {
+    return [`WARN    claude ${where}: \`--help\` no longer lists ${missing.join(', ')}, which wake.sh passes; a removed or renamed flag fails the wake at launch (WAKE FAILED), so this is the warning before 08:00`];
+  }
+  return [`ok      claude ${where}: \`--help\` still lists the flags wake.sh passes (${WAKE_FLAGS.map(({ flag }) => flag).join(', ')}; the last is listed as a family)`];
+}
+
 /** Real I/O for the nightshift's preflight. */
 export function realIo({ claudeBin, wakeCostsPath, kind, shell, nodePath, spawn = spawnSync }) {
   const look = lookupCommand({ kind, shell, nodePath, claudeBin });
@@ -118,6 +159,10 @@ export function realIo({ claudeBin, wakeCostsPath, kind, shell, nodePath, spawn 
     runVersion: (p) => {
       const r = spawnSync(p, ['--version'], { encoding: 'utf8', timeout: 10_000 });
       return r.status === 0 ? r.stdout : null;
+    },
+    runHelp: (p) => {
+      const r = spawnSync(p, ['--help'], { encoding: 'utf8', timeout: 10_000 });
+      return r.status === 0 && r.stdout ? r.stdout : null;
     },
     wakeCostsText: existsSync(wakeCostsPath) ? readFileSync(wakeCostsPath, 'utf8') : '',
   };
