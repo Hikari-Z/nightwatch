@@ -273,5 +273,52 @@ try {
   rmSync(dirV, { recursive: true, force: true });
 }
 
+// IMAGE BUDGET (10/25): a fold keeps the NEWEST images up to --image-budget-bytes of base64 and turns
+// each older one into a line of text; images in the request log (never sent on resume) are neither
+// counted nor touched. Three Read results with a 600 KB image each, oldest first, plus a request-log
+// copy of a 900 KB image placed last, where it would be "newest" if it were counted.
+{
+  const dirI = mkdtempSync(join(tmpdir(), 'trim-img-'));
+  const SIDI = '33333333-4444-5555-6666-777777777777';
+  const img = (ch, kb) => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: ch.repeat(kb * 1000) } });
+  const rowsI = [];
+  let p = null; let i = 0;
+  const push = (e) => { const uuid = e.type === 'api-request-blob' ? undefined : `i${++i}`; rowsI.push({ ...(uuid ? { parentUuid: p, uuid } : {}), sessionId: SIDI, timestamp: `2026-10-25T22:${String(rowsI.length).padStart(2, '0')}:00.000Z`, ...e }); if (uuid) p = uuid; };
+  push({ type: 'user', message: { role: 'user', content: 'show me the plants' } });
+  for (const [ch, n] of [['A', 1], ['B', 2], ['C', 3]]) {
+    push({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: `t${n}`, name: 'Read', input: { file_path: `/p/${n}.jpg` } }] } });
+    push({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `t${n}`, content: [img(ch, 600)] }] }, toolUseResult: { type: 'image', file: { base64: ch.repeat(600 * 1000), type: 'image/jpeg' } } });
+  }
+  push({ type: 'api-request-blob', hash: 'h1', message: { role: 'user', content: [{ type: 'tool_result', content: [img('Z', 900)] }] } });
+  push({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'lovely' }] } });
+  const f = join(dirI, `${SIDI}.jsonl`);
+  writeFileSync(f, rowsI.map((r) => JSON.stringify(r)).join('\n') + '\n');
+  const run = (budget) => {
+    const r = spawnSync(process.execPath, [join(HERE, 'trim.mjs'), f, '--target-tokens', '2000000', ...(budget === undefined ? [] : ['--image-budget-bytes', String(budget)])], { encoding: 'utf8' });
+    if (r.status !== 0) return { exit: r.status, err: r.stderr.trim() };
+    const rep = JSON.parse(r.stdout);
+    const tail = readFileSync(rep.path, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    rmSync(rep.path, { force: true });
+    const imgs = (e) => JSON.stringify(e.message?.content ?? '').match(/"data":"([A-Z])/g)?.map((m) => m.slice(-1)) ?? [];
+    const sent = tail.filter((e) => e.type !== 'api-request-blob').flatMap(imgs);
+    return { rep, tail, sent, log: tail.filter((e) => e.type === 'api-request-blob').flatMap(imgs) };
+  };
+  const d = run();
+  check('default 1 MB budget: only the NEWEST message image is kept (the request-log copy does not take its place)', JSON.stringify(d.sent) === '["C"]', JSON.stringify(d.sent ?? d));
+  check('each older image becomes a text line saying what was there', d.tail.filter((e) => /image removed at fold: image\/jpeg, 586 KB/.test(JSON.stringify(e.message?.content ?? ''))).length === 2, JSON.stringify(d.rep?.imagesStripped));
+  check('the report counts what went', d.rep?.imagesStripped?.count === 2 && d.rep.imagesStripped.bytes === 1_200_000, JSON.stringify(d.rep?.imagesStripped));
+  check('the request log is left as it was', JSON.stringify(d.log) === '["Z"]', JSON.stringify(d.log));
+  const ids = new Set(d.tail.map((e) => e.uuid).filter(Boolean));
+  check('the chain is whole (only content changed)', d.tail.filter((e) => e.uuid && e.parentUuid && !ids.has(e.parentUuid)).length === 0);
+  check('a stripped image\'s harness copy (toolUseResult) goes with it; the kept one\'s stays', d.tail.filter((e) => e.toolUseResult?.file).map((e) => e.toolUseResult.file.base64.length).join(',') === '0,0,600000', d.tail.filter((e) => e.toolUseResult?.file).map((e) => e.toolUseResult.file.base64.length).join(','));
+  const all = run(2_000_000);
+  check('under the budget nothing is touched and nothing is reported', JSON.stringify(all.sent) === '["A","B","C"]' && !('imagesStripped' in all.rep), JSON.stringify(all.sent));
+  const none = run(0);
+  check('a budget of 0 keeps no image', JSON.stringify(none.sent) === '[]' && none.rep.imagesStripped.count === 3, JSON.stringify(none.sent));
+  const bad = run('lots');
+  check('a budget that is not a number is refused (exit 2)', bad.exit === 2 && /image-budget-bytes/.test(bad.err), JSON.stringify(bad));
+  rmSync(dirI, { recursive: true, force: true });
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nall pass');
 process.exit(fails ? 1 : 0);
