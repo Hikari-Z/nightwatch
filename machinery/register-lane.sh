@@ -15,6 +15,8 @@ set -u
 # directory, which is where the registry has always lived — a hook that
 # fails to resolve config must still register the lane, not exit silently.
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+# The node wake.sh exported to the claude that runs this hook (the daemon's), else the shell's.
+NODE="${NIGHTWATCH_NODE:-node}"
 # NIGHTWATCH_CONFIG and NIGHTWATCH_LANE are the names. WEFT_CONFIG and
 # WEFT_LANE, from older installs, hooks and wakes, are read too (issue #7).
 # Both config names set to different files is config.mjs's to refuse.
@@ -30,7 +32,7 @@ if [ -n "$NW_CFG" ]; then
   # falling back to this script's folder would register the session into
   # the CODE directory under the state/code split (walk finding, 10/10 —
   # config.mjs threw loudly and the || ate it).
-  if ! REG="$(node "$SELF_DIR/config.mjs" get paths.wakecycle 2>/dev/null)"; then
+  if ! REG="$("$NODE" "$SELF_DIR/config.mjs" get paths.wakecycle 2>/dev/null)"; then
     echo "register-lane: the hub config is named but unusable ($NW_CFG) — not registering" >&2
     exit 1
   fi
@@ -45,7 +47,7 @@ SESSION_ID=$(python3 -c "import json,sys; print(json.load(sys.stdin).get('sessio
 # $PPID is the shell's parent: the claude process that spawned this hook.
 printf '{"lane":"%s","pid":%d,"at":"%s"}\n' "$NW_LANE" "$PPID" \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$REG/lane.$SESSION_ID"
-SWITCH="$(node "$SELF_DIR/config.mjs" get "lanes.$NW_LANE.switchboard" 2>/dev/null || echo false)"
+SWITCH="$("$NODE" "$SELF_DIR/config.mjs" get "lanes.$NW_LANE.switchboard" 2>/dev/null || echo false)"
 if [ "$SWITCH" != "true" ]; then
   CFGPFX=""
   [ -n "$NW_CFG" ] && CFGPFX="NIGHTWATCH_CONFIG=$NW_CFG "

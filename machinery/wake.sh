@@ -19,14 +19,21 @@ set -e
 # script, which is the single bootstrap anchor; everything else resolves
 # through it. The lane default is the config's, not a hardcoded name.
 WAKECYCLE_DIR="$(cd "$(dirname "$0")" && pwd)"
+# The node to run: the daemon's own (its process.execPath, pinned by the launchd plist or systemd unit),
+# which the nightshift hands the window as NIGHTWATCH_NODE (platform.mjs withNode). The window's shell PATH
+# can find a different one (10/25: Terminal found Homebrew's Node 20 while the daemon ran 22). Exported, so
+# the claude this launches, its SessionStart hook and its agent shells inherit it. A hand run without it
+# uses the shell's node, as before.
+NODE="${NIGHTWATCH_NODE:-node}"
+[ -n "${NIGHTWATCH_NODE:-}" ] && export NIGHTWATCH_NODE
 # CODE vs STATE (multi-persona split, 10/7): this script and config.mjs live
 # in the app's machinery/ (one version for every hub); receipts, the lane
 # registry, armed and state.json live in the HUB's wakecycle dir, named by
 # the hub config (paths.wakecycle, relative to weftRoot). The fallback is
 # this script's own dir, which keeps a copied (sealed) hub working unchanged.
 STATE_DIR="$WAKECYCLE_DIR"
-WEFTROOT="$(node "$WAKECYCLE_DIR/config.mjs" get weftRoot 2>/dev/null)" || WEFTROOT=""
-WC_REL="$(node "$WAKECYCLE_DIR/config.mjs" get paths.wakecycle 2>/dev/null)" || WC_REL=""
+WEFTROOT="$("$NODE" "$WAKECYCLE_DIR/config.mjs" get weftRoot 2>/dev/null)" || WEFTROOT=""
+WC_REL="$("$NODE" "$WAKECYCLE_DIR/config.mjs" get paths.wakecycle 2>/dev/null)" || WC_REL=""
 if [ -n "$WEFTROOT" ] && [ -n "$WC_REL" ]; then
   case "$WC_REL" in
     /*) STATE_DIR="$WC_REL" ;;
@@ -44,7 +51,7 @@ fi
 # NIGHTWATCH_CONFIG is the name; WEFT_CONFIG from older installs too (#7).
 NW_CFG="${NIGHTWATCH_CONFIG:-${WEFT_CONFIG:-}}"
 if [ -n "$NW_CFG" ]; then FALLBACK_LOG="$(dirname "$NW_CFG")/nightshift.log"; else FALLBACK_LOG="$WAKECYCLE_DIR/../nightshift.log"; fi
-WEFT_LOG="$(node "$WAKECYCLE_DIR/config.mjs" get paths.nightshiftLog)" || {
+WEFT_LOG="$("$NODE" "$WAKECYCLE_DIR/config.mjs" get paths.nightshiftLog)" || {
   echo "$(date -u +%Y-%m-%dT%H:%M:%S.000Z) WAKE FAILED: weft config unreadable (node config.mjs get failed) — fix weft.config.json" >> "$FALLBACK_LOG"
   echo "{\"at\":\"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\",\"kind\":\"wake-failed\",\"lane\":\"${1:-unknown}\",\"cause\":\"config-unreadable\",\"alarm\":true}" >> "$(dirname "$FALLBACK_LOG")/events.jsonl" 2>/dev/null || true
   exit 4
@@ -53,7 +60,7 @@ WEFT_LOG="$(node "$WAKECYCLE_DIR/config.mjs" get paths.nightshiftLog)" || {
   echo "$(date -u +%Y-%m-%dT%H:%M:%S.000Z) WAKE FAILED: config resolved an empty log path" >> "$FALLBACK_LOG"
   exit 4
 }
-DEFAULT_LANE="$(node "$WAKECYCLE_DIR/config.mjs" get defaultLane)" || {
+DEFAULT_LANE="$("$NODE" "$WAKECYCLE_DIR/config.mjs" get defaultLane)" || {
   echo "$(date -u +%Y-%m-%dT%H:%M:%S.000Z) WAKE FAILED: weft config unreadable resolving defaultLane" >> "$FALLBACK_LOG"
   exit 4
 }
@@ -157,11 +164,11 @@ cp "$CP" "$HEAD"
 # The duties must be TRUE on every hub (opus's read, 10/7): the switchboard
 # lane comes from config, watcher duties exist only where the watcher does,
 # and a hub without a doorbell gets one honest line instead.
-SWITCHBOARD_LANE="$(node -e "import('file://$WAKECYCLE_DIR/config.mjs').then(m=>console.log(m.switchboardLane(m.loadConfig())))" 2>/dev/null)" || SWITCHBOARD_LANE=""
+SWITCHBOARD_LANE="$("$NODE" -e "import('file://$WAKECYCLE_DIR/config.mjs').then(m=>console.log(m.switchboardLane(m.loadConfig())))" 2>/dev/null)" || SWITCHBOARD_LANE=""
 # The doorbell is hub infrastructure, never app machinery: look beside the
 # hub (weftRoot), not beside this script.
 WATCHER="${WEFTROOT:-$WAKECYCLE_DIR/..}/doorbell/inbox-watcher.sh"
-FOLDS="$(node "$WAKECYCLE_DIR/config.mjs" get paths.folds 2>/dev/null)" || FOLDS="ladder/folds.jsonl"
+FOLDS="$("$NODE" "$WAKECYCLE_DIR/config.mjs" get paths.folds 2>/dev/null)" || FOLDS="ladder/folds.jsonl"
 python3 - "$NEXT" "$SWITCHBOARD_LANE" "$WATCHER" "$WAKECYCLE_DIR" "$FOLDS" >> "$HEAD" << 'PYEOF'
 import json, os, sys
 nw = json.load(open(sys.argv[1]))
@@ -199,7 +206,7 @@ if [ -n "$FIRSTWAKE" ]; then RECEIPT_WHAT="first wake, fresh session"; else RECE
 echo "$(date -u +%Y-%m-%dT%H:%M:%S.000Z) wake receipt: $LANE lane reached exec ($RECEIPT_WHAT)" >> "$WEFT_LOG"
 # Event-stream twin: the receipt's JSON echo, best-effort (events path from
 # config; a resolution failure here must never block the exec below).
-WEFT_EVENTS="$(node "$WAKECYCLE_DIR/config.mjs" get paths.events 2>/dev/null)" || WEFT_EVENTS=""
+WEFT_EVENTS="$("$NODE" "$WAKECYCLE_DIR/config.mjs" get paths.events 2>/dev/null)" || WEFT_EVENTS=""
 [ -n "$WEFT_EVENTS" ] && echo "{\"at\":\"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\",\"kind\":\"wake-exec\",\"lane\":\"$LANE\",\"tail\":\"$SID\"}" >> "$WEFT_EVENTS" 2>/dev/null || true
 # The SessionStart hook (register-lane.sh) reads this to write the session→lane
 # registry — the id itself only exists once claude mints the forked session.
@@ -209,12 +216,12 @@ export NIGHTWATCH_LANE="$LANE"
 # The working directory comes from config (portability: a fresh hub works
 # from itself; ours works from ~/origin). The fallback is the literal the
 # hardcode used to be, same doctrine as FALLBACK_LOG above.
-WORKDIR="$(node "$WAKECYCLE_DIR/config.mjs" get paths.workdir 2>/dev/null)" || WORKDIR=""
+WORKDIR="$("$NODE" "$WAKECYCLE_DIR/config.mjs" get paths.workdir 2>/dev/null)" || WORKDIR=""
 [ -n "$WORKDIR" ] || WORKDIR="$HOME/origin"
 cd "$WORKDIR"
 # The lane's pinned model (Ra's ruling: the model never changes out from
 # under the agent). Unset = no flag, today's behavior.
-MODEL="$(node "$WAKECYCLE_DIR/config.mjs" get "lanes.$LANE.model" 2>/dev/null)" || MODEL=""
+MODEL="$("$NODE" "$WAKECYCLE_DIR/config.mjs" get "lanes.$LANE.model" 2>/dev/null)" || MODEL=""
 # claude runs as a WAITED CHILD, not exec: exec made the child's death
 # invisible, so a bad model pin could never be told apart from any other
 # silent no-show. stderr goes to a capture file (stdout keeps the TTY, so
@@ -242,7 +249,7 @@ set -- --append-system-prompt-file "$HEAD" --system-prompt-snapshot off
 # exec launch — no stderr capture, no model-death discrimination.
 # The configured claude when it's there (paths.claudeBin), PATH's otherwise:
 # an npm/nvm install lives somewhere the default ~/.local/bin guess isn't.
-CLAUDE_BIN="$(node "$WAKECYCLE_DIR/config.mjs" get paths.claudeBin 2>/dev/null)" || CLAUDE_BIN=""
+CLAUDE_BIN="$("$NODE" "$WAKECYCLE_DIR/config.mjs" get paths.claudeBin 2>/dev/null)" || CLAUDE_BIN=""
 [ -n "$CLAUDE_BIN" ] && [ -x "$CLAUDE_BIN" ] || CLAUDE_BIN=claude
 if [ -n "${WEFT_WAKE_EXEC:-}" ]; then exec "$CLAUDE_BIN" "$@"; fi
 "$CLAUDE_BIN" "$@" 2>"$STDERR_CAP"
@@ -270,7 +277,7 @@ case "$MYTTY" in
     # platform.mjs owns the per-OS answer (darwin closes the Terminal
     # window; elsewhere the window belongs to the summoner and this is a
     # no-op). Cosmetic either way: failure is ignored.
-    nohup node "$WAKECYCLE_DIR/platform.mjs" close-tty "$MYTTY" >/dev/null 2>&1 &
+    nohup "$NODE" "$WAKECYCLE_DIR/platform.mjs" close-tty "$MYTTY" >/dev/null 2>&1 &
     ;;
 esac
 exit $RC
