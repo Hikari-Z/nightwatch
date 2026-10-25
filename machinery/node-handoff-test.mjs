@@ -24,6 +24,8 @@ try {
   writeFileSync(join(decoy, 'node'), `#!/bin/sh\ntouch "${join(hub, 'decoy-ran')}"\nexit 97\n`); chmodSync(join(decoy, 'node'), 0o755);
   const wrap = join(hub, 'node-wrapper');
   writeFileSync(wrap, `#!/bin/sh\necho "$*" >> "${join(hub, 'wrapper.log')}"\nexec "${process.execPath}" "$@"\n`); chmodSync(wrap, 0o755);
+  // Each check starts clean, so one script's failure can't fail the next.
+  const fresh = () => { for (const f of ['decoy-ran', 'wrapper.log']) rmSync(join(hub, f), { force: true }); };
   const env = (extra) => {
     const e = { ...process.env, PATH: `${decoy}:/usr/bin:/bin`, NIGHTWATCH_CONFIG: cfg, NIGHTWATCH_NODE: wrap, ...extra };
     for (const k of ['WEFT_CONFIG', 'WEFT_LANE', 'NIGHTWATCH_LANE']) if (!(k in (extra ?? {}))) delete e[k];
@@ -32,6 +34,7 @@ try {
 
   check('the SessionStart hook registers through the handed node, not the PATH one', () => {
     // Inside the check, so a script that fails (the decoy exits 97) reads as this check's FAIL, not a crash.
+    fresh();
     execFileSync('sh', [join(HERE, 'register-lane.sh')], { env: env({ NIGHTWATCH_LANE: 'alpha' }), input: JSON.stringify({ session_id: 'sid-h' }), encoding: 'utf8' });
     assert.equal(JSON.parse(readFileSync(join(hub, 'wakecycle', 'lane.sid-h'), 'utf8')).lane, 'alpha');
     assert.equal(existsSync(join(hub, 'decoy-ran')), false, 'the PATH node ran');
@@ -41,6 +44,7 @@ try {
   mkdirSync(join(hub, 'spool', 'nhtest'), { recursive: true });
   writeFileSync(join(hub, 'spool', 'nhtest', '1-bell-nhtest.txt'), 'BELL for the handoff test\n');
   check('the bell watcher reads its config through the handed node and delivers the note', () => {
+    fresh();
     const out = execFileSync('sh', [join(HERE, 'bell-watcher.sh'), 'nhtest'], { env: env(), encoding: 'utf8', timeout: 20000 });
     assert.match(out, /BELL for the handoff test/);
     assert.equal(existsSync(join(hub, 'decoy-ran')), false, 'the PATH node ran');
