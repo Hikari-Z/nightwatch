@@ -126,11 +126,18 @@ check("an emergency wake's receipts name this hub's files, not ~/origin/weft", (
 });
 
 check('the PreCompact guard blocks with valid JSON naming the sleep.mjs beside it', () => {
-  const out = execFileSync('sh', [join(MACHINERY, 'precompact-guard.sh')], { encoding: 'utf8' });
+  const env = { ...process.env }; delete env.NIGHTWATCH_NODE;
+  const out = execFileSync('sh', [join(MACHINERY, 'precompact-guard.sh')], { encoding: 'utf8', env });
   const j = JSON.parse(out);
   assert.equal(j.decision, 'block');
   assert.ok(j.reason.includes(`node ${MACHINERY}/sleep.mjs`), j.reason);
   assert.doesNotMatch(j.reason, /origin\/weft/);
+});
+check('the PreCompact guard names the node its session inherited, JSON-safe however it is spelled (10/25)', () => {
+  const odd = '/n "q" \\ dir/node';
+  const out = execFileSync('sh', [join(MACHINERY, 'precompact-guard.sh')], { encoding: 'utf8', env: { ...process.env, NIGHTWATCH_NODE: odd } });
+  const j = JSON.parse(out);
+  assert.ok(j.reason.includes(`${odd} ${MACHINERY}/sleep.mjs`), j.reason);
 });
 
 // The saved head (item 2 of the compatibility guard): wake.sh keeps the head it built beside the

@@ -33,5 +33,8 @@ printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$INPUT" >> "$GUARD_LOG" 2>/de
 # hook was installed from — never a path baked in for one hub. Backslashes
 # and quotes are escaped so an odd install path can't break the JSON.
 SELF_DIR="$(cd "$(dirname "$0")" && pwd | sed 's/\\/\\\\/g; s/"/\\"/g')"
-printf '{"decision": "block", "reason": "Compaction is disabled by the wake-cycle design: the built-in fold drops authored memory (reasons, texture, other people'"'"'s words). If the window is heavy, run the sleep ritual instead — write the checkpoint (path: config.mjs get paths.checkpoint) and today'"'"'s rung, then run sleep.mjs from the live machinery (WEFT_CONFIG=<this hub'"'"'s config> node %s/sleep.mjs) — and wake into the trimmed tail."}\n' "$SELF_DIR"
+# The node it names is the one wake.sh's session inherited (NIGHTWATCH_NODE, the daemon's own), else a bare
+# `node`: sleep.mjs runs the whole fold on whatever node starts it (10/25). Escaped the same way.
+NODE_SHOWN="$(printf '%s' "${NIGHTWATCH_NODE:-node}" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+printf '{"decision": "block", "reason": "Compaction is disabled by the wake-cycle design: the built-in fold drops authored memory (reasons, texture, other people'"'"'s words). If the window is heavy, run the sleep ritual instead — write the checkpoint (path: config.mjs get paths.checkpoint) and today'"'"'s rung, then run sleep.mjs from the live machinery (WEFT_CONFIG=<this hub'"'"'s config> %s %s/sleep.mjs) — and wake into the trimmed tail."}\n' "$NODE_SHOWN" "$SELF_DIR"
 exit 0
