@@ -1482,7 +1482,9 @@ async function rehearse() {
 
 function tick() { tickWith(io); }
 
-if (process.argv.includes("--rehearse")) { await rehearse(); process.exit(0); }
+// The exit carries rehearse()'s own status: a bare exit(0) here overrode its exitCode = 1, so a failing
+// rehearsal exited 0 and CI's rehearsal step could never go red (found 10/25; since 10/7).
+if (process.argv.includes("--rehearse")) { await rehearse(); process.exit(process.exitCode ?? 0); }
 
 // --arm <lane> | --disarm <lane> | --armed: the app's Nightly toggle and the
 // per-lane "Nightshift folds and wakes this lane" box. Reads tolerate every
