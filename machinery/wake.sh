@@ -21,11 +21,10 @@ set -e
 WAKECYCLE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # The node to run: the daemon's own (its process.execPath, pinned by the launchd plist or systemd unit),
 # which the nightshift hands the window as NIGHTWATCH_NODE (platform.mjs withNode). The window's shell PATH
-# can find a different one (10/25: Terminal found Homebrew's Node 20 while the daemon ran 22). Exported, so
-# the claude this launches, its SessionStart hook and its agent shells inherit it. A hand run without it
-# uses the shell's node, as before.
+# can find a different one (10/25: Terminal found Homebrew's Node 20 while the daemon ran 22). It arrives in
+# the environment, so it's already exported: the claude this launches, its SessionStart hook and its agent
+# shells inherit it with no export here. A hand run without it uses the shell's node, as before.
 NODE="${NIGHTWATCH_NODE:-node}"
-[ -n "${NIGHTWATCH_NODE:-}" ] && export NIGHTWATCH_NODE
 # CODE vs STATE (multi-persona split, 10/7): this script and config.mjs live
 # in the app's machinery/ (one version for every hub); receipts, the lane
 # registry, armed and state.json live in the HUB's wakecycle dir, named by

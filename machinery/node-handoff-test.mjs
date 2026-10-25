@@ -30,8 +30,9 @@ try {
     return e;
   };
 
-  execFileSync('sh', [join(HERE, 'register-lane.sh')], { env: env({ NIGHTWATCH_LANE: 'alpha' }), input: JSON.stringify({ session_id: 'sid-h' }), encoding: 'utf8' });
   check('the SessionStart hook registers through the handed node, not the PATH one', () => {
+    // Inside the check, so a script that fails (the decoy exits 97) reads as this check's FAIL, not a crash.
+    execFileSync('sh', [join(HERE, 'register-lane.sh')], { env: env({ NIGHTWATCH_LANE: 'alpha' }), input: JSON.stringify({ session_id: 'sid-h' }), encoding: 'utf8' });
     assert.equal(JSON.parse(readFileSync(join(hub, 'wakecycle', 'lane.sid-h'), 'utf8')).lane, 'alpha');
     assert.equal(existsSync(join(hub, 'decoy-ran')), false, 'the PATH node ran');
     assert.match(readFileSync(join(hub, 'wrapper.log'), 'utf8'), /config\.mjs get paths\.wakecycle/);
@@ -39,8 +40,8 @@ try {
 
   mkdirSync(join(hub, 'spool', 'nhtest'), { recursive: true });
   writeFileSync(join(hub, 'spool', 'nhtest', '1-bell-nhtest.txt'), 'BELL for the handoff test\n');
-  const out = execFileSync('sh', [join(HERE, 'bell-watcher.sh'), 'nhtest'], { env: env(), encoding: 'utf8', timeout: 20000 });
   check('the bell watcher reads its config through the handed node and delivers the note', () => {
+    const out = execFileSync('sh', [join(HERE, 'bell-watcher.sh'), 'nhtest'], { env: env(), encoding: 'utf8', timeout: 20000 });
     assert.match(out, /BELL for the handoff test/);
     assert.equal(existsSync(join(hub, 'decoy-ran')), false, 'the PATH node ran');
     assert.match(readFileSync(join(hub, 'wrapper.log'), 'utf8'), /config\.mjs get paths\.spool/);
