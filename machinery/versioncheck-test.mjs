@@ -9,8 +9,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, existsSync, r
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveClaude, parseVersion, seenVersions, claudeVersionLines, realIo, lookupCommand, flagLines, WAKE_FLAGS } from './versioncheck.mjs';
-import { platformKind } from './platform.mjs';
+import { resolveClaude, parseVersion, seenVersions, claudeVersionLines, realIo, lookupCommand, flagLines, WAKE_FLAGS, NODE_FLOOR, parseExecStart, nodeJobs, nodeLines, nodeRealIo } from './versioncheck.mjs';
+import { platformKind, daemonJob } from './platform.mjs';
 
 const MACHINERY = dirname(fileURLToPath(import.meta.url));
 let pass = 0, fail = 0;
@@ -233,6 +233,91 @@ check('flags: never red', () => {
   for (const c of [{}, { runHelp: () => null }, { runHelp: () => HELP(Object.keys(HELP_LINES)) }]) assert.doesNotMatch(flagOne(c), /^(MISSING|BAD)/);
 });
 
+// ── the node the background jobs run on, against the floor CI certifies ──
+const M = '/hub/machinery';
+const nio = (over = {}) => ({
+  kind: 'darwin', dir: '/LA', machineryDir: M, realpath: (p) => p,
+  readdir: () => ['a.plist', 'b.plist', 'c.txt'],
+  readFile: () => '', readPlist: (f) => ({ '/LA/a.plist': ['/n/node22', `${M}/nightshift.mjs`], '/LA/b.plist': ['/n/node20', `${M}/watch.mjs`] })[f] ?? null,
+  runNode: (p) => ({ '/n/node22': 'v22.21.1\n', '/n/node20': 'v20.20.2\n' })[p] ?? null, ...over,
+});
+check('node: NODE_FLOOR is CI\'s node-version; the two cannot drift', () => {
+  const yml = readFileSync(join(MACHINERY, '..', '.github', 'workflows', 'linux.yml'), 'utf8');
+  const vs = [...yml.matchAll(/node-version:\s*['"]?(\d+)/g)].map((m) => Number(m[1]));
+  assert.ok(vs.length >= 1, 'found no node-version in the workflow');
+  for (const v of vs) assert.equal(v, NODE_FLOOR, `workflow pins ${v}, NODE_FLOOR is ${NODE_FLOOR}`);
+});
+check('node: a job at or above the floor is ok, one below is amber, each naming its node path and job file', () => {
+  const l = nodeLines(nio());
+  assert.equal(l.length, 2);
+  assert.match(l[0], /^ok {6}node: the nightshift job runs on node 22\.21\.1 \(\/n\/node22, from a\.plist\), at or above the 22 floor/);
+  assert.match(l[1], /^WARN {4}node: the watch job runs on node 20\.20\.2 \(\/n\/node20, from b\.plist\), below the 22 floor CI certifies; it runs, but nothing certifies/);
+});
+check('node: lines come out nightshift first, then watch, whatever order the directory lists them in', () => {
+  const l = nodeLines(nio({ readdir: () => ['b.plist', 'a.plist'] }));
+  assert.match(l[0], /the nightshift job/); assert.match(l[1], /the watch job/);
+});
+check('node: the floor boundary: 21.9.9 is amber, 22.0.0 and 23.1.0 are ok', () => {
+  const at = (v) => nodeLines(nio({ readdir: () => ['a.plist'], runNode: () => `v${v}\n` }))[0];
+  assert.match(at('21.9.9'), /^WARN/); assert.match(at('22.0.0'), /^ok/); assert.match(at('23.1.0'), /^ok/);
+});
+check('node: a node that cannot be run for a version is amber, not ok', () => {
+  for (const out of [null, '', 'command not found']) assert.match(nodeLines(nio({ readdir: () => ['a.plist'], runNode: () => out }))[0], /^WARN {4}node: .*could not be run for a version/);
+});
+check('node: another hub\'s jobs, and malformed plists, are ignored: no job for this machinery is a neutral note', () => {
+  const l = nodeLines(nio({ readPlist: (f) => ({ '/LA/a.plist': ['/n/node22', '/other/machinery/nightshift.mjs'], '/LA/b.plist': ['/n/node20'] })[f] ?? null }));
+  assert.equal(l.length, 1); assert.match(l[0], /^note {4}node: no background job for this machinery \(\/hub\/machinery\) was found in \/LA/);
+});
+check('node: a missing job directory reads as no jobs (a note), not a crash', () => {
+  assert.match(nodeLines(nio({ readdir: () => { throw new Error('ENOENT'); } }))[0], /^note {4}/);
+});
+check('node: an unknown platform says it cannot tell, neutrally', () => {
+  const l = nodeLines(nio({ kind: 'plan9' })); assert.equal(l.length, 1); assert.match(l[0], /^note {4}node: this platform/);
+});
+check('node: a job found through a symlinked machinery directory still matches (realpath on both sides)', () => {
+  const l = nodeLines(nio({ readdir: () => ['a.plist'], realpath: (p) => p.replace('/link/', '/hub/machinery/'), readPlist: () => ['/n/node22', '/link/nightshift.mjs'], machineryDir: M, ...{} }));
+  assert.equal(l.length, 1);
+  assert.match(l[0], /^ok {6}node: the nightshift job runs on node 22/, 'the symlinked path matched only because both sides go through realpath (a single "no job" note would also be one line)');
+});
+check('node: never red', () => {
+  for (const o of [{}, { runNode: () => null }, { readdir: () => [] }, { kind: 'plan9' }]) for (const l of nodeLines(nio(o))) assert.doesNotMatch(l, /^(MISSING|BAD)/);
+});
+check('node: linux and wsl read the systemd ExecStart, as daemonJob writes it', () => {
+  const unit = (n, s) => `[Service]\nExecStart="${n}" "${s}"\nRestart=always\n`;
+  const io2 = nio({ kind: 'linux', dir: '/sd', readdir: () => ['x.service', 'y.service', 'z.timer'], readFile: (f) => ({ '/sd/x.service': unit('/n/node22', `${M}/nightshift.mjs`), '/sd/y.service': unit('/n/node20', `${M}/watch.mjs`) })[f] ?? '' });
+  const l = nodeLines(io2); assert.equal(l.length, 2); assert.match(l[0], /^ok {6}.*nightshift.*x\.service/); assert.match(l[1], /^WARN {4}.*watch.*y\.service/);
+  assert.equal(nodeLines({ ...io2, kind: 'wsl' }).length, 2);
+});
+check('node: parseExecStart reads quoted, spaced, %%-escaped and bare words, and nothing else', () => {
+  assert.deepEqual(parseExecStart('ExecStart="/a b/node" "/c d/s.mjs"\n'), ['/a b/node', '/c d/s.mjs']);
+  assert.deepEqual(parseExecStart('x\nExecStart="/n/100%%/node" "/s.mjs"\n'), ['/n/100%/node', '/s.mjs']);
+  assert.deepEqual(parseExecStart('ExecStart=/usr/bin/node /s.mjs\n'), ['/usr/bin/node', '/s.mjs']);
+  assert.equal(parseExecStart('Restart=always\n'), null); assert.equal(parseExecStart('ExecStart="/only/one"\n'), null); assert.equal(parseExecStart(undefined), null);
+});
+
+// the real writer's own files, read back by the real reader (darwin: plutil; linux: the systemd text)
+let nodeFix;
+{
+  const hubDir = mkdtempSync(join(tmpdir(), 'nw-nodejobs-'));
+  const jobsDir = join(hubDir, 'jobs'); mkdirSync(jobsDir);
+  const fakeNode = (name, v) => { const f = join(hubDir, name); writeFileSync(f, `#!/bin/sh\necho v${v}\n`); chmodSync(f, 0o755); return f; };
+  const n22 = fakeNode('node22', '22.21.1'), n20 = fakeNode('node20', '20.20.2');
+  const kind = platformKind();
+  const put = (jobKind, slug, node, machineryDir) => { const j = daemonJob({ slug, hub: hubDir, jobKind, node, machineryDir, configPath: join(hubDir, 'c.json') }, kind); writeFileSync(join(jobsDir, j.fileName), j.content); return j.fileName; };
+  const saved = process.env.NW_INSTALL_DIR; process.env.NW_INSTALL_DIR = jobsDir;
+  try {
+    const fNs = put('nightshift', 'one', n22, MACHINERY), fW = put('watch', 'one', n20, MACHINERY), fOther = put('nightshift', 'two', n20, join(hubDir, 'some-other-machinery'));
+    check('node: reading back files written by the REAL daemonJob (this platform): both jobs found, the other hub\'s ignored', () => {
+      const l = nodeLines(nodeRealIo({ machineryDir: MACHINERY }));
+      assert.equal(l.length, 2, l.join('\n'));
+      assert.ok(l[0].startsWith('ok') && l[0].includes(n22) && l[0].includes(fNs), l[0]);
+      assert.ok(l[1].startsWith('WARN') && l[1].includes(n20) && l[1].includes(fW), l[1]);
+      assert.ok(!l.join('\n').includes(fOther), 'the other hub\'s job must not appear');
+    });
+  } finally { if (saved === undefined) delete process.env.NW_INSTALL_DIR; else process.env.NW_INSTALL_DIR = saved; }
+  nodeFix = { hubDir, n22, n20, kind };
+}
+
 // ── real I/O ──
 const scratch = mkdtempSync(join(tmpdir(), 'nw-versioncheck-'));
 const stub = (name, body) => { const f = join(scratch, name); writeFileSync(f, `#!/bin/sh\n${body}\n`); chmodSync(f, 0o755); return f; };
@@ -263,7 +348,7 @@ check('realIo: a missing wake-costs file reads as empty', () => {
 // window's shell would do. On macOS that is an interactive login zsh, so a throwaway ZDOTDIR/.zshrc puts the
 // stub dir first on PATH; on Linux and WSL the lookup prefixes the configured claude's own directory, so the
 // stub sits there. Either way the stub is not on the child's PATH, so only the fall-through can find it.
-function preflightLines(wakeCostsText, claudeBinOk = true, { fallThrough = false, omit = [] } = {}) {
+function preflightLines(wakeCostsText, claudeBinOk = true, { fallThrough = false, omit = [], installDir } = {}) {
   const hub = mkdtempSync(join(tmpdir(), 'nw-vc-hub-'));
   try {
     for (const d of ['wakecycle', 'ladder', 'projects', 'sessions']) mkdirSync(join(hub, d), { recursive: true });
@@ -272,6 +357,7 @@ function preflightLines(wakeCostsText, claudeBinOk = true, { fallThrough = false
     writeFileSync(join(hub, 'wakecycle', 'nightshift.armed'), ''); // preflight reads it unguarded; empty = disarmed
     writeFileSync(join(hub, 'ladder', 'wake-costs.jsonl'), wakeCostsText);
     let claudeBin = claudeBinOk ? s : join(hub, 'no-such-claude'); let found = null; const extraEnv = {};
+    if (installDir) extraEnv.NW_INSTALL_DIR = installDir; // the bench seam: where this platform's background job files are read from
     if (fallThrough) {
       const bin = join(hub, 'stubbin'); mkdirSync(bin);
       found = join(bin, 'claude'); writeFileSync(found, '#!/bin/sh\necho "2.1.310 (Claude Code)"\n'); chmodSync(found, 0o755);
@@ -305,6 +391,31 @@ check('preflight carries the flag check: a --help that lists them is ok, naming 
   assert.ok(gone.lines.some((x) => /^WARN {4}claude .*no longer lists --system-prompt-snapshot/.test(x)), gone.lines.join('\n'));
   assert.ok(!gone.lines.some((x) => /^(MISSING|BAD)/.test(x) && /claude/.test(x)), 'never red');
 });
+// The node the background jobs run on, through the nightshift's own --preflight. The job files are written by the
+// real daemonJob for this platform and name stub nodes, so the reader, the writer and the wiring agree.
+const jobDir = (nightshiftNode, watchNode) => {
+  const d = mkdtempSync(join(nodeFix.hubDir, 'jd-'));
+  for (const [jobKind, node] of [['nightshift', nightshiftNode], ['watch', watchNode]]) {
+    const j = daemonJob({ slug: 'wired', hub: nodeFix.hubDir, jobKind, node, machineryDir: MACHINERY, configPath: join(nodeFix.hubDir, 'c.json') }, nodeFix.kind);
+    writeFileSync(join(d, j.fileName), j.content);
+  }
+  return d;
+};
+check('preflight carries the node check: a job on node 20 is amber and names the stub, one on 22 is ok', () => {
+  const r = preflightLines(rows('2.1.310'), true, { installDir: jobDir(nodeFix.n20, nodeFix.n22) });
+  assert.equal(r.code, 0, r.err);
+  const l = r.lines.filter((x) => /^(ok|WARN|note) +node:/.test(x));
+  assert.equal(l.length, 2, r.lines.join('\n'));
+  assert.ok(l[0].startsWith('WARN') && l[0].includes('the nightshift job') && l[0].includes(nodeFix.n20) && l[0].includes('below the 22 floor'), l[0]);
+  assert.ok(l[1].startsWith('ok') && l[1].includes('the watch job') && l[1].includes(nodeFix.n22), l[1]);
+  assert.ok(!r.lines.some((x) => /^(MISSING|BAD)/.test(x) && /node/.test(x)), 'never red');
+});
+check('preflight: no job file for this machinery is a note, and the rest of the preflight still runs', () => {
+  const r = preflightLines(rows('2.1.310'), true, { installDir: mkdtempSync(join(nodeFix.hubDir, 'empty-')) });
+  assert.equal(r.code, 0, r.err);
+  assert.ok(r.lines.some((x) => /^note {4}node: no background job for this machinery/.test(x)), r.lines.join('\n'));
+  assert.ok(r.lines.some((x) => /preflight complete/.test(x)));
+});
 check('preflight: a version that has woken is ok; no baseline is a note', () => {
   assert.match(preflightLines(rows('2.1.310')).lines.find((x) => /claude 2\.1\.310/.test(x)), /^ok/);
   assert.match(preflightLines('').lines.find((x) => /claude 2\.1\.310/.test(x)), /^note/);
@@ -327,5 +438,6 @@ else check('preflight: a missing configured claude falls through to the claude t
 });
 
 rmSync(scratch, { recursive: true, force: true });
+rmSync(nodeFix.hubDir, { recursive: true, force: true });
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

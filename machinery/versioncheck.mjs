@@ -30,10 +30,11 @@
  *
  * Written by: claude-sonnet-5-5, 2026-10-25.
  */
-import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { accessSync, constants, existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { platformKind } from './platform.mjs';
+import { platformKind, daemonJob } from './platform.mjs';
 
 /**
  * The command that finds `claude` the way the wake window's shell would.
@@ -141,6 +142,89 @@ export function flagLines(io) {
     return [`WARN    claude ${where}: \`--help\` no longer lists ${missing.join(', ')}, which wake.sh passes; a removed or renamed flag fails the wake at launch (WAKE FAILED), so this is the warning before 08:00`];
   }
   return [`ok      claude ${where}: \`--help\` still lists the flags wake.sh passes (${WAKE_FLAGS.map(({ flag }) => flag).join(', ')}; the last is listed as a family)`];
+}
+
+/**
+ * The node the background jobs run on, against the floor CI certifies.
+ *
+ * The tests, the second reads and CI all run Node 22; the launchd/systemd jobs ran whatever the plist named
+ * (Homebrew's Node 20 until 10/25). Nothing certified that runtime: a 22-only construct landing in
+ * machinery code would break the daemons and not CI. This reports it, amber and never red (the daemon runs,
+ * it is just uncertified), naming the binary and the job file it came from.
+ *
+ * The jobs are found by WHAT THEY RUN, not by label: any job file whose script is this machinery directory's
+ * nightshift.mjs or watch.mjs. This house's own jobs use the legacy labels (com.weft.nightshift,
+ * com.weft.spiralwatch) that daemonJob does not write for new hubs (house.nightwatch.<slug>[.watch]), and
+ * this hub has no installed.json; reading by script covers both.
+ *
+ * NODE_FLOOR is CI's node-version (.github/workflows/linux.yml); a test fails if the two drift.
+ */
+export const NODE_FLOOR = 22;
+const JOB_SCRIPTS = { nightshift: 'nightshift.mjs', watch: 'watch.mjs' };
+
+/** The two quoted-or-bare words of a systemd ExecStart=, i.e. [node, script]; null if it is not that shape. */
+export function parseExecStart(text) {
+  const m = /^ExecStart=(.*)$/m.exec(String(text ?? ''));
+  if (!m) return null;
+  const words = [...m[1].matchAll(/"((?:[^"\\]|\\.)*)"|(\S+)/g)].map((x) => (x[1] ?? x[2]).replace(/%%/g, '%'));
+  return words.length >= 2 ? [words[0], words[1]] : null;
+}
+
+/**
+ * The job files in `dir` that run this machinery's nightshift or watch, with the node each names.
+ * io: { kind, dir, machineryDir, readdir(dir) → names, readFile(path) → text, readPlist(path) → argv[] | null,
+ *       realpath(path) → path }.
+ */
+export function nodeJobs(io) {
+  const want = new Map(Object.entries(JOB_SCRIPTS).map(([job, f]) => [io.realpath(join(io.machineryDir, f)), job]));
+  const found = [];
+  let names = [];
+  try { names = io.readdir(io.dir); } catch { return found; }
+  for (const name of names) {
+    let argv = null;
+    const file = join(io.dir, name);
+    try {
+      if (io.kind === 'darwin' && name.endsWith('.plist')) argv = io.readPlist(file);
+      else if ((io.kind === 'linux' || io.kind === 'wsl') && name.endsWith('.service')) argv = parseExecStart(io.readFile(file));
+    } catch { argv = null; }
+    if (!Array.isArray(argv) || argv.length < 2) continue;
+    const job = want.get(io.realpath(argv[1]));
+    if (job) found.push({ job, file: name, node: argv[0] });
+  }
+  return found.sort((a, b) => a.job.localeCompare(b.job) || a.file.localeCompare(b.file));
+}
+
+/** The preflight lines for the background jobs' node. io adds runNode(path) → stdout | null to nodeJobs's. */
+export function nodeLines(io) {
+  if (!['darwin', 'linux', 'wsl'].includes(io.kind)) return ["note    node: this platform's background job files are not read here, so the node they run is not compared with the floor"];
+  const jobs = nodeJobs(io);
+  if (!jobs.length) return [`note    node: no background job for this machinery (${io.machineryDir}) was found in ${io.dir}, so there is no node to compare with the floor of ${NODE_FLOOR}`];
+  return jobs.map(({ job, file, node }) => {
+    const v = /^v?(\d+)\.(\d+)\.(\d+)/.exec(String(io.runNode(node) ?? '').trim());
+    if (!v) return `WARN    node: the ${job} job's node ${node} (from ${file}) could not be run for a version`;
+    const where = `node ${v[1]}.${v[2]}.${v[3]} (${node}, from ${file})`;
+    return Number(v[1]) >= NODE_FLOOR
+      ? `ok      node: the ${job} job runs on ${where}, at or above the ${NODE_FLOOR} floor CI certifies`
+      : `WARN    node: the ${job} job runs on ${where}, below the ${NODE_FLOOR} floor CI certifies; it runs, but nothing certifies this runtime`;
+  });
+}
+
+/** Real I/O for nodeLines. `kind` and `machineryDir` default to this machine and this directory. */
+export function nodeRealIo({ kind = platformKind(), machineryDir = dirname(fileURLToPath(import.meta.url)), spawn = spawnSync } = {}) {
+  // daemonJob is pure; its installDir is where this platform's job files live (NW_INSTALL_DIR is the bench seam).
+  const dir = daemonJob({ slug: 'x', hub: '/x', machineryDir: '/x', configPath: '/x' }, kind).installDir;
+  return {
+    kind, dir, machineryDir,
+    readdir: (d) => readdirSync(d),
+    readFile: (f) => readFileSync(f, 'utf8'),
+    realpath: (p) => { try { return realpathSync(p); } catch { return p; } },
+    readPlist: (f) => {
+      const r = spawn('plutil', ['-convert', 'json', '-o', '-', f], { encoding: 'utf8', timeout: 5000 });
+      if (r.status !== 0) return null;
+      try { return JSON.parse(r.stdout).ProgramArguments ?? null; } catch { return null; }
+    },
+    runNode: (p) => { const r = spawn(p, ['-v'], { encoding: 'utf8', timeout: 5000 }); return r.status === 0 ? r.stdout : null; },
+  };
 }
 
 /** Real I/O for the nightshift's preflight. */
