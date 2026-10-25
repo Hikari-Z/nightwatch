@@ -189,11 +189,18 @@ export function nodeJobs(io) {
     const file = join(io.dir, name);
     try {
       if (io.kind === 'darwin' && name.endsWith('.plist')) argv = io.readPlist(file);
-      else if ((io.kind === 'linux' || io.kind === 'wsl') && name.endsWith('.service')) argv = parseExecStart(io.readFile(file));
+      else if ((io.kind === 'linux' || io.kind === 'wsl') && name.endsWith('.service')) argv = parseExecWords(io.readFile(file));
     } catch { argv = null; }
     if (!Array.isArray(argv) || argv.length < 2) continue;
-    const job = want.get(io.realpath(argv[1]));
-    if (job) found.push({ job, file: name, node: argv[0] });
+    // The script is the first word after the launcher that is one of ours: `node s.mjs`, but also
+    // `/usr/bin/env node s.mjs`, where the second word is not the script.
+    const at = argv.findIndex((w, i) => i > 0 && want.has(io.realpath(w)));
+    if (at < 0) continue;
+    const launcher = argv.slice(0, at);
+    // A node that is not an absolute path (`node`, `./node`) or that goes through `env` is resolved by the
+    // JOB's own PATH when it runs, not by Doctor's: running `node -v` here would report Doctor's node.
+    const bare = !String(argv[0]).startsWith('/') || /(^|\/)env$/.test(argv[0]);
+    found.push({ job: want.get(io.realpath(argv[at])), file: name, node: argv[0], bare, launcher: launcher.join(' ') });
   }
   return found.sort((a, b) => a.job.localeCompare(b.job) || a.file.localeCompare(b.file));
 }
@@ -203,7 +210,8 @@ export function nodeLines(io) {
   if (!['darwin', 'linux', 'wsl'].includes(io.kind)) return ["note    node: this platform's background job files are not read here, so the node they run is not compared with the floor"];
   const jobs = nodeJobs(io);
   if (!jobs.length) return [`note    node: no background job for this machinery (${io.machineryDir}) was found in ${io.dir}, so there is no node to compare with the floor of ${NODE_FLOOR}`];
-  return jobs.map(({ job, file, node }) => {
+  return jobs.map(({ job, file, node, bare, launcher }) => {
+    if (bare) return `WARN    node: the ${job} job's command is \`${launcher}\` (from ${file}), which its own PATH resolves when it runs, so Doctor cannot say which node it runs; name an absolute node path in the job to check it`;
     const v = /^v?(\d+)\.(\d+)\.(\d+)/.exec(String(io.runNode(node) ?? '').trim());
     if (!v) return `WARN    node: the ${job} job's node ${node} (from ${file}) could not be run for a version`;
     const where = `node ${v[1]}.${v[2]}.${v[3]} (${node}, from ${file})`;
