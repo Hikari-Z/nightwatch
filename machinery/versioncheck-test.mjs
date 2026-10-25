@@ -9,7 +9,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, existsSync, r
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveClaude, parseVersion, seenVersions, claudeVersionLines, realIo, lookupCommand, flagLines, WAKE_FLAGS, NODE_FLOOR, parseExecStart, nodeJobs, nodeLines, nodeRealIo } from './versioncheck.mjs';
+import { resolveClaude, parseVersion, seenVersions, claudeVersionLines, realIo, lookupCommand, flagLines, WAKE_FLAGS, NODE_FLOOR, parseExecStart, parseExecWords, nodeJobs, nodeLines, nodeRealIo } from './versioncheck.mjs';
 import { platformKind, daemonJob } from './platform.mjs';
 
 const MACHINERY = dirname(fileURLToPath(import.meta.url));
@@ -278,6 +278,42 @@ check('node: a job found through a symlinked machinery directory still matches (
   const l = nodeLines(nio({ readdir: () => ['a.plist'], realpath: (p) => p.replace('/link/', '/hub/machinery/'), readPlist: () => ['/n/node22', '/link/nightshift.mjs'], machineryDir: M, ...{} }));
   assert.equal(l.length, 1);
   assert.match(l[0], /^ok {6}node: the nightshift job runs on node 22/, 'the symlinked path matched only because both sides go through realpath (a single "no job" note would also be one line)');
+});
+// A job whose node is not an absolute path is resolved by the JOB's own PATH when it runs; Doctor's `node -v`
+// would run Doctor's PATH's node and report THAT as the job's (the same trap as the claude lookup). So it says it
+// cannot tell, and does not run anything. An `env node` launcher also hides the script behind a second word.
+const bareLine = (over) => { let ran = 0; const l = nodeLines(nio({ readdir: () => ['a.plist'], runNode: () => { ran++; return 'v22.21.1\n'; }, ...over })); return { l, ran }; };
+check('node: a plist whose node is a bare `node` is amber: the job\'s own PATH decides, so Doctor does not run its own', () => {
+  const { l, ran } = bareLine({ readPlist: () => ['node', `${M}/nightshift.mjs`] });
+  assert.equal(l.length, 1); assert.match(l[0], /^WARN {4}node: the nightshift job's command is `node`.*a\.plist.*its own PATH resolves.*cannot say which node/);
+  assert.equal(ran, 0, 'Doctor ran a node -v for a job that names no node');
+});
+check('node: an `/usr/bin/env node` launcher is found (not "no job") and is amber for the same reason', () => {
+  const { l, ran } = bareLine({ readPlist: () => ['/usr/bin/env', 'node', `${M}/watch.mjs`] });
+  assert.equal(l.length, 1); assert.match(l[0], /^WARN {4}node: the watch job's command is `\/usr\/bin\/env node`/);
+  assert.equal(ran, 0);
+});
+check('node: a relative node path is bare too (./node resolves from the job\'s directory)', () => {
+  const { l, ran } = bareLine({ readPlist: () => ['./node', `${M}/nightshift.mjs`] });
+  assert.match(l[0], /^WARN {4}node: the nightshift job's command is `\.\/node`/); assert.equal(ran, 0);
+});
+check('node: systemd ExecStart with a bare node or env node: found, amber, nothing run', () => {
+  for (const [exec, shown] of [[`node "${M}/nightshift.mjs"`, '`node`'], [`/usr/bin/env node "${M}/nightshift.mjs"`, '`/usr/bin/env node`'], [`env node ${M}/nightshift.mjs`, '`env node`']]) {
+    const { l, ran } = bareLine({ kind: 'linux', dir: '/sd', readdir: () => ['x.service'], readFile: () => `[Service]\nExecStart=${exec}\n` });
+    assert.equal(l.length, 1, exec); assert.ok(l[0].startsWith('WARN') && l[0].includes(shown), l[0]); assert.equal(ran, 0, exec);
+  }
+});
+check('node: another hub\'s env-style job is still ignored (the script decides, not the launcher)', () => {
+  const { l } = bareLine({ readPlist: () => ['/usr/bin/env', 'node', '/other/machinery/nightshift.mjs'] });
+  assert.match(l[0], /^note {4}node: no background job for this machinery/);
+});
+check('node: an absolute node path is unchanged: run, versioned, ok (the bare rule does not catch it)', () => {
+  const l = nodeLines(nio({ readdir: () => ['a.plist'], readPlist: () => ['/n/node22', `${M}/nightshift.mjs`] }));
+  assert.equal(l.length, 1); assert.match(l[0], /^ok {6}node: the nightshift job runs on node 22\.21\.1 \(\/n\/node22/);
+});
+check('node: parseExecWords returns every word, quoted or bare, and null with no ExecStart', () => {
+  assert.deepEqual(parseExecWords('ExecStart=/usr/bin/env node "/a b/s.mjs" --flag\n'), ['/usr/bin/env', 'node', '/a b/s.mjs', '--flag']);
+  assert.equal(parseExecWords('Restart=always\n'), null);
 });
 check('node: never red', () => {
   for (const o of [{}, { runNode: () => null }, { readdir: () => [] }, { kind: 'plan9' }]) for (const l of nodeLines(nio(o))) assert.doesNotMatch(l, /^(MISSING|BAD)/);
