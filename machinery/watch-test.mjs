@@ -172,10 +172,10 @@ check("an old fold still named by a wake receipt is costed; a replaced one isn't
 // of the lane's window is one amber event, never a notification. The window
 // is the model's (1M for ours, 200k for haiku), unknown models have none.
 check('a wake well under the warn share raises nothing (t-good: 205,799 of 1M)', lines(EVENTS).filter((e) => e.kind === 'wake-cost-high').length, 0);
-const wakeWith = (t, w, lane, model, tokens, estimate) => {
+const wakeWith = (t, w, lane, model, tokens, estimate, version) => {
   const te = [{ type: 'user', uuid: `${t}-u1`, timestamp: iso(now - 3 * 3600_000), message: { role: 'user', content: t } }];
   write(t, te);
-  write(w, [...te, { type: 'assistant', uuid: `${w}-a1`, timestamp: iso(now - 20 * 60_000), message: { role: 'assistant', model, content: [{ type: 'text', text: 'up' }], usage: { input_tokens: 1, cache_read_input_tokens: tokens - 1 } } }]);
+  write(w, [...te, { type: 'assistant', uuid: `${w}-a1`, timestamp: iso(now - 20 * 60_000), message: { role: 'assistant', model, content: [{ type: 'text', text: 'up' }], usage: { input_tokens: 1, cache_read_input_tokens: tokens - 1 } }, ...(version ? { version } : {}) }]);
   writeFileSync(join(dirs.wakecycle, `lane.${w}`), JSON.stringify({ lane }));
   fold(t, estimate);
 };
@@ -208,6 +208,30 @@ tick(cfgWarn('warn0', 0));
 check('wakeCostWarn 0 turns it off (90% of the window, nothing)', lines(EVENTS).some((e) => e.kind === 'wake-cost-high' && e.session === 'w-off'), false);
 check('the row still lands with the warning off', lines(join(root, 'ladder', 'wake-costs.jsonl')).some((r) => r.tail === 't-off'), true);
 check('and no wake-cost warning ever sent a notification', lines(SENT).some((m) => JSON.stringify(m).includes('wake-cost')), false);
+
+// The version that woke is the receipt that it woke clean: the row carries it,
+// the first version ever recorded only seeds the baseline, and a version no
+// earlier wake has run is told once, amber, never as a notification.
+const versions = () => lines(join(root, 'ladder', 'wake-costs.jsonl')).filter((r) => r.tail.startsWith('t-v')).map((r) => `${r.tail}:${r.version ?? '-'}`);
+const newOnes = () => lines(EVENTS).filter((e) => e.kind === 'claude-version-new').map((e) => `${e.version}<-${e.previous}`);
+wakeWith('t-v1', 'w-v1', 'opus', 'claude-opus-5-5', 100_000, 100_000, '2.1.309');
+tick();
+check('the wake row carries the version that woke', versions(), ['t-v1:2.1.309']);
+check('the first version ever recorded only seeds the baseline (no event)', newOnes(), []);
+wakeWith('t-v2', 'w-v2', 'opus', 'claude-opus-5-5', 100_000, 100_000, '2.1.309');
+tick();
+check('a version already seen raises nothing', newOnes(), []);
+wakeWith('t-v3', 'w-v3', 'opus', 'claude-opus-5-5', 100_000, 100_000, '2.1.310');
+tick();
+check('a version no earlier wake has run is told once, naming what came before', newOnes(), ['2.1.310<-2.1.309']);
+check('as an amber event', lines(EVENTS).filter((e) => e.kind === 'claude-version-new').map((e) => e.alarm), [false]);
+tick();
+wakeWith('t-v4', 'w-v4', 'opus', 'claude-opus-5-5', 100_000, 100_000, '2.1.310');
+wakeWith('t-v5', 'w-v5', 'opus', 'claude-opus-5-5', 100_000, 100_000);
+tick();
+check('and not again for the same version, nor for a reply with no version', newOnes(), ['2.1.310<-2.1.309']);
+check('a reply with no version leaves the row without the key', lines(join(root, 'ladder', 'wake-costs.jsonl')).filter((r) => r.tail === 't-v5').map((r) => 'version' in r), [false]);
+check('and no version event ever sent a notification', lines(SENT).some((m) => JSON.stringify(m).includes('claude-version')), false);
 // A lane's own contextWindow outranks the model's (Opus's note on #39: windowFor
 // is old code, and nothing pinned this branch of it). 250k is 25% of 1M and
 // stays quiet; with the lane pinned to 400k it is 62.5% and warns, naming 400k.

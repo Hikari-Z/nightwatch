@@ -53,7 +53,7 @@ function hub({ rung = true } = {}) {
 }
 
 // A transcript trim.mjs will fold: a chain of turns starting at a human prompt.
-function transcript(h, sid, turns, extra = []) {
+function transcript(h, sid, turns, extra = [], version = null) {
   let prev = null;
   const rows = [];
   for (let i = 0; i < turns; i++) {
@@ -62,7 +62,7 @@ function transcript(h, sid, turns, extra = []) {
       { type: 'assistant', message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'text', text: `reply ${i}` }] } },
     ]) {
       const uuid = `${sid.slice(0, 4)}-${rows.length}`;
-      rows.push({ parentUuid: prev, uuid, sessionId: sid, timestamp: `2026-10-11T10:${String(rows.length % 60).padStart(2, '0')}:00.000Z`, ...e });
+      rows.push({ parentUuid: prev, uuid, sessionId: sid, timestamp: `2026-10-11T10:${String(rows.length % 60).padStart(2, '0')}:00.000Z`, ...(version ? { version } : {}), ...e });
       prev = uuid;
     }
   }
@@ -96,6 +96,7 @@ try {
     check('1 the archive holds the folded session, byte-identical', same(join(h.transcripts, `${A}.jsonl`), join(h.archive, `${A}.jsonl`)));
     check('1 the fold row names the archived copy', lastFold(h)?.archived === join(h.archive, `${A}.jsonl`), lastFold(h));
     check('1 no staging file left behind', existsSync(h.archive) && readdirSync(h.archive).every((f) => !f.includes('.partial')), existsSync(h.archive) ? readdirSync(h.archive) : 'no archive dir');
+    check('1 no version was stamped, so the fold row invents none', lastFold(h) && !('claudeVersion' in lastFold(h)), lastFold(h));
     check('1 the new tail is not archived (it is tomorrow\'s, not a fold)', existsSync(h.archive) && readdirSync(h.archive).length === 1, existsSync(h.archive) ? readdirSync(h.archive) : '');
   }
   // 2. Unauthored emergency fold (the daemon's orphan-fold invocation).
@@ -203,6 +204,15 @@ try {
     const r = sleep(h, A);
     check('9 a session with torn lines still folds', r.code === 0, r.err);
     check('9 and its fold row says how many lines were dropped', lastFold(h)?.tornLines === 2, lastFold(h));
+  }
+
+  // 10. The fold row records the version that wrote the tail.
+  {
+    const h = hub();
+    transcript(h, A, 6, [], '2.1.310');
+    const r = sleep(h, A);
+    check('10 a stamped session folds', r.code === 0, r.err);
+    check('10 and its fold row carries claudeVersion', lastFold(h)?.claudeVersion === '2.1.310', lastFold(h));
   }
 } finally {
   for (const r of roots) rmSync(r, { recursive: true, force: true });

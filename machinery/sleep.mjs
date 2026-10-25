@@ -346,6 +346,7 @@ appendFileSync(
     target_tokens: trimOut.targetTokens ?? target,
     ...(trimOut.overshoot ? { overshoot: trimOut.overshoot } : {}),
     ...(trimOut.tornLines ? { tornLines: trimOut.tornLines } : {}),
+    ...(trimOut.claudeVersion ? { claudeVersion: trimOut.claudeVersion } : {}),
     tail: trimOut.newSessionId,
     ...(deadWake.skipped.length ? { deadWakesSkipped: deadWake.skipped } : {}),
     ...(archived.error ? { archiveError: archived.error } : { archived: archived.path }),
