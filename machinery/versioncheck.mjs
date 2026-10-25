@@ -163,11 +163,15 @@ export const NODE_FLOOR = 22;
 const JOB_SCRIPTS = { nightshift: 'nightshift.mjs', watch: 'watch.mjs' };
 
 /** The two quoted-or-bare words of a systemd ExecStart=, i.e. [node, script]; null if it is not that shape. */
-export function parseExecStart(text) {
+export function parseExecWords(text) {
   const m = /^ExecStart=(.*)$/m.exec(String(text ?? ''));
   if (!m) return null;
   const words = [...m[1].matchAll(/"((?:[^"\\]|\\.)*)"|(\S+)/g)].map((x) => (x[1] ?? x[2]).replace(/%%/g, '%'));
-  return words.length >= 2 ? [words[0], words[1]] : null;
+  return words.length ? words : null;
+}
+export function parseExecStart(text) {
+  const words = parseExecWords(text);
+  return words && words.length >= 2 ? [words[0], words[1]] : null;
 }
 
 /**
