@@ -208,6 +208,16 @@ tick(cfgWarn('warn0', 0));
 check('wakeCostWarn 0 turns it off (90% of the window, nothing)', lines(EVENTS).some((e) => e.kind === 'wake-cost-high' && e.session === 'w-off'), false);
 check('the row still lands with the warning off', lines(join(root, 'ladder', 'wake-costs.jsonl')).some((r) => r.tail === 't-off'), true);
 check('and no wake-cost warning ever sent a notification', lines(SENT).some((m) => JSON.stringify(m).includes('wake-cost')), false);
+// A lane's own contextWindow outranks the model's (Opus's note on #39: windowFor
+// is old code, and nothing pinned this branch of it). 250k is 25% of 1M and
+// stays quiet; with the lane pinned to 400k it is 62.5% and warns, naming 400k.
+const cfgLaneWindow = (name, lane, contextWindow) => { const c = JSON.parse(readFileSync(CONFIG, 'utf8')); const f = join(root, `${name}.config.json`); writeFileSync(f, JSON.stringify({ ...c, lanes: { ...(c.lanes ?? {}), [lane]: { ...(c.lanes?.[lane] ?? {}), contextWindow } } })); return f; };
+wakeWith('t-plain', 'w-plain', 'fable', 'claude-fable-5-1', 250_000, 200_000);
+wakeWith('t-pin', 'w-pin', 'opus', 'claude-opus-5-5', 250_000, 200_000);
+tick(cfgLaneWindow('lanewin', 'opus', 400_000));
+check("a lane's own contextWindow is the window: 250k of a pinned 400k warns, naming 400k",
+  lines(EVENTS).filter((e) => e.kind === 'wake-cost-high' && e.session === 'w-pin').map((e) => [e.window, e.ratio]), [[400_000, 0.625]]);
+check('and another lane on the model default (250k of 1M) stays quiet in the same tick', lines(EVENTS).some((e) => e.kind === 'wake-cost-high' && e.session === 'w-plain'), false);
 
 // An unnamed single-agent hub reads "the main agent"; a failing command never
 // costs the event card.
