@@ -76,6 +76,10 @@ export const DEFAULTS = {
     waitingMs: 15 * 60_000,
     contextWarn: 0.85,
     contextRearm: 0.80,
+    // A wake whose first request is this share of the window warns (amber, no
+    // banner): the ladder and system prompt the fold can't trim keep growing.
+    // 0 turns it off.
+    wakeCostWarn: 0.5,
     // TRANSITIONAL (Ra, 10/12), not policy: amber is the agent's normal
     // operating stream and never needs the keeper, so amber alerts don't
     // notify. While the house is still being built, a lane WITHOUT the midday
