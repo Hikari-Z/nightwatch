@@ -61,6 +61,40 @@ check('a first wake reaches the configured claude (GNU mktemp, paths.claudeBin)'
   } finally { rmSync(hub, { recursive: true, force: true }); }
 });
 
+check('a wake runs the node it was handed (NIGHTWATCH_NODE), never a different one on PATH, and passes it on (10/25)', () => {
+  // The window's shell PATH found Homebrew's Node 20 while the daemon ran 22. Here a decoy `node` sits FIRST
+  // on PATH and leaves a mark if it ever runs; NIGHTWATCH_NODE is a wrapper that logs each use, then runs
+  // the real node. The claude stub records what NIGHTWATCH_NODE it inherited (its hooks and agent shells).
+  const hub = scratchHub({ firstWake: true });
+  try {
+    const decoy = join(hub, 'decoy'); mkdirSync(decoy);
+    writeFileSync(join(decoy, 'node'), `#!/bin/sh\ntouch "${join(hub, 'decoy-ran')}"\nexit 97\n`); chmodSync(join(decoy, 'node'), 0o755);
+    const wrap = join(hub, 'bin', 'node-wrapper');
+    writeFileSync(wrap, `#!/bin/sh\necho "$1" >> "${join(hub, 'wrapper.log')}"\nexec "${process.execPath}" "$@"\n`); chmodSync(wrap, 0o755);
+    writeFileSync(join(hub, 'bin', 'claude-stub'), `#!/bin/sh\nprintf '%s' "\${NIGHTWATCH_NODE-unset}" > "${join(hub, 'claude.node')}"\n`);
+    const r = spawnSync('sh', [join(MACHINERY, 'wake.sh'), 'main'], {
+      env: { ...process.env, WEFT_CONFIG: join(hub, 'nightwatch.config.json'), NIGHTWATCH_NODE: wrap, PATH: `${decoy}:/usr/bin:/bin` },
+      encoding: 'utf8', timeout: 30000,
+    });
+    assert.equal(r.status, 0, `wake.sh exited ${r.status}: ${r.stdout}${r.stderr}`);
+    assert.equal(existsSync(join(hub, 'decoy-ran')), false, 'the PATH node ran');
+    assert.match(readFileSync(join(hub, 'wrapper.log'), 'utf8'), /config\.mjs/, 'the handed node read the config');
+    assert.equal(readFileSync(join(hub, 'claude.node'), 'utf8'), wrap, 'claude did not inherit the handed node');
+  } finally { rmSync(hub, { recursive: true, force: true }); }
+});
+
+check('a hand run without NIGHTWATCH_NODE uses the shell\'s node and exports nothing', () => {
+  const hub = scratchHub({ firstWake: true });
+  try {
+    writeFileSync(join(hub, 'bin', 'claude-stub'), `#!/bin/sh\nprintf '%s' "\${NIGHTWATCH_NODE-unset}" > "${join(hub, 'claude.node')}"\n`);
+    const env = { ...process.env, WEFT_CONFIG: join(hub, 'nightwatch.config.json'), PATH: `${dirname(process.execPath)}:/usr/bin:/bin` };
+    delete env.NIGHTWATCH_NODE;
+    const r = spawnSync('sh', [join(MACHINERY, 'wake.sh'), 'main'], { env, encoding: 'utf8', timeout: 30000 });
+    assert.equal(r.status, 0, `wake.sh exited ${r.status}: ${r.stdout}${r.stderr}`);
+    assert.equal(readFileSync(join(hub, 'claude.node'), 'utf8'), 'unset');
+  } finally { rmSync(hub, { recursive: true, force: true }); }
+});
+
 check('a first wake is not refused as stale, even with a later bell on record', () => {
   const hub = scratchHub({ firstWake: true }, { belledAt: Date.now() + 3_600_000 });
   try {
