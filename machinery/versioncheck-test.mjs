@@ -98,8 +98,18 @@ check('darwin looks as Terminal\'s window does: the user\'s shell, interactive l
   assert.equal(c.bin, '/bin/zsh'); assert.deepEqual(c.args, ['-ilc', 'command -v claude']); assert.match(c.label, /-ilc/);
   assert.equal(lookupCommand({ kind: 'darwin', shell: '/opt/homebrew/bin/fish' }).bin, '/opt/homebrew/bin/fish');
 });
-check('darwin without a usable $SHELL falls back to zsh, still -ilc', () => {
-  for (const shell of [undefined, '', 'zsh']) { const c = lookupCommand({ kind: 'darwin', shell }); assert.equal(c.bin, '/bin/zsh', String(shell)); assert.equal(c.args[0], '-ilc'); }
+check('darwin without a usable shell falls back to zsh, still -ilc', () => {
+  // null, empty and a bare name are unusable. undefined is NOT passed here: it means "use $SHELL", and
+  // the CI runner's $SHELL is /bin/bash, so asserting zsh for it passed on a Mac by coincidence (10/25).
+  for (const shell of [null, '', 'zsh']) { const c = lookupCommand({ kind: 'darwin', shell }); assert.equal(c.bin, '/bin/zsh', String(shell)); assert.equal(c.args[0], '-ilc'); }
+});
+check('darwin with no shell argument looks as the environment\'s $SHELL does', () => {
+  const saved = process.env.SHELL;
+  try {
+    process.env.SHELL = '/bin/bash'; assert.equal(lookupCommand({ kind: 'darwin' }).bin, '/bin/bash');
+    process.env.SHELL = '/bin/zsh'; assert.equal(lookupCommand({ kind: 'darwin' }).bin, '/bin/zsh');
+    delete process.env.SHELL; assert.equal(lookupCommand({ kind: 'darwin' }).bin, '/bin/zsh');
+  } finally { if (saved === undefined) delete process.env.SHELL; else process.env.SHELL = saved; }
 });
 check('linux and wsl look as the window does: sh -lc with the node and configured-claude directories first', () => {
   for (const kind of ['linux', 'wsl']) {
@@ -199,7 +209,9 @@ check('preflight: a version that has woken is ok; no baseline is a note', () => 
 check('preflight: a configured claude that is missing falls through to PATH, and says so', () => {
   const r = preflightLines(rows('2.1.310'), false);
   assert.equal(r.code, 0, r.err);
-  const l = r.lines.find((x) => /claude /.test(x) && /^(ok|WARN|note)/.test(x));
+  // Machine-independent: a box with a claude on PATH says "via PATH"; one without (the CI runner)
+  // says no paths.claudeBin and none on PATH. Either way it is a Doctor line about claude.
+  const l = r.lines.find((x) => /^(ok|WARN|note)\s+claude/.test(x));
   assert.ok(l && /via PATH|no paths\.claudeBin/.test(l), r.lines.join('\n'));
 });
 
