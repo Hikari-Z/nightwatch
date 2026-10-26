@@ -5,7 +5,7 @@
 // Each check goes red when the behaviour it names is reverted.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, existsSync, readFileSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -129,6 +129,23 @@ check('linux and wsl look as the window does: sh -lc with the node and configure
     assert.equal(c.bin, '/bin/sh'); assert.equal(c.args[0], '-lc');
     assert.match(c.args[1], /^PATH="\/home\/u\/\.nvm\/bin:\/home\/u\/\.local\/bin:\$PATH"; command -v claude$/); assert.match(c.label, /sh -lc/);
   }
+});
+// The string above is only matched; run it. The directories are real and each holds a claude that says whose it is, so
+// which one `command -v` finds is the order the lookup puts them in. kind is passed, so this runs the linux/wsl command on
+// any machine (sh -lc is POSIX). Found by marginalia's WSL machine, where the real claude sits beside node (npm into the
+// same nvm bin) and the end-to-end test below assumed none does.
+check('linux and wsl lookups, run: a claude beside node wins over the configured claude\'s directory; with none beside node, the configured one is found', () => {
+  const d = mkdtempSync(join(tmpdir(), 'nw-vc-order-'));
+  try {
+    const nodeDir = join(d, 'nodedir'), cfgDir = join(d, 'cfgdir'), plainNodeDir = join(d, 'plainnode');
+    for (const x of [nodeDir, cfgDir, plainNodeDir]) mkdirSync(x);
+    for (const x of [join(nodeDir, 'claude'), join(cfgDir, 'claude')]) { writeFileSync(x, '#!/bin/sh\n'); chmodSync(x, 0o755); }
+    const find = (kind, nodePath) => { const c = lookupCommand({ kind, nodePath, claudeBin: join(cfgDir, 'claude-missing') }); return spawnSync(c.bin, c.args, { encoding: 'utf8', env: { PATH: '/usr/bin:/bin' } }).stdout.trim(); };
+    for (const kind of ['linux', 'wsl']) {
+      assert.equal(find(kind, join(nodeDir, 'node')), join(nodeDir, 'claude'), `${kind}: node's directory comes first, as the wake window's PATH does`);
+      assert.equal(find(kind, join(plainNodeDir, 'node')), join(cfgDir, 'claude'), `${kind}: with no claude beside node, the configured claude's directory is the next`);
+    }
+  } finally { rmSync(d, { recursive: true, force: true }); }
 });
 check('an unknown platform says it is only Doctor\'s shell, and never claims the window\'s', () => {
   const c = lookupCommand({ kind: 'plan9' }); assert.match(c.label, /Doctor's shell/); assert.doesNotMatch(c.label, /as the wake window runs/);
@@ -393,6 +410,14 @@ function preflightLines(wakeCostsText, claudeBinOk = true, { fallThrough = false
     writeFileSync(join(hub, 'wakecycle', 'nightshift.armed'), ''); // preflight reads it unguarded; empty = disarmed
     writeFileSync(join(hub, 'ladder', 'wake-costs.jsonl'), wakeCostsText);
     let claudeBin = claudeBinOk ? s : join(hub, 'no-such-claude'); let found = null; const extraEnv = {};
+    // On linux and wsl the lookup puts node's own directory first, as the window's PATH does, so a claude installed
+    // beside the test's node (npm into the same nvm bin; marginalia's WSL) would win over the stub below. The fall-through
+    // case therefore runs the preflight under a copy of node in a directory of its own, where no claude sits.
+    let nodeExe = process.execPath, nodeDir = dirname(process.execPath);
+    if (fallThrough && platformKind() !== 'darwin') {
+      nodeDir = join(hub, 'nodebin'); mkdirSync(nodeDir); nodeExe = join(nodeDir, 'node');
+      copyFileSync(process.execPath, nodeExe); chmodSync(nodeExe, 0o755);
+    }
     if (installDir) extraEnv.NW_INSTALL_DIR = installDir; // the bench seam: where this platform's background job files are read from
     if (fallThrough) {
       const bin = join(hub, 'stubbin'); mkdirSync(bin);
@@ -406,9 +431,9 @@ function preflightLines(wakeCostsText, claudeBinOk = true, { fallThrough = false
     const cfg = { weftRoot: hub, defaultLane: 'main', lanes: { main: { targetTokens: 250000 } }, notify: { macos: false },
       paths: { workdir: hub, machinery: MACHINERY, transcripts: join(hub, 'projects'), sessions: join(hub, 'sessions'), claudeBin } };
     writeFileSync(join(hub, 'nightwatch.config.json'), JSON.stringify(cfg));
-    const env = { ...process.env, ...extraEnv, WEFT_CONFIG: join(hub, 'nightwatch.config.json'), PATH: `${dirname(process.execPath)}:/usr/bin:/bin` };
+    const env = { ...process.env, ...extraEnv, WEFT_CONFIG: join(hub, 'nightwatch.config.json'), PATH: `${nodeDir}:/usr/bin:/bin` };
     for (const k of ['NIGHTWATCH_CONFIG', 'WEFT_LANE', 'NIGHTWATCH_LANE']) delete env[k];
-    const r = spawnSync(process.execPath, [join(MACHINERY, 'nightshift.mjs'), '--preflight'], { env, encoding: 'utf8', timeout: 60000 });
+    const r = spawnSync(nodeExe, [join(MACHINERY, 'nightshift.mjs'), '--preflight'], { env, encoding: 'utf8', timeout: 60000 });
     return { code: r.status, lines: r.stdout.split('\n'), err: r.stderr, stub: s, found };
   } finally { rmSync(hub, { recursive: true, force: true }); }
 }
