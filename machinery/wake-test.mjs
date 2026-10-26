@@ -24,7 +24,7 @@ function check(name, fn) {
 }
 
 /** A scratch hub with one lane and a stub claude. `receipt` is next-wake's JSON. */
-function scratchHub(receipt, { belledAt } = {}) {
+function scratchHub(receipt, { belledAt, lane = {} } = {}) {
   const hub = mkdtempSync(join(tmpdir(), 'nw-wake-'));
   mkdirSync(join(hub, 'wakecycle'), { recursive: true });
   mkdirSync(join(hub, 'ladder'), { recursive: true });
@@ -34,7 +34,7 @@ function scratchHub(receipt, { belledAt } = {}) {
   chmodSync(stub, 0o755);
   writeFileSync(join(hub, 'checkpoint.md'), '# checkpoint\n');
   const cfg = {
-    weftRoot: hub, defaultLane: 'main', lanes: { main: { targetTokens: 250000 } },
+    weftRoot: hub, defaultLane: 'main', lanes: { main: { targetTokens: 250000, ...lane } },
     paths: { workdir: hub, machinery: MACHINERY, claudeBin: stub },
   };
   writeFileSync(join(hub, 'nightwatch.config.json'), JSON.stringify(cfg));
@@ -176,6 +176,62 @@ for (const [what, shim] of [['cp', 'case "$*" in *last-head*) exit 1;; esac\nexe
     } finally { rmSync(hub, { recursive: true, force: true }); }
   });
 }
+
+// The wake prompt (lanes.<name>.wakePrompt): claude's positional prompt, the woken session's first user
+// turn, so a lane starts its morning without a human typing. The stub writes one argv element per line.
+const argvOf = (hub) => readFileSync(join(hub, 'claude.argv'), 'utf8').replace(/\n$/, '').split('\n');
+const WAKE_PROMPT = `[nightwatch] it's "10:00": arm $NIGHTWATCH_LANE's watcher, then \`date\` and the receipts`;
+for (const [what, receipt] of [['first wake', { firstWake: true }], ['resumed wake', { sessionId: '00000000-0000-0000-0000-000000000002' }]]) {
+  check(`a ${what} with no wakePrompt passes no prompt: the argv ends at the flags, as before`, () => {
+    const hub = scratchHub(receipt);
+    try {
+      const r = runWake(hub);
+      assert.equal(r.status, 0, `wake.sh exited ${r.status}: ${r.stdout}${r.stderr}`);
+      assert.deepEqual(argvOf(hub).slice(-2), ['--system-prompt-snapshot', 'off']);
+    } finally { rmSync(hub, { recursive: true, force: true }); }
+  });
+  check(`a ${what} with a wakePrompt passes it last, as one argument, quote and $ and backticks as written`, () => {
+    const hub = scratchHub(receipt, { lane: { wakePrompt: WAKE_PROMPT } });
+    try {
+      const r = runWake(hub);
+      assert.equal(r.status, 0, `wake.sh exited ${r.status}: ${r.stdout}${r.stderr}`);
+      const argv = argvOf(hub);
+      assert.deepEqual(argv.slice(-3), ['--system-prompt-snapshot', 'off', WAKE_PROMPT]);
+      if (receipt.sessionId) assert.deepEqual(argv.slice(0, 3), ['--resume', receipt.sessionId, '--fork-session']);
+    } finally { rmSync(hub, { recursive: true, force: true }); }
+  });
+}
+// A wakePrompt claude would misread is refused, logged, and the wake goes on without it (Opus's asks on #53):
+// a hand-edited non-string (`get` would stringify 42 into the prompt "42"), a leading "-" (a flag), and a
+// bare word (claude could run it as a subcommand: "doctor", "update").
+for (const [what, bad, why] of [['a number', 42, /it is a number, not text/], ['a leading "-"', '--dangerously-skip-permissions now', /starts with "-"/], ['a bare word', 'doctor', /single bare word/]]) {
+  check(`a wakePrompt that is ${what} is ignored with a log line, and the wake still launches without a prompt`, () => {
+    const hub = scratchHub({ firstWake: true }, { lane: { wakePrompt: bad } });
+    try {
+      const r = runWake(hub);
+      assert.equal(r.status, 0, `wake.sh exited ${r.status}: ${r.stdout}${r.stderr}`);
+      assert.deepEqual(argvOf(hub).slice(-2), ['--system-prompt-snapshot', 'off']);
+      const log = readFileSync(join(hub, 'nightshift.log'), 'utf8');
+      assert.match(log, /lanes\.main\.wakePrompt ignored/); assert.match(log, why);
+    } finally { rmSync(hub, { recursive: true, force: true }); }
+  });
+}
+
+// The app's write side: config.mjs `set` goes through the LANE_KEYS whitelist, so wakePrompt must be on it
+// (the mutant that dropped it survived #53's first read), and it takes text, not a number.
+check('config.mjs set writes lanes.<name>.wakePrompt as text and refuses a number', () => {
+  const hub = scratchHub({ firstWake: true });
+  const cfgFile = join(hub, 'nightwatch.config.json');
+  const cli = (...a) => spawnSync(process.execPath, [join(MACHINERY, 'config.mjs'), ...a], { env: { ...process.env, NIGHTWATCH_CONFIG: cfgFile, WEFT_CONFIG: cfgFile }, encoding: 'utf8' });
+  try {
+    const ok = cli('set', 'lanes.main.wakePrompt', '[nightwatch] woken: arm your watcher');
+    assert.equal(ok.status, 0, ok.stderr);
+    assert.equal(JSON.parse(readFileSync(cfgFile, 'utf8')).lanes.main.wakePrompt, '[nightwatch] woken: arm your watcher');
+    const no = cli('set', 'lanes.main.wakePrompt', '42');
+    assert.equal(no.status, 1); assert.match(no.stderr, /takes a string/);
+    assert.equal(JSON.parse(readFileSync(cfgFile, 'utf8')).lanes.main.wakePrompt, '[nightwatch] woken: arm your watcher', 'a refused set wrote anyway');
+  } finally { rmSync(hub, { recursive: true, force: true }); }
+});
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -243,6 +243,37 @@ set +e
 set -- --append-system-prompt-file "$HEAD" --system-prompt-snapshot off
 [ -n "$MODEL" ] && set -- --model "$MODEL" "$@"
 [ -z "$FIRSTWAKE" ] && set -- --resume "$SID" --fork-session "$@"
+# The lane's wake prompt (lanes.<name>.wakePrompt; unset = no prompt, today's
+# behavior): claude's positional [prompt], so it is the woken session's first
+# user turn and the lane starts its morning on its own instead of idling at
+# the input until a human types (10/26: a 10:00 wake sat an hour, its mail
+# unheard). An argument on this command line, not keystrokes sent after
+# launch, which would race startup and a human's first key (Opus's read).
+# One argv element, so a quote or a $ in the text reaches claude as written.
+# The text should be plainly machine-voiced ("[nightwatch] …"): it is input
+# to the lane, never anything speaking as the persona or its person.
+# Read typed, not through `get` (which stringifies, so a hand-edited 42 would
+# reach claude as the prompt "42"). Claude reads its first positional as the
+# prompt, so text starting with "-" would parse as a flag, and a bare word
+# that names a subcommand ("doctor", "update") would run that instead of the
+# session (Opus's read of claude --help). Those are refused: logged, and the
+# wake goes on without a prompt, because a bad optional knob must not cost the
+# morning.
+WAKE_PROMPT="$("$NODE" -e '
+import(process.argv[1]).then((m) => {
+  const v = m.loadConfig().lanes?.[process.argv[2]]?.wakePrompt;
+  if (v === undefined || v === "") return;
+  const why = typeof v !== "string" ? `it is a ${typeof v}, not text`
+    : /^\s*-/.test(v) ? "it starts with \"-\", which claude would read as a flag"
+    : !/\s/.test(v.trim()) ? "it is a single bare word, which claude could read as a subcommand"
+    : null;
+  if (why) { console.log(`REFUSED ${why}`); process.exitCode = 3; } else process.stdout.write(v);
+});' "file://$WAKECYCLE_DIR/config.mjs" "$LANE" 2>/dev/null)"
+case $? in
+  0) [ -n "$WAKE_PROMPT" ] && set -- "$@" "$WAKE_PROMPT" ;;
+  3) echo "$(date -u +%Y-%m-%dT%H:%M:%S.000Z) wake for $LANE: lanes.$LANE.wakePrompt ignored (${WAKE_PROMPT#REFUSED }); waking without a prompt" >> "$WEFT_LOG" ;;
+  *) echo "$(date -u +%Y-%m-%dT%H:%M:%S.000Z) wake for $LANE: couldn't read lanes.$LANE.wakePrompt; waking without a prompt" >> "$WEFT_LOG" ;;
+esac
 # Insurance hatch until the waited child is proven against REAL interactive
 # claude (the bench's claude is a stub): WEFT_WAKE_EXEC=1 restores the old
 # exec launch — no stderr capture, no model-death discrimination.
