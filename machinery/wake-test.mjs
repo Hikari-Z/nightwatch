@@ -201,6 +201,37 @@ for (const [what, receipt] of [['first wake', { firstWake: true }], ['resumed wa
     } finally { rmSync(hub, { recursive: true, force: true }); }
   });
 }
+// A wakePrompt claude would misread is refused, logged, and the wake goes on without it (Opus's asks on #53):
+// a hand-edited non-string (`get` would stringify 42 into the prompt "42"), a leading "-" (a flag), and a
+// bare word (claude could run it as a subcommand: "doctor", "update").
+for (const [what, bad, why] of [['a number', 42, /it is a number, not text/], ['a leading "-"', '--dangerously-skip-permissions now', /starts with "-"/], ['a bare word', 'doctor', /single bare word/]]) {
+  check(`a wakePrompt that is ${what} is ignored with a log line, and the wake still launches without a prompt`, () => {
+    const hub = scratchHub({ firstWake: true }, { lane: { wakePrompt: bad } });
+    try {
+      const r = runWake(hub);
+      assert.equal(r.status, 0, `wake.sh exited ${r.status}: ${r.stdout}${r.stderr}`);
+      assert.deepEqual(argvOf(hub).slice(-2), ['--system-prompt-snapshot', 'off']);
+      const log = readFileSync(join(hub, 'nightshift.log'), 'utf8');
+      assert.match(log, /lanes\.main\.wakePrompt ignored/); assert.match(log, why);
+    } finally { rmSync(hub, { recursive: true, force: true }); }
+  });
+}
+
+// The app's write side: config.mjs `set` goes through the LANE_KEYS whitelist, so wakePrompt must be on it
+// (the mutant that dropped it survived #53's first read), and it takes text, not a number.
+check('config.mjs set writes lanes.<name>.wakePrompt as text and refuses a number', () => {
+  const hub = scratchHub({ firstWake: true });
+  const cfgFile = join(hub, 'nightwatch.config.json');
+  const cli = (...a) => spawnSync(process.execPath, [join(MACHINERY, 'config.mjs'), ...a], { env: { ...process.env, NIGHTWATCH_CONFIG: cfgFile, WEFT_CONFIG: cfgFile }, encoding: 'utf8' });
+  try {
+    const ok = cli('set', 'lanes.main.wakePrompt', '[nightwatch] woken: arm your watcher');
+    assert.equal(ok.status, 0, ok.stderr);
+    assert.equal(JSON.parse(readFileSync(cfgFile, 'utf8')).lanes.main.wakePrompt, '[nightwatch] woken: arm your watcher');
+    const no = cli('set', 'lanes.main.wakePrompt', '42');
+    assert.equal(no.status, 1); assert.match(no.stderr, /takes a string/);
+    assert.equal(JSON.parse(readFileSync(cfgFile, 'utf8')).lanes.main.wakePrompt, '[nightwatch] woken: arm your watcher', 'a refused set wrote anyway');
+  } finally { rmSync(hub, { recursive: true, force: true }); }
+});
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

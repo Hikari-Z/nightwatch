@@ -165,7 +165,10 @@ covers them, but treat the first night as a trial and read its log.
   e.g. `"[nightwatch] woken at 10:00: arm your watcher, then read the
   receipts"`. Unset, a woken session waits at the input until someone
   types, and hears no mail until then. Keep it machine-voiced: it's the
-  harness talking, not you or the agent.
+  harness talking, not you or the agent. It's claude's first positional
+  argument, so wake.sh skips (and logs) text that isn't a string, starts
+  with "-" (a flag), or is a single bare word (claude could run it as a
+  subcommand); the wake goes on without a prompt.
 
 ## The watch: hearing when an agent is stuck
 
