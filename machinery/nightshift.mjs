@@ -43,9 +43,11 @@ const HOME = homedir();
 // like a render, an encode, a daemon a hand started.
 // The interim heartbeat (10/23, marginalia's pattern, while nightwatch#38 lands) is plumbing too: a lane arms
 // `sleep 7200; echo "heartbeat: …"` as a background task, and on 10/25 it held Ra's Fold now for the fable lane
-// twice. Only that exact shape counts, a sleep whose next act is the heartbeat echo; a sleep followed by real
-// work, or a bare sleep, still defers.
-export const INFRA_PROCESS = /mcpl|cc-sock|bridge|inbox-watcher|bell-watcher|caffeinate|\bsleep \d+; *echo "heartbeat:/;
+// twice. Only that shape counts: a sleep, then (`;` or `&&`) an echo whose word is `heartbeat`, and nothing after
+// the echo (the eval's closing quote, or the line's end). A sleep followed by any other echo or real work, a
+// heartbeat echo followed by more commands, or a bare sleep, still defers. The bare `echo heartbeat` is the
+// spelling nightwatch#38 documents for other houses; `'"'"'` is how Claude Code wraps a single quote.
+export const INFRA_PROCESS = /mcpl|cc-sock|bridge|inbox-watcher|bell-watcher|caffeinate|\bsleep \d+ *(?:;|&&) *echo (?:"|'"'"'|')?heartbeat\b[^;&|]*(?:'|$)/;
 // One config, one truth (item E; the 10/5 decoy-checkpoint failure is the
 // receipt). Env overrides are applied INSIDE the loader, so the pre-E
 // spellings (WEFT_NIGHT_SLEEP etc.) keep working without a second ?? chain
@@ -1469,7 +1471,12 @@ async function rehearse() {
     check('infra-filter', 'the inbox watcher is plumbing', INFRA_PROCESS.test('/bin/bash ./inbox-watcher.sh fable'));
     check('infra-filter', "the lane's own bell watcher is plumbing", INFRA_PROCESS.test('/bin/zsh -c source /x/shell-snapshots/s.sh && sh /Users/x/nightwatch/machinery/bell-watcher.sh main'));
     check('infra-filter', 'the interim heartbeat is plumbing (the command line a lane really runs, 10/25)', INFRA_PROCESS.test(`/bin/zsh -c source /Users/x/.claude/shell-snapshots/snapshot-zsh-1-a.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && eval 'sleep 7200; echo "heartbeat: 2h elapsed, re-arm me and glance at the spool"' < /dev/null && pwd -P >| /tmp/claude-x-cwd`));
-    check('infra-filter', 'a sleep before real work is still work', !INFRA_PROCESS.test(`/bin/zsh -c source /x/s.sh && eval 'sleep 30; npm test' < /dev/null`));
+    const W = (c) => `/bin/zsh -c source /x/.claude/shell-snapshots/s.sh 2>/dev/null || true && eval '${c}' < /dev/null && pwd -P >| /tmp/claude-x-cwd`;
+    check('infra-filter', 'the heartbeat spelling nightwatch#38 documents is plumbing', INFRA_PROCESS.test(W('sleep 7200; echo heartbeat')));
+    check('infra-filter', 'a heartbeat joined with && is plumbing', INFRA_PROCESS.test(W('sleep 7200 && echo "heartbeat: x"')));
+    check('infra-filter', 'a sleep before real work is still work', !INFRA_PROCESS.test(W('sleep 30; npm test')));
+    check('infra-filter', 'a sleep, another echo, then real work is still work (second reader\'s blocking case)', !INFRA_PROCESS.test(W('sleep 5; echo starting; npm test')));
+    check('infra-filter', 'a heartbeat echo with more commands after it is still work', !INFRA_PROCESS.test(W('sleep 60; echo "heartbeat: x"; make')));
     check('infra-filter', 'a bare sleep is still work', !INFRA_PROCESS.test('sleep 7200'));
     check('infra-filter', 'a render is real work', !INFRA_PROCESS.test('node render.mjs --frames 0-8160'));
     check('infra-filter', 'a hand-started daemon is real work', !INFRA_PROCESS.test('node /Users/x/nightwatch/machinery/nightshift.mjs'));
