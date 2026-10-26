@@ -344,6 +344,9 @@ const LANE_KEYS = {
   // so the model never changes out from under the agent (Ra's ruling 2,
   // 10/6). modelName above stays the human-facing display label.
   model: 'string',
+  // The first prompt a wake sends (wake.sh): present = the woken session
+  // starts its own morning. Absent = no prompt, the session waits for a human.
+  wakePrompt: 'string',
   schedule: { sleep: 'time', wake: 'time' },
   // The midday cycle (Ra, 10/12): present = on for this lane. A soft bell at
   // softPct of the window (no timer: the agent's own fold is its "ready"),

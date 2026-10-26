@@ -24,7 +24,7 @@ function check(name, fn) {
 }
 
 /** A scratch hub with one lane and a stub claude. `receipt` is next-wake's JSON. */
-function scratchHub(receipt, { belledAt } = {}) {
+function scratchHub(receipt, { belledAt, lane = {} } = {}) {
   const hub = mkdtempSync(join(tmpdir(), 'nw-wake-'));
   mkdirSync(join(hub, 'wakecycle'), { recursive: true });
   mkdirSync(join(hub, 'ladder'), { recursive: true });
@@ -34,7 +34,7 @@ function scratchHub(receipt, { belledAt } = {}) {
   chmodSync(stub, 0o755);
   writeFileSync(join(hub, 'checkpoint.md'), '# checkpoint\n');
   const cfg = {
-    weftRoot: hub, defaultLane: 'main', lanes: { main: { targetTokens: 250000 } },
+    weftRoot: hub, defaultLane: 'main', lanes: { main: { targetTokens: 250000, ...lane } },
     paths: { workdir: hub, machinery: MACHINERY, claudeBin: stub },
   };
   writeFileSync(join(hub, 'nightwatch.config.json'), JSON.stringify(cfg));
@@ -173,6 +173,31 @@ for (const [what, shim] of [['cp', 'case "$*" in *last-head*) exit 1;; esac\nexe
       assert.match(readFileSync(join(hub, 'nightshift.log'), 'utf8'), /wake receipt: main lane reached exec/);
       assert.ok(!existsSync(join(hub, 'wakecycle', 'last-head.main')), 'nothing was saved');
       assert.deepEqual(readdirSync(join(hub, 'wakecycle')).filter((f) => f.includes('.tmp.')), [], 'and no temp file was left behind');
+    } finally { rmSync(hub, { recursive: true, force: true }); }
+  });
+}
+
+// The wake prompt (lanes.<name>.wakePrompt): claude's positional prompt, the woken session's first user
+// turn, so a lane starts its morning without a human typing. The stub writes one argv element per line.
+const argvOf = (hub) => readFileSync(join(hub, 'claude.argv'), 'utf8').replace(/\n$/, '').split('\n');
+const WAKE_PROMPT = `[nightwatch] it's "10:00": arm $NIGHTWATCH_LANE's watcher, then \`date\` and the receipts`;
+for (const [what, receipt] of [['first wake', { firstWake: true }], ['resumed wake', { sessionId: '00000000-0000-0000-0000-000000000002' }]]) {
+  check(`a ${what} with no wakePrompt passes no prompt: the argv ends at the flags, as before`, () => {
+    const hub = scratchHub(receipt);
+    try {
+      const r = runWake(hub);
+      assert.equal(r.status, 0, `wake.sh exited ${r.status}: ${r.stdout}${r.stderr}`);
+      assert.deepEqual(argvOf(hub).slice(-2), ['--system-prompt-snapshot', 'off']);
+    } finally { rmSync(hub, { recursive: true, force: true }); }
+  });
+  check(`a ${what} with a wakePrompt passes it last, as one argument, quote and $ and backticks as written`, () => {
+    const hub = scratchHub(receipt, { lane: { wakePrompt: WAKE_PROMPT } });
+    try {
+      const r = runWake(hub);
+      assert.equal(r.status, 0, `wake.sh exited ${r.status}: ${r.stdout}${r.stderr}`);
+      const argv = argvOf(hub);
+      assert.deepEqual(argv.slice(-3), ['--system-prompt-snapshot', 'off', WAKE_PROMPT]);
+      if (receipt.sessionId) assert.deepEqual(argv.slice(0, 3), ['--resume', receipt.sessionId, '--fork-session']);
     } finally { rmSync(hub, { recursive: true, force: true }); }
   });
 }

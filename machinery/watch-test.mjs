@@ -254,12 +254,14 @@ const NEW10 = mkLines('today', 10);           // what only today's head has
 const TODAY = OLD + NEW10;                    // today's head: 30 lines, 10 of them discriminating
 const setMtime = (f, msAgo) => utimesSync(f, new Date(now - msAgo), new Date(now - msAgo));
 const shapeEntry = (sid, text, atMs = now - 25 * 60_000) => ({ type: 'api-request-shape', sessionId: sid, timestamp: iso(atMs), version: '2.1.310', shapeHash: `h-${sid}`, shape: { system: [{ type: 'text', text: 'You are Claude Code' }, { type: 'text', text }], tools: [] } });
-const headCase = (id, { system, shapeSid, head = TODAY, headAgoMin = 30, receipt, cp, cpAgoMin, prev = OLD, prevWhere = 'projects', prevSid }) => {
+const headCase = (id, { system, shapeSid, head = TODAY, headAgoMin = 30, receipt, cp, cpAgoMin, prev = OLD, prevWhere = 'projects', prevSid, wakePrompt }) => {
   for (const f of [HEADFILE, RECEIPT, CPFILE]) rmSync(f, { force: true });
   const t = `t-hw-${id}`, w = `w-hw-${id}`;
   const te = [{ type: 'user', uuid: `${t}-u1`, timestamp: iso(now - 3 * 3600_000), message: { role: 'user', content: t } }];
   write(t, te);
-  write(w, [...te, ...(system === undefined ? [] : [shapeEntry(shapeSid ?? w, system)]),
+  // A wake prompt (lanes.<name>.wakePrompt) is the woken session's first user turn, after the forked tail.
+  const wp = wakePrompt === undefined ? [] : [{ type: 'user', uuid: `${w}-wp`, timestamp: iso(now - 26 * 60_000), message: { role: 'user', content: wakePrompt } }];
+  write(w, [...te, ...wp, ...(system === undefined ? [] : [shapeEntry(shapeSid ?? w, system)]),
     { type: 'assistant', uuid: `${w}-a1`, timestamp: iso(now - 20 * 60_000), message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'text', text: 'up' }], usage: { input_tokens: 1, cache_read_input_tokens: 99_999 } }, version: '2.1.310' }]);
   // The folded (previous) session, whose own first api-request-shape is the previous wake's prompt (fold() names it src-<tail>).
   if (prev !== null) {
@@ -281,6 +283,14 @@ const has = (row, k) => row !== undefined && k in row;
 let c = headCase('exact', { system: `boilerplate\n${TODAY}\nmore` }); tick();
 check('a prompt carrying the whole head: headMatch 1, headFresh 1 over the 10 discriminating lines, quiet',
   [rowOf(c.t)?.headMatch, rowOf(c.t)?.headFresh, rowOf(c.t)?.headDisc, rowOf(c.t)?.headRef, headEvents(c.w).length], [1, 1, 10, 'saved-head', 0]);
+
+// A wake prompt is a user turn, not part of the system blocks the witness reads, so turning it on moves
+// neither the head's scores nor the first request's cost (Opus's ask on the wake-prompt PR).
+const scoresOf = (t) => { const r = rowOf(t); return r && [r.headMatch, r.headFresh, r.headDisc, r.headRef, r.firstRequestTokens]; };
+const offT = c.t;
+c = headCase('exact-wp', { system: `boilerplate\n${TODAY}\nmore`, wakePrompt: '[nightwatch] woken at 10:00: arm your watcher, then read the receipts' }); tick();
+check('a wake with a wakePrompt scores its head exactly as one without (headMatch, headFresh, headDisc, ref, first-request tokens), quiet',
+  [scoresOf(c.t), headEvents(c.w).length], [scoresOf(offT), 0]);
 
 // The case that motivated the change: yesterday's prompt re-sent. 20 of 30 lines match, but with a longer
 // standing part the full share clears 0.9, and ONLY the discriminating share convicts.

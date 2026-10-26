@@ -243,6 +243,17 @@ set +e
 set -- --append-system-prompt-file "$HEAD" --system-prompt-snapshot off
 [ -n "$MODEL" ] && set -- --model "$MODEL" "$@"
 [ -z "$FIRSTWAKE" ] && set -- --resume "$SID" --fork-session "$@"
+# The lane's wake prompt (lanes.<name>.wakePrompt; unset = no prompt, today's
+# behavior): claude's positional [prompt], so it is the woken session's first
+# user turn and the lane starts its morning on its own instead of idling at
+# the input until a human types (10/26: a 10:00 wake sat an hour, its mail
+# unheard). An argument on this command line, not keystrokes sent after
+# launch, which would race startup and a human's first key (Opus's read).
+# One argv element, so a quote or a $ in the text reaches claude as written.
+# The text should be plainly machine-voiced ("[nightwatch] …"): it is input
+# to the lane, never anything speaking as the persona or its person.
+WAKE_PROMPT="$("$NODE" "$WAKECYCLE_DIR/config.mjs" get "lanes.$LANE.wakePrompt" 2>/dev/null)" || WAKE_PROMPT=""
+[ -n "$WAKE_PROMPT" ] && set -- "$@" "$WAKE_PROMPT"
 # Insurance hatch until the waited child is proven against REAL interactive
 # claude (the bench's claude is a stub): WEFT_WAKE_EXEC=1 restores the old
 # exec launch — no stderr capture, no model-death discrimination.
