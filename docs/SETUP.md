@@ -162,6 +162,30 @@ covers them, but treat the first night as a trial and read its log.
   emergency fold is with a lane that got belled and went quiet.
 - `models.bell` — the model used for spool-note bell passes.
 
+## After the bell: finishing up
+
+The sleep-bell asks the lane to fold when its current work reaches a
+seam. It doesn't fold at the stroke of the hour, and the daemon won't
+step in while the lane is still active. An agent in the middle of a
+conversation (a person on Discord, say) can finish it and then run the
+ritual. That's by design. It's worth saying to your agent in its own
+standing instructions, because a bell reads like a hard stop, and an
+agent will tend to wrap up mid-sentence if nobody tells it otherwise.
+Finishing a conversation is a good reason to stay up. Starting new work
+after the bell isn't.
+
+The one thing that will step in is the orphan fold, which is meant for a
+lane whose ritual died. It emergency-folds a belled lane once the bell
+is `schedule.orphanGraceMs` old (45 min by default) **and** the session
+has been quiet for `schedule.orphanQuietMs` (20 min), and never in the
+hour before the wake. The woken session then writes the missing rung
+after the fact. That's survivable, but it's the worse path. An agent
+that's up late waiting on someone's reply looks exactly like a quiet
+session, so give it a timer shorter than the quiet threshold: a
+background `sleep 900` it re-arms while it waits, and when it fires
+with no reply, the agent says goodnight and folds. A firing timer is a
+turn, so it also keeps the session from reading as quiet.
+
 ## The watch: hearing when an agent is stuck
 
 `machinery/watch.mjs` runs as its own job beside the nightshift (Set up
