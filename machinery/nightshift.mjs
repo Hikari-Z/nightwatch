@@ -1005,8 +1005,12 @@ async function rehearse() {
         const s = w.sessions.find((x) => x.sessionId === sid);
         return s ? { lane: s.lane, grade: s.grade ?? 'registry' } : null;
       },
+      // A session's registry stamp: its bornAt, when the scenario gives one.
+      sessionStartedAt: (sid) => w.sessions.find((s) => s.sessionId === sid)?.bornAt ?? null,
       ringBell: (lane, sid) => { w.events.push(`bell:${lane}@${w.day}d${fmt(w.min)}`); (w.bellSids ??= []).push(sid); },
-      quietMs: (sid) => w.sessions.find((s) => s.sessionId === sid)?.quietMs ?? 0,
+      // A session gone from the list reads as its transcript's age does live:
+      // quiet since it ended, when the scenario says how long (w.goneQuietMs).
+      quietMs: (sid) => w.sessions.find((s) => s.sessionId === sid)?.quietMs ?? w.goneQuietMs ?? 0,
       nextWakeMtime: (lane) => w.nextWake[lane] ?? 0,
       closePid: (pid) => {
         w.events.push(`close:${w.sessions.find((s) => s.pid === pid)?.lane}@${w.day}d${fmt(w.min)}`);
@@ -1024,7 +1028,10 @@ async function rehearse() {
       cannotAnswer: (sid) => !!w.deadWakes?.[sid],
       busyChildren: () => w.busy ?? [],
       killAndWait: (pid) => { w.sessions = w.sessions.filter((s) => s.pid !== pid); return true; },
-      emergencyFold: (lane, sid) => { w.events.push(`orphanfold:${lane}@${w.day}d${fmt(w.min)}`); w.ms = (w.ms ?? 0) + 1; w.nextWake[lane] = w.io.now(); return true; },
+      emergencyFold: (lane, sid) => {
+        if (w.foldRefuses) { w.events.push(`orphanfold-failed:${lane}@${w.day}d${fmt(w.min)}`); return false; } // the trim's output check, refusing (#56)
+        w.events.push(`orphanfold:${lane}@${w.day}d${fmt(w.min)}`); w.ms = (w.ms ?? 0) + 1; w.nextWake[lane] = w.io.now(); return true;
+      },
       log: (line) => w.logs.push(line),
     };
     w.step = (minutes = 1) => {
@@ -1390,6 +1397,49 @@ async function rehearse() {
     w.step(2);
     check('manual-bell', 'a heard out-of-window bell closes when slept and quiet', count(w, 'close:fable') === 1, w.events.join());
     check('manual-bell', 'and never orphan-folds', count(w, 'orphanfold:') === 0, w.events.join());
+  }
+
+  { // #56 (10/27): a woken session ran the ritual for the session before it
+    // (the fold postdates its start), then stayed open with Ra past the bell.
+    // Belling it can't fold anything: no bell, close when quiet, wake at 08:00.
+    const w = makeWorld(['fable']);
+    w.step(3 * 60 + 40); // 19:00 → 22:40
+    w.sessions = [{ pid: 41, sessionId: 'sess-woken', lane: 'fable', quietMs: 0, bornAt: w.io.now() }];
+    w.step(5);
+    w.nextWake.fable = w.io.now(); // 22:45: its ritual's fold lands
+    w.step(3 * 60 + 20); // → 02:05, the session still open and busy
+    check('slept-elsewhere', 'no bell rung into a session the lane already slept from', count(w, 'bell:') === 0, w.events.join());
+    check('slept-elsewhere', 'said so in the log', w.logs.some((l) => l.startsWith('NO BELL: fable')), w.logs.join(' | '));
+    w.sessions[0].quietMs = 60 * 60_000; // Ra exits at 03:1x; it goes quiet
+    w.step(4 * 60);
+    check('slept-elsewhere', 'never orphan-folds it', count(w, 'orphanfold') === 0, w.events.join());
+    check('slept-elsewhere', 'closes it as a slept panel', count(w, 'close:fable') === 1, w.events.join());
+    w.step(2 * 60 + 5); // → 08:10
+    check('slept-elsewhere', 'the morning wake takes that fold', count(w, 'wake:fable') === 1 && !w.logs.some((l) => l.startsWith('BELLED BUT NEVER FOLDED')), w.logs.join(' | '));
+  }
+
+  { // #56: a belled session the lane has moved on from (woken by hand on a
+    // new session) gets no orphan fold: nothing is left to catch.
+    const w = makeWorld(['fable']);
+    w.sessions = [{ pid: 42, sessionId: 'sess-old', lane: 'fable', quietMs: 0 }];
+    w.step(7 * 60 + 1); // → 02:01, belled
+    check('moved-on', 'the premise: the old session was belled', count(w, 'bell:fable') === 1, w.events.join());
+    w.sessions[0].quietMs = 10 * 3600_000;
+    w.sessions.push({ pid: 43, sessionId: 'sess-new', lane: 'fable', quietMs: 0, bornAt: w.io.now() + 1 });
+    w.step(3 * 60);
+    check('moved-on', 'no orphan fold of the session left behind', count(w, 'orphanfold') === 0, w.events.join());
+  }
+
+  { // #56: an orphan fold that's refused (10/27: the trim's output check,
+    // every minute, two alarms a time) stops after three, saying so once.
+    const w = makeWorld(['fable']);
+    w.sessions = [{ pid: 44, sessionId: 'sess-f', lane: 'fable', quietMs: 10 * 3600_000 }];
+    w.foldRefuses = true;
+    w.goneQuietMs = 10 * 3600_000; // its panel closed by the first try, its transcript quiet
+    w.step(7 * 60 + 1); // → 02:01, belled, unheard
+    w.step(3 * 60);
+    check('fold-refused', 'three tries, then no more', count(w, 'orphanfold-failed:fable') === 3, w.events.join());
+    check('fold-refused', 'gave up once, in the log', w.logs.filter((l) => l.startsWith('ORPHAN FOLD GAVE UP: fable')).length === 1, w.logs.join(' | '));
   }
 
   { // Ra's spec (10/9): a DISARMED agent put to sleep stays asleep until
