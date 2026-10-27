@@ -54,6 +54,10 @@ export const DEFAULTS = {
     orphanQuietMs: 20 * 60_000,
     orphanGraceMs: 45 * 60_000,
     windowGapMs: 16 * 3600_000,
+    // Sleep now at or past this share of the window folds without a bell:
+    // the ritual a bell asks for needs room, and at 98% the note itself
+    // pushed a session to 100%, where it could answer nothing (nightwatch#56).
+    sleepNowFoldPct: 0.95,
   },
   models: {
     bell: 'claude-haiku-4-5-20251001',
@@ -316,6 +320,27 @@ export function hublessConfig() {
 // the house (lanes[].switchboard: true). Falls back to defaultLane so a
 // config without the flag still has a single answer. One truth, asked of
 // the config — never a lane name spelled in a daemon (E-polish, 10/6).
+// A lane's context window: its own `contextWindow`, else by the model family
+// that answered. Shared by the watch and Sleep now (nightwatch#56).
+export function windowForLane(cfg, lane, model) {
+  const own = cfg.lanes?.[lane]?.contextWindow;
+  if (own) return own;
+  if (!model) return null;
+  if (/haiku/.test(model)) return 200_000;
+  if (/^claude-(fable|mythos|opus|sonnet)-/.test(model)) return 1_000_000;
+  return null;
+}
+
+/** The newest real reply's input side against the lane's window, or null. */
+export function contextOfEntries(cfg, lane, entries) {
+  const reply = [...entries].reverse().find((e) => e?.type === 'assistant' && e.message?.usage && !e.isApiErrorMessage);
+  const u = reply?.message?.usage;
+  const window = windowForLane(cfg, lane, reply?.message?.model);
+  if (!u || !window) return null;
+  const tokens = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+  return { ratio: tokens / window, tokens, window };
+}
+
 export function switchboardLane(cfg) {
   for (const [name, lc] of Object.entries(cfg.lanes)) if (lc && lc.switchboard) return name;
   return cfg.defaultLane;

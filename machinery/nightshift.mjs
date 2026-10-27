@@ -30,7 +30,7 @@ import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { configEnv, loadConfig, reloadConfig, switchboardLane } from './config.mjs';
+import { configEnv, contextOfEntries, loadConfig, reloadConfig, switchboardLane } from './config.mjs';
 import { cannotAnswer } from './deadwake.mjs';
 import { claudeVersionLines, flagLines, nodeLines, nodeRealIo, realIo as claudeVersionIo } from './versioncheck.mjs';
 
@@ -299,6 +299,16 @@ function laneSessionsRanked(sessions, attribution, lane) {
     .filter((s) => s.at?.lane === lane)
     .map((s) => ({ ...s, lane: s.at.lane }))
     .sort((a, b) => (rank[a.at.grade] ?? 3) - (rank[b.at.grade] ?? 3));
+}
+// A session's context now: the newest real reply's input side against the
+// lane's window, read from the transcript's tail (the watch's measure,
+// contextOfEntries). Null when there's no reply with usage yet.
+function contextNow(sessionId, lane) {
+  try {
+    const lines = readFileSync(join(PROJECT_DIR, `${sessionId}.jsonl`), 'utf8').split('\n').filter((l) => l.trim()).slice(-400);
+    const entries = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+    return contextOfEntries(CFG, lane, entries);
+  } catch { return null; }
 }
 function transcriptQuietMs(sessionId) {
   try { return Date.now() - statSync(join(PROJECT_DIR, `${sessionId}.jsonl`)).mtimeMs; } catch { return Infinity; }
@@ -754,7 +764,10 @@ function tickWith(io) {
         const quiet = io.quietMs(sid);
         const apiErr = io.lastEntryIsApiError(sid);
         const dead = io.cannotAnswer?.(sid) ?? false; // no grace: nothing will ever answer
-        const ready = dead ? true : apiErr ? quiet >= ORPHAN_QUIET
+        // Sleep now on a nearly full window rang no bell (--ring, below): no
+        // ritual is coming, so the floor folds it at once, as a dead wake.
+        const full = laneState.fullBell != null && laneState.fullBell === laneState.belledAt;
+        const ready = dead || full ? true : apiErr ? quiet >= ORPHAN_QUIET
           : quiet >= ORPHAN_QUIET && now - laneState.belledAt >= ORPHAN_GRACE;
         if (ready) {
           const r = tryOrphanFold(io, lane, laneState, st, sid, { deferKey: 'orphanDeferredEmitted' });
@@ -1836,7 +1849,18 @@ if (process.argv.includes('--ring')) {
     process.exit(4);
   }
   LIVE_EMIT = true; // a hand-rung bell is a real act; its event is real
-  ringBell(lane, live[0].sessionId, 'nightwatch');
+  // Sleep now on a nearly full window (nightwatch#56): the ritual a bell asks
+  // for needs room (at 98% the note itself pushed a session to 100%, where it
+  // could answer nothing). So no bell: the bell is recorded as rung but full,
+  // and the daemon's orphan floor folds the session on its next tick, closing
+  // it and leaving the lane asleep for its next wake, as Sleep always does.
+  const ctx = contextNow(live[0].sessionId, lane);
+  const foldPct = CFG.schedule.sleepNowFoldPct ?? 0.95;
+  const full = ctx !== null && ctx.ratio >= foldPct;
+  if (full) {
+    log(`SLEEP NOW, FULL: ${lane} session ${live[0].sessionId.slice(0, 8)}… is at ${Math.round(ctx.ratio * 100)}% of its window (≥ ${Math.round(foldPct * 100)}%) — no bell; the nightshift folds it on its next tick and leaves the lane asleep`);
+    emitEvent('sleep-now-full', { lane, session: live[0].sessionId, pct: Math.round(ctx.ratio * 100) });
+  } else ringBell(lane, live[0].sessionId, 'nightwatch');
   // Record the bell in the daemon's state the way the scheduled bell does
   // (read-modify-write, the --fold-now pattern): without this, the close
   // and the orphan floor have nothing to anchor to — opus's find, 10/9:
@@ -1844,11 +1868,15 @@ if (process.argv.includes('--ring')) {
   try {
     let st = {};
     try { st = JSON.parse(readFileSync(STATE_FILE, 'utf8')); } catch {}
-    st[lane] = { ...(st[lane] ?? {}), belledAt: Date.now(), belledSession: live[0].sessionId };
+    const at = Date.now();
+    st[lane] = { ...(st[lane] ?? {}), belledAt: at, belledSession: live[0].sessionId };
+    if (full) st[lane].fullBell = at; else delete st[lane].fullBell;
     delete st[lane].orphanDeferredEmitted;
     writeFileSync(STATE_FILE, JSON.stringify(st, null, 2));
   } catch (e) { console.error(`--ring: bell rung but state write failed (${e.message}) — the close/orphan floor won't see this bell`); }
-  console.log(`bell rung for ${lane} (session ${live[0].sessionId.slice(0, 8)}…)`);
+  console.log(full
+    ? `${lane} is at ${Math.round(ctx.ratio * 100)}% of its window, too full for the bedtime ritual: no bell; the nightshift folds the session within a minute and leaves ${lane} asleep until its next wake`
+    : `bell rung for ${lane} (session ${live[0].sessionId.slice(0, 8)}…)`);
   process.exit(0);
 }
 
