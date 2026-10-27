@@ -203,11 +203,35 @@ if (promptIdx === -1) {
 }
 cut = promptIdx;
 
+// OUT-OF-ORDER ROWS (10/27, nightwatch#56): a session can write a row above
+// the tail it resumed. A woken session's SessionStart hook attachment sat at
+// row 10, parented to row 387, the resumed tail's end, and the first prompt
+// after the wake was parented to it. The cut is by position, so that row fell
+// before it: the prompt pointed outside the tail, and the output check below
+// refused every fold of the session, rightly. A row before the cut whose
+// parent is in the kept range belongs to the tail in fact: it moves in, right
+// after its parent, and so does any row parented to it in turn.
+const order = [];
+for (let i = cut; i < lines.length; i++) order.push(i);
+const inTail = new Set(order.map((i) => entries[i]?.uuid).filter((u) => typeof u === 'string'));
+let movedIn = 0;
+for (let grew = true; grew;) {
+  grew = false;
+  for (let i = 0; i < cut; i++) {
+    const e = entries[i];
+    if (typeof e?.uuid !== 'string' || inTail.has(e.uuid) || !e.parentUuid || !inTail.has(e.parentUuid)) continue;
+    order.splice(order.findIndex((j) => entries[j]?.uuid === e.parentUuid) + 1, 0, i);
+    inTail.add(e.uuid);
+    movedIn++;
+    grew = true;
+  }
+}
+
 // A dropped entry's children are re-pointed at its parent, or the harness's
 // chain walk (leaf → parentUuid → …) would stop at the gap and silently
 // resume only the turns after it.
 const droppedParent = new Map();
-for (let i = cut; i < lines.length; i++) {
+for (const i of order) {
   if (isHarnessLoaded(entries[i]) && entries[i].uuid) droppedParent.set(entries[i].uuid, entries[i].parentUuid ?? null);
 }
 function liveParent(u) {
@@ -220,7 +244,7 @@ let keptEst = 0;
 let dropped = 0;
 let relinked = 0;
 let usageStripped = 0;
-for (let i = cut; i < lines.length; i++) {
+for (const i of order) {
   if (entries[i] === null) continue;
   if (isHarnessLoaded(entries[i])) { dropped++; continue; }
   let e = entries[i];
@@ -376,6 +400,7 @@ const report = {
   harnessDropped: dropped,
   tornLines: torn,
   relinked,
+  ...(movedIn ? { movedIn } : {}),
   usageStripped,
   ...(imagesStripped.count ? { imagesStripped } : {}),
   cutAt: cutEntry?.timestamp ?? null,

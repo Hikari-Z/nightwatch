@@ -208,6 +208,32 @@ try {
   check('parentUuid renamed: refused, nothing written (relinking would no-op and leave a hole)', refused(run(build({ parentKey: 'parent_uuid' })), /lack a uuid or a parentUuid/), '');
   check('uuid renamed: refused, nothing written', refused(run(build({ uuidKey: 'id' })), /lack a uuid or a parentUuid/), '');
   check('a kept entry whose parent is not in the tail: refused, nothing written', refused(run(build({ order: 'late', mutate: (rows) => { rows.at(-1).parentUuid = 'nowhere'; } })), /not in the tail/), '');
+  // A row written ABOVE the tail it continues (10/27, nightwatch#56): a woken
+  // session's SessionStart hook attachment sat at the top of the file, parented
+  // to the resumed tail's last row, and the first prompt after the wake was
+  // parented to it. Main's positional cut left it out and refused every fold.
+  {
+    const wake = (rows) => {
+      const end = rows.at(-1).uuid;
+      rows.unshift({ type: 'attachment', attachment: { type: 'hook_success', hookName: 'SessionStart', content: 'registered' }, parentUuid: end, uuid: 'hk', sessionId: 'x', timestamp: '2026-10-21T11:00:00.000Z' });
+      rows.push({ type: 'user', userType: 'external', message: { role: 'user', content: 'the first prompt after the wake' }, parentUuid: 'hk', uuid: 'w1', sessionId: 'x', timestamp: '2026-10-21T11:01:00.000Z' });
+      rows.push({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'answered' }] }, parentUuid: 'w1', uuid: 'w2', sessionId: 'x', timestamp: '2026-10-21T11:02:00.000Z' });
+    };
+    const res = run(build({ order: 'late', mutate: wake }));
+    check('a row above the tail it continues: the fold is accepted', res.r.status === 0 && res.wrote === 1, `${res.r.status} ${res.r.stderr.trim()}`);
+    if (res.r.status === 0) {
+      const rep = JSON.parse(res.r.stdout);
+      const keptRows = readFileSync(rep.path, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+      const at = keptRows.findIndex((e) => e.uuid === 'hk');
+      check('and that row is kept, right after its parent', at > 0 && keptRows[at - 1].uuid === keptRows[at].parentUuid, `at ${at}`);
+      const byId = new Map(keptRows.map((e) => [e.uuid, e]));
+      let cur = keptRows.at(-1); let walked = 1;
+      while (cur.parentUuid && byId.has(cur.parentUuid)) { cur = byId.get(cur.parentUuid); walked++; }
+      const convo = keptRows.filter((e) => e.uuid).length;
+      check('the chain walks from the leaf through it to the first kept entry', walked === convo, `walked ${walked} of ${convo}`);
+      check('the report counts it (movedIn)', rep.movedIn === 1, JSON.stringify(rep.movedIn));
+    }
+  }
   check('isMeta renamed, cut stays on the prompt: refused (wrapper rides in the tail unmarked)', refused(run(build({ order: 'late', metaKey: 'meta' })), /not marked isMeta/), '');
   check('isMeta renamed, cut lands ON the caveat: refused (the repro that moved the cut)', refused(run(build({ order: 'near', metaKey: 'meta' })), /not marked isMeta/), '');
 
