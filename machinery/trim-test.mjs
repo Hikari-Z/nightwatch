@@ -208,6 +208,131 @@ try {
   check('parentUuid renamed: refused, nothing written (relinking would no-op and leave a hole)', refused(run(build({ parentKey: 'parent_uuid' })), /lack a uuid or a parentUuid/), '');
   check('uuid renamed: refused, nothing written', refused(run(build({ uuidKey: 'id' })), /lack a uuid or a parentUuid/), '');
   check('a kept entry whose parent is not in the tail: refused, nothing written', refused(run(build({ order: 'late', mutate: (rows) => { rows.at(-1).parentUuid = 'nowhere'; } })), /not in the tail/), '');
+  // A row written ABOVE the tail it continues (10/27, nightwatch#56): a woken
+  // session's SessionStart hook attachment sat at the top of the file, parented
+  // to the resumed tail's last row, and the first prompt after the wake was
+  // parented to it. Main's positional cut left it out and refused every fold.
+  {
+    const wake = (rows) => {
+      const end = rows.at(-1).uuid;
+      rows.unshift({ type: 'attachment', attachment: { type: 'hook_success', hookName: 'SessionStart', content: 'registered' }, parentUuid: end, uuid: 'hk', sessionId: 'x', timestamp: '2026-10-21T11:00:00.000Z' });
+      rows.push({ type: 'user', userType: 'external', message: { role: 'user', content: 'the first prompt after the wake' }, parentUuid: 'hk', uuid: 'w1', sessionId: 'x', timestamp: '2026-10-21T11:01:00.000Z' });
+      rows.push({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'answered' }] }, parentUuid: 'w1', uuid: 'w2', sessionId: 'x', timestamp: '2026-10-21T11:02:00.000Z' });
+    };
+    const res = run(build({ order: 'late', mutate: wake }));
+    check('a row above the tail it continues: the fold is accepted', res.r.status === 0 && res.wrote === 1, `${res.r.status} ${res.r.stderr.trim()}`);
+    if (res.r.status === 0) {
+      const rep = JSON.parse(res.r.stdout);
+      const keptRows = readFileSync(rep.path, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+      const at = keptRows.findIndex((e) => e.uuid === 'hk');
+      check('and that row is kept, right after its parent', at > 0 && keptRows[at - 1].uuid === keptRows[at].parentUuid, `at ${at}`);
+      const byId = new Map(keptRows.map((e) => [e.uuid, e]));
+      let cur = keptRows.at(-1); let walked = 1;
+      while (cur.parentUuid && byId.has(cur.parentUuid)) { cur = byId.get(cur.parentUuid); walked++; }
+      const convo = keptRows.filter((e) => e.uuid).length;
+      check('the chain walks from the leaf through it to the first kept entry', walked === convo, `walked ${walked} of ${convo}`);
+      check('the report counts it (movedIn)', rep.movedIn === 1, JSON.stringify(rep.movedIn));
+    }
+  }
+  // A CHAIN of start-of-file attachments, the shape real resumed sessions write (nightwatch#56 review, Sonnet; 14 such
+  // rows in 2 of 1,140 archived transcripts): an `instructions` row (harness-loaded, so DROPPED) parented to the tail's
+  // end, and two attachments parented to it in turn, then the first prompt after the wake parented to the last of them.
+  // Pins the closure (rows parented to a moved row move too) and the relink past a moved-then-dropped row.
+  {
+    let endId;
+    const chain = (rows) => {
+      endId = rows.at(-1).uuid;
+      rows.unshift(
+        { type: 'attachment', attachment: { type: 'instructions', files: [{ path: 'CLAUDE.md', content: 'i'.repeat(500) }] }, parentUuid: endId, uuid: 'x1', sessionId: 'x', timestamp: '2026-10-21T11:00:00.000Z' },
+        { type: 'attachment', attachment: { type: 'session_context', content: 'ctx' }, parentUuid: 'x1', uuid: 'x2', sessionId: 'x', timestamp: '2026-10-21T11:00:01.000Z' },
+        { type: 'attachment', attachment: { type: 'credential_org', content: 'org' }, parentUuid: 'x2', uuid: 'x3', sessionId: 'x', timestamp: '2026-10-21T11:00:02.000Z' });
+      rows.push({ type: 'user', userType: 'external', message: { role: 'user', content: 'first prompt after the wake' }, parentUuid: 'x3', uuid: 'w1', sessionId: 'x', timestamp: '2026-10-21T11:01:00.000Z' });
+      rows.push({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'answered' }] }, parentUuid: 'w1', uuid: 'w2', sessionId: 'x', timestamp: '2026-10-21T11:02:00.000Z' });
+    };
+    const res = run(build({ order: 'late', mutate: chain }));
+    check('a chain of rows above the tail: the fold is accepted', res.r.status === 0 && res.wrote === 1, `${res.r.status} ${res.r.stderr.trim()}`);
+    if (res.r.status === 0) {
+      const rep = JSON.parse(res.r.stdout);
+      const keptRows = readFileSync(rep.path, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+      const byId = new Map(keptRows.map((e) => [e.uuid, e]));
+      check('…all three rows moved in (the closure), and the report counts them', rep.movedIn === 3, JSON.stringify(rep.movedIn));
+      check('…the harness-loaded one is dropped and not kept', !byId.has('x1') && byId.has('x2') && byId.has('x3'), [...byId.keys()].filter((k) => k.startsWith('x')).join());
+      check('…its child is re-pointed at the dropped row\'s parent, so the chain has no hole', byId.get('x2')?.parentUuid === endId, String(byId.get('x2')?.parentUuid));
+      let cur = keptRows.at(-1); let walked = 1;
+      while (cur.parentUuid && byId.has(cur.parentUuid)) { cur = byId.get(cur.parentUuid); walked++; }
+      check('…and the chain walks from the leaf through all of it to the first kept entry', walked === keptRows.filter((e) => e.uuid).length, `walked ${walked} of ${keptRows.filter((e) => e.uuid).length}`);
+    }
+  }
+  // The same chain written in REVERSED file order (grandchild above parent above
+  // its parent); pins the repeat loop. A CHAIN of start-of-file attachments, the shape real resumed sessions write (nightwatch#56 review, Sonnet; 14 such
+  // rows in 2 of 1,140 archived transcripts): an `instructions` row (harness-loaded, so DROPPED) parented to the tail's
+  // end, and two attachments parented to it in turn, then the first prompt after the wake parented to the last of them.
+  // Pins the closure (rows parented to a moved row move too) and the relink past a moved-then-dropped row.
+  {
+    let endId;
+    const chain = (rows) => {
+      endId = rows.at(-1).uuid;
+      rows.unshift(
+        { type: 'attachment', attachment: { type: 'credential_org', content: 'org' }, parentUuid: 'x2', uuid: 'x3', sessionId: 'x', timestamp: '2026-10-21T11:00:02.000Z' },
+        { type: 'attachment', attachment: { type: 'session_context', content: 'ctx' }, parentUuid: 'x1', uuid: 'x2', sessionId: 'x', timestamp: '2026-10-21T11:00:01.000Z' },
+        { type: 'attachment', attachment: { type: 'instructions', files: [{ path: 'CLAUDE.md', content: 'i'.repeat(500) }] }, parentUuid: endId, uuid: 'x1', sessionId: 'x', timestamp: '2026-10-21T11:00:00.000Z' });
+      rows.push({ type: 'user', userType: 'external', message: { role: 'user', content: 'first prompt after the wake' }, parentUuid: 'x3', uuid: 'w1', sessionId: 'x', timestamp: '2026-10-21T11:01:00.000Z' });
+      rows.push({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'answered' }] }, parentUuid: 'w1', uuid: 'w2', sessionId: 'x', timestamp: '2026-10-21T11:02:00.000Z' });
+    };
+    const res = run(build({ order: 'late', mutate: chain }));
+    check('a chain of rows above the tail: the fold is accepted (reversed)', res.r.status === 0 && res.wrote === 1, `${res.r.status} ${res.r.stderr.trim()}`);
+    if (res.r.status === 0) {
+      const rep = JSON.parse(res.r.stdout);
+      const keptRows = readFileSync(rep.path, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+      const byId = new Map(keptRows.map((e) => [e.uuid, e]));
+      check('…all three rows moved in (the closure), and the report counts them (reversed)', rep.movedIn === 3, JSON.stringify(rep.movedIn));
+      check('…the harness-loaded one is dropped and not kept (reversed)', !byId.has('x1') && byId.has('x2') && byId.has('x3'), [...byId.keys()].filter((k) => k.startsWith('x')).join());
+      check('…its child is re-pointed at the dropped row\'s parent, so the chain has no hole (reversed)', byId.get('x2')?.parentUuid === endId, String(byId.get('x2')?.parentUuid));
+      let cur = keptRows.at(-1); let walked = 1;
+      while (cur.parentUuid && byId.has(cur.parentUuid)) { cur = byId.get(cur.parentUuid); walked++; }
+      check('…and the chain walks from the leaf through all of it to the first kept entry (reversed)', walked === keptRows.filter((e) => e.uuid).length, `walked ${walked} of ${keptRows.filter((e) => e.uuid).length}`);
+    }
+  }
+  // Two siblings written above the tail, both children of its last row: they
+  // move in keeping their file order (the splice once reversed them).
+  {
+    const sibs = (rows) => {
+      const end = rows.at(-1).uuid;
+      rows.unshift(
+        { type: 'attachment', attachment: { type: 'hook_success', content: 'first' }, parentUuid: end, uuid: 's1', sessionId: 'x', timestamp: '2026-10-21T11:00:00.000Z' },
+        { type: 'attachment', attachment: { type: 'hook_success', content: 'second' }, parentUuid: end, uuid: 's2', sessionId: 'x', timestamp: '2026-10-21T11:00:01.000Z' });
+      rows.push({ type: 'user', userType: 'external', message: { role: 'user', content: 'after the wake' }, parentUuid: 's2', uuid: 'w1', sessionId: 'x', timestamp: '2026-10-21T11:01:00.000Z' });
+    };
+    const res = run(build({ order: 'late', mutate: sibs }));
+    const keptRows = res.r.status === 0 ? readFileSync(JSON.parse(res.r.stdout).path, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : [];
+    const ids = keptRows.map((e) => e.uuid);
+    check('two siblings above the tail move in, in their file order', res.r.status === 0 && ids.indexOf('s1') > 0 && ids.indexOf('s1') + 1 === ids.indexOf('s2'), `${res.r.status} ${ids.filter((x) => /^s\d/.test(x)).join()}`);
+  }
+  // A cascade past MAX_MOVED_IN (21 rows above the tail, chained to its end):
+  // refused, nothing written, rather than a silently bloated tail.
+  {
+    const many = (rows) => {
+      let parent = rows.at(-1).uuid;
+      const top = [];
+      for (let i = 1; i <= 21; i++) { top.push({ type: 'attachment', attachment: { type: 'hook_success', content: `h${i}` }, parentUuid: parent, uuid: `m${i}`, sessionId: 'x', timestamp: '2026-10-21T11:00:00.000Z' }); parent = `m${i}`; }
+      rows.unshift(...top);
+      rows.push({ type: 'user', userType: 'external', message: { role: 'user', content: 'after the wake' }, parentUuid: parent, uuid: 'w1', sessionId: 'x', timestamp: '2026-10-21T11:01:00.000Z' });
+    };
+    check('more than 20 rows to move in: refused, nothing written', refused(run(build({ order: 'late', mutate: many })), /rows written above the tail would move into it/), '');
+  }
+  // The cap's boundary (nightwatch#57 review, Sonnet): exactly MAX_MOVED_IN (20) rows written above the tail are
+  // ACCEPTED; the 21-row case above is refused. Pins `>` against `>=` and the constant against 19/21.
+  {
+    const nAbove = (n) => (rows) => {
+      const end = rows.at(-1).uuid; const above = []; let prev = end;
+      for (let k = 1; k <= n; k++) { above.push({ type: 'attachment', attachment: { type: 'credential_org', content: `org${k}` }, parentUuid: prev, uuid: `c${k}`, sessionId: 'x', timestamp: '2026-10-21T11:00:00.000Z' }); prev = `c${k}`; }
+      rows.unshift(...above);
+      rows.push({ type: 'user', userType: 'external', message: { role: 'user', content: 'first prompt after the wake' }, parentUuid: prev, uuid: 'w1', sessionId: 'x', timestamp: '2026-10-21T11:01:00.000Z' });
+      rows.push({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'answered' }] }, parentUuid: 'w1', uuid: 'w2', sessionId: 'x', timestamp: '2026-10-21T11:02:00.000Z' });
+    };
+    const at20 = run(build({ order: 'late', mutate: nAbove(20) }));
+    check('exactly 20 rows above the tail: accepted, and counted', at20.r.status === 0 && at20.wrote === 1 && JSON.parse(at20.r.stdout).movedIn === 20, `${at20.r.status} ${at20.r.stderr.trim()}`);
+  }
   check('isMeta renamed, cut stays on the prompt: refused (wrapper rides in the tail unmarked)', refused(run(build({ order: 'late', metaKey: 'meta' })), /not marked isMeta/), '');
   check('isMeta renamed, cut lands ON the caveat: refused (the repro that moved the cut)', refused(run(build({ order: 'near', metaKey: 'meta' })), /not marked isMeta/), '');
 

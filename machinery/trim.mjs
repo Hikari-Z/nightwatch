@@ -203,11 +203,45 @@ if (promptIdx === -1) {
 }
 cut = promptIdx;
 
+// OUT-OF-ORDER ROWS (10/27, nightwatch#56): a session can write a row above
+// the tail it resumed. A woken session's SessionStart hook attachment sat at
+// row 10, parented to row 387, the resumed tail's end, and the first prompt
+// after the wake was parented to it. The cut is by position, so that row fell
+// before it: the prompt pointed outside the tail, and the output check below
+// refused every fold of the session, rightly. A row before the cut whose
+// parent is in the kept range belongs to the tail in fact: it moves in, right
+// after its parent, and so does any row parented to it in turn. Measured over
+// every transcript on this hub (Sonnet's read of #57: 1,140 files, 771,543
+// rows), only attachments written at a session's start ever sit above their
+// parent, never more than four at a cut; past MAX_MOVED_IN the output check
+// refuses, so a cascade nobody foresaw is a loud refusal, not a bloated tail.
+// The loop ends because each pass moves only rows not yet in the tail.
+const MAX_MOVED_IN = 20;
+const order = [];
+for (let i = cut; i < lines.length; i++) order.push(i);
+const inTail = new Set(order.map((i) => entries[i]?.uuid).filter((u) => typeof u === 'string'));
+let movedIn = 0;
+for (let grew = true; grew;) {
+  grew = false;
+  for (let i = 0; i < cut; i++) {
+    const e = entries[i];
+    if (typeof e?.uuid !== 'string' || inTail.has(e.uuid) || !e.parentUuid || !inTail.has(e.parentUuid)) continue;
+    // Right after its parent, past any sibling moved there before it from
+    // earlier in the file, so moved siblings keep their file order.
+    let at = order.findIndex((j) => entries[j]?.uuid === e.parentUuid) + 1;
+    while (at < order.length && order[at] < i && entries[order[at]]?.parentUuid === e.parentUuid) at++;
+    order.splice(at, 0, i);
+    inTail.add(e.uuid);
+    movedIn++;
+    grew = true;
+  }
+}
+
 // A dropped entry's children are re-pointed at its parent, or the harness's
 // chain walk (leaf → parentUuid → …) would stop at the gap and silently
 // resume only the turns after it.
 const droppedParent = new Map();
-for (let i = cut; i < lines.length; i++) {
+for (const i of order) {
   if (isHarnessLoaded(entries[i]) && entries[i].uuid) droppedParent.set(entries[i].uuid, entries[i].parentUuid ?? null);
 }
 function liveParent(u) {
@@ -220,7 +254,7 @@ let keptEst = 0;
 let dropped = 0;
 let relinked = 0;
 let usageStripped = 0;
-for (let i = cut; i < lines.length; i++) {
+for (const i of order) {
   if (entries[i] === null) continue;
   if (isHarnessLoaded(entries[i])) { dropped++; continue; }
   let e = entries[i];
@@ -337,6 +371,7 @@ function tailProblems(keptLines) {
   return problems;
 }
 const problems = tailProblems(kept);
+if (movedIn > MAX_MOVED_IN) problems.push(`${movedIn} rows written above the tail would move into it (more than ${MAX_MOVED_IN}; at most 4 seen on this hub): the transcript's shape may have changed`);
 if (problems.length) {
   console.error(`trim: OUTPUT CHECK FAILED, nothing written. ${problems.join('; ')}.`);
   process.exit(1);
@@ -376,6 +411,7 @@ const report = {
   harnessDropped: dropped,
   tornLines: torn,
   relinked,
+  ...(movedIn ? { movedIn } : {}),
   usageStripped,
   ...(imagesStripped.count ? { imagesStripped } : {}),
   cutAt: cutEntry?.timestamp ?? null,
