@@ -264,6 +264,31 @@ function laneAttribution(sessionId) {
 function laneOf(sessionId) {
   return laneAttribution(sessionId)?.lane ?? null;
 }
+// When a session began, by the registry's own stamp (the SessionStart hook
+// writes `at`). Null for a session the registry doesn't hold: a caller can't
+// conclude a fold happened inside a session it can't date (nightwatch#56).
+function sessionStartedAt(sessionId) {
+  try {
+    const at = Date.parse(JSON.parse(readFileSync(join(WAKECYCLE, `lane.${sessionId}`), 'utf8')).at);
+    return Number.isFinite(at) ? at : null;
+  } catch { return null; }
+}
+// Whether this lane's latest bell found its session already slept: a ritual
+// run inside the session had folded the lane, so the bell rang nothing, and
+// the receipt it found is that fold's. Tied to the bell (its time) and the
+// receipt, so a later bell, --ring's included, never inherits it.
+// Whether the lane is awake on a session that began after its latest bell:
+// the belled session was left behind (a wake by hand, 10/27), so the floor
+// has nothing to catch. Registry-grade only, as wake-suppression is.
+function movedOn(laneState, live, io) {
+  const s = live.find((x) => x.sessionId !== laneState.belledSession && x.at?.grade === 'registry');
+  if (!s) return false;
+  const started = io.sessionStartedAt?.(s.sessionId) ?? null;
+  return started !== null && started > laneState.belledAt;
+}
+function sleptAtBell(laneState, nwMtime) {
+  return !!laneState.sleptBell && laneState.sleptBell.at === laneState.belledAt && laneState.sleptBell.receipt === nwMtime;
+}
 // The lane's live sessions, best-attributed first (registry > marker >
 // fallback). Everywhere the machinery PICKS one session to act for a lane —
 // the bell, the close, --fold-now, --midday, --ring — it must prefer the
@@ -371,6 +396,8 @@ let WINDOW_GAP_MS = CFG.schedule.windowGapMs;
 // an un-answered bell waits before the fold happens anyway.
 let ORPHAN_QUIET = CFG.schedule.orphanQuietMs;
 let ORPHAN_GRACE = CFG.schedule.orphanGraceMs;
+// Identical orphan-fold failures for one bell before the floor gives up (#56).
+const ORPHAN_MAX_FAILURES = 3;
 
 // Hot reload (10/6): the app's save buttons write weft.config.json; a
 // boot-frozen schedule would ignore them until the next crash-restart.
@@ -408,6 +435,7 @@ const io = {
   liveSessions,
   laneOf,
   laneAttribution,
+  sessionStartedAt,
   ringBell,
   quietMs: transcriptQuietMs,
   nextWakeMtime: (lane) => {
@@ -675,13 +703,28 @@ function tickWith(io) {
         // prompt, so a bell can't reach it (10/8). Flag it loudly; the orphan
         // fold below folds it at once, and sleep.mjs folds the last session
         // that actually ran instead of the corpse.
-        if (io.cannotAnswer?.(live[0].sessionId)) {
+        // A session the lane has already slept from can't answer a bell with
+        // a fold: its newest fold was written after the session began, so a
+        // ritual run inside it folded the lane (10/27: a woken session ran
+        // the ritual for the session before it, stayed open, was belled at
+        // 02:33, and the orphan fold then retried it every minute). No bell;
+        // it closes when quiet as a slept panel does, and that fold is
+        // tonight's (nightwatch#56).
+        const startedAt = io.sessionStartedAt?.(live[0].sessionId) ?? null;
+        const sleptHere = startedAt !== null && nwMtime > startedAt;
+        if (sleptHere) {
+          io.log(`NO BELL: ${lane} session ${live[0].sessionId.slice(0, 8)}… already slept (its fold at ${new Date(nwMtime).toISOString()} postdates the session's start) — it closes when quiet, and that fold is tonight's`);
+          io.emit('bell-skipped-slept', { lane, session: live[0].sessionId });
+        } else if (io.cannotAnswer?.(live[0].sessionId)) {
           io.log(`DEAD WAKE: ${lane} session ${live[0].sessionId.slice(0, 8)}… can't take a prompt ("Prompt is too long") — no bell, nothing could answer it; folding it from the last session that ran`);
           io.emit('dead-wake', { lane, session: live[0].sessionId, alarm: true });
         } else io.ringBell(lane, live[0].sessionId);
         laneState.belledAt = now;
         laneState.belledSession = live[0].sessionId;
+        if (sleptHere) laneState.sleptBell = { at: now, receipt: nwMtime };
+        else delete laneState.sleptBell;
         delete laneState.orphanDeferredEmitted; // new window, fresh deferral event
+        delete laneState.orphanFailures; // a new bell's floor starts fresh
         io.saveState(st);
       }
     }
@@ -697,7 +740,7 @@ function tickWith(io) {
       // actually slept (next-wake written AFTER the bell) and gone quiet.
       if (live.length && laneState.belledAt && now - laneState.belledAt <= WINDOW_GAP_MS
           && (laneState.closedAt ?? 0) < laneState.belledAt
-          && nwMtime > laneState.belledAt
+          && (nwMtime > laneState.belledAt || sleptAtBell(laneState, nwMtime))
           && io.quietMs(live[0].sessionId) >= QUIET_MS) {
         io.log(`closing ${lane} panel (pid ${live[0].pid}, session ${live[0].sessionId.slice(0, 8)}…) — slept and quiet`);
         io.emit('panel-closed', { lane, session: live[0].sessionId });
@@ -720,6 +763,9 @@ function tickWith(io) {
           && nwMtime < laneState.belledAt
           && (laneState.orphanFoldedAt ?? 0) < laneState.belledAt
           && laneState.belledSession
+          && !sleptAtBell(laneState, nwMtime)
+          && !movedOn(laneState, live, io)
+          && (laneState.orphanFailures ?? 0) < ORPHAN_MAX_FAILURES
           && ((WAKE_MIN - m + 1440) % 1440) > 60) {
         const sid = laneState.belledSession;
         const quiet = io.quietMs(sid);
@@ -736,6 +782,16 @@ function tickWith(io) {
             io.saveState(st);
             io.log(`ORPHAN FOLD: ${lane} belled at ${new Date(laneState.belledAt).toISOString()}, never folded (last entry: ${dead ? 'prompt too long' : apiErr ? 'api error' : 'idle'}) — closed and emergency-folded; the 08:00 wake will brief the lane`);
             io.emit('orphan-fold-done', { lane, cause: dead ? 'dead-wake' : apiErr ? 'api-error' : 'idle' });
+          } else if (r === 'failed') {
+            // A refusal doesn't change by itself (10/27: the trim's output
+            // check refused one session's cut every minute for eight hours,
+            // two alarms a time). Stop after a few, once, loudly.
+            laneState.orphanFailures = (laneState.orphanFailures ?? 0) + 1;
+            io.saveState(st);
+            if (laneState.orphanFailures >= ORPHAN_MAX_FAILURES) {
+              io.log(`ORPHAN FOLD GAVE UP: ${lane} session ${sid.slice(0, 8)}… failed ${laneState.orphanFailures} times — no more tries for this bell; fold it by hand or wake the lane (WEFT_WAKE_STALE_OK=1 in a terminal window)`);
+              io.emit('orphan-fold-gave-up', { lane, session: sid, failures: laneState.orphanFailures, alarm: true });
+            }
           }
         }
       }
@@ -759,7 +815,7 @@ function tickWith(io) {
       // Belled but never folded: the receipt predates this window's bell, so
       // the lane's span since its old fold is unfolded. Don't wake the stale
       // tail; say so once, loudly (the 10:17 heartbeat alerts on this line).
-      if (nwMtime > 0 && (laneState.belledAt ?? 0) > nwMtime) {
+      if (nwMtime > 0 && (laneState.belledAt ?? 0) > nwMtime && !sleptAtBell(laneState, nwMtime)) {
         if ((laneState.staleFlaggedAt ?? 0) < laneState.belledAt) {
           io.log(`BELLED BUT NEVER FOLDED: ${lane}'s next-wake predates its bell — not waking the stale tail; fold the lane (or WEFT_WAKE_STALE_OK=1 ${join(MACHINERY_DIR, 'wake.sh')} ${lane} to resume it anyway)`);
           io.emit('stale-receipt', { lane, session: io.nextWakeSession(lane) ?? undefined, alarm: true });
