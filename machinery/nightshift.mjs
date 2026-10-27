@@ -1437,6 +1437,39 @@ async function rehearse() {
     check('fold-clears', 'the next try folds', count(w, 'orphanfold:fable') === 1 && count(w, 'orphanfold-failed:fable') === 1, w.events.join());
   }
 
+  { // #56 review (Sonnet): a night that gave up must not disable the floor for the NEXT bell.
+    const w = makeWorld(['fable']);
+    w.sessions = [{ pid: 44, sessionId: 'sess-f', lane: 'fable', quietMs: 10 * 3600_000 }];
+    w.foldRefuses = true;
+    w.goneQuietMs = 10 * 3600_000;
+    w.step(7 * 60 + 1); w.step(3 * 60); // night 1: three refused tries, gave up
+    check('floor-next-night', 'the premise: night 1 gave up', w.logs.some((l) => l.startsWith('ORPHAN FOLD GAVE UP')), w.logs.join(' | '));
+    w.foldRefuses = false; // the fault is gone
+    w.sessions = [{ pid: 46, sessionId: 'sess-g', lane: 'fable', quietMs: 10 * 3600_000 }];
+    w.step(21 * 60); // → 02:01 on night 2, belled, unheard
+    w.step(3 * 60);
+    check('floor-next-night', 'the next night\'s bell still gets its orphan fold', count(w, 'orphanfold:fable') === 1, w.events.join());
+  }
+  { // #56 review: only a REGISTRY-grade newer session means the lane has moved on (marker/fallback grades are guesses).
+    const w = makeWorld(['fable']);
+    w.sessions = [{ pid: 42, sessionId: 'sess-old', lane: 'fable', quietMs: 0 }];
+    w.step(7 * 60 + 1);
+    check('moved-on-grade', 'the premise: the old session was belled', count(w, 'bell:fable') === 1, w.events.join());
+    w.sessions[0].quietMs = 10 * 3600_000;
+    w.sessions.push({ pid: 43, sessionId: 'sess-guess', lane: 'fable', quietMs: 0, bornAt: w.io.now() + 1, grade: 'marker' });
+    w.step(3 * 60);
+    check('moved-on-grade', 'a newer session known only by a guess does not stop the orphan fold', count(w, 'orphanfold') === 1, w.events.join());
+  }
+  { // #56 review: a newer session the registry cannot date does not count as moved on.
+    const w = makeWorld(['fable']);
+    w.sessions = [{ pid: 42, sessionId: 'sess-old', lane: 'fable', quietMs: 0 }];
+    w.step(7 * 60 + 1);
+    w.sessions[0].quietMs = 10 * 3600_000;
+    w.sessions.push({ pid: 43, sessionId: 'sess-undated', lane: 'fable', quietMs: 0 }); // no bornAt: undated
+    w.step(3 * 60);
+    check('moved-on-undated', 'a newer session with no registry stamp does not stop the orphan fold', count(w, 'orphanfold') === 1, w.events.join());
+  }
+
   { // Ra's spec (10/9): a DISARMED agent put to sleep stays asleep until
     // the Wake button — the daemon never schedules it. (The button's half
     // is the app's path, outside this bench.)
