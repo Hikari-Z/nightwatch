@@ -1411,6 +1411,7 @@ async function rehearse() {
     check('slept-elsewhere', 'no bell rung into a session the lane already slept from', count(w, 'bell:') === 0, w.events.join());
     check('slept-elsewhere', 'said so in the log', w.logs.some((l) => l.startsWith('NO BELL: fable')), w.logs.join(' | '));
     w.sessions[0].quietMs = 60 * 60_000; // Ra exits at 03:1x; it goes quiet
+    w.goneQuietMs = 60 * 60_000; // and once closed, its transcript ages as live
     w.step(4 * 60);
     check('slept-elsewhere', 'never orphan-folds it', count(w, 'orphanfold') === 0, w.events.join());
     check('slept-elsewhere', 'closes it as a slept panel', count(w, 'close:fable') === 1, w.events.join());
