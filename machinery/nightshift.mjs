@@ -1483,6 +1483,34 @@ async function rehearse() {
     check('moved-on-undated', 'a newer session with no registry stamp does not stop the orphan fold', count(w, 'orphanfold') === 1, w.events.join());
   }
 
+  { // #56: Sleep now on a nearly full window rings no bell; --ring records it
+    // as full, and the floor folds the busy session on the next tick, with no
+    // wake until the morning (Sleep sleeps; Fold now is the one that reopens).
+    const w = makeWorld(['fable']);
+    w.sessions = [{ pid: 51, sessionId: 'sess-f', lane: 'fable', quietMs: 0 }];
+    w.step(3 * 60 + 39); // 19:00 → 22:39
+    w.st.fable = { ...(w.st.fable ?? {}), belledAt: w.io.now(), belledSession: 'sess-f', fullBell: w.io.now() }; // what --ring writes
+    w.step(2);
+    check('sleep-now-full', 'folded on the next tick, busy or not', count(w, 'orphanfold:fable') === 1, w.events.join());
+    w.step(60);
+    check('sleep-now-full', 'and left asleep: no wake before morning', count(w, 'wake:fable') === 0, w.events.join());
+    w.step(8 * 60 + 30); // → 08:10
+    check('sleep-now-full', 'the morning wake takes the fold', count(w, 'wake:fable') === 1, w.events.join());
+    w.step(18 * 60); // → 02:10 the next night: the scheduled bell, the woken session busy
+    check('sleep-now-full', 'the next night\'s bell rings as usual', count(w, 'bell:fable') === 1, w.events.join());
+    check('sleep-now-full', 'and the full mark doesn\'t carry over: no fold under the busy session', count(w, 'orphanfold:fable') === 1, w.events.join());
+  }
+
+  { // #56 control: an ordinary hand bell (no full mark) on a busy session
+    // still waits for quiet and its grace, as before.
+    const w = makeWorld(['fable']);
+    w.sessions = [{ pid: 52, sessionId: 'sess-f', lane: 'fable', quietMs: 0 }];
+    w.step(3 * 60 + 39);
+    w.st.fable = { ...(w.st.fable ?? {}), belledAt: w.io.now(), belledSession: 'sess-f' };
+    w.step(30);
+    check('sleep-now-room', 'a busy session with room is not folded under it', count(w, 'orphanfold') === 0, w.events.join());
+  }
+
   { // Ra's spec (10/9): a DISARMED agent put to sleep stays asleep until
     // the Wake button — the daemon never schedules it. (The button's half
     // is the app's path, outside this bench.)
