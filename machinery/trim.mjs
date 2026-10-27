@@ -210,7 +210,13 @@ cut = promptIdx;
 // before it: the prompt pointed outside the tail, and the output check below
 // refused every fold of the session, rightly. A row before the cut whose
 // parent is in the kept range belongs to the tail in fact: it moves in, right
-// after its parent, and so does any row parented to it in turn.
+// after its parent, and so does any row parented to it in turn. Measured over
+// every transcript on this hub (Sonnet's read of #57: 1,140 files, 771,543
+// rows), only attachments written at a session's start ever sit above their
+// parent, never more than four at a cut; past MAX_MOVED_IN the output check
+// refuses, so a cascade nobody foresaw is a loud refusal, not a bloated tail.
+// The loop ends because each pass moves only rows not yet in the tail.
+const MAX_MOVED_IN = 20;
 const order = [];
 for (let i = cut; i < lines.length; i++) order.push(i);
 const inTail = new Set(order.map((i) => entries[i]?.uuid).filter((u) => typeof u === 'string'));
@@ -220,7 +226,11 @@ for (let grew = true; grew;) {
   for (let i = 0; i < cut; i++) {
     const e = entries[i];
     if (typeof e?.uuid !== 'string' || inTail.has(e.uuid) || !e.parentUuid || !inTail.has(e.parentUuid)) continue;
-    order.splice(order.findIndex((j) => entries[j]?.uuid === e.parentUuid) + 1, 0, i);
+    // Right after its parent, past any sibling moved there before it from
+    // earlier in the file, so moved siblings keep their file order.
+    let at = order.findIndex((j) => entries[j]?.uuid === e.parentUuid) + 1;
+    while (at < order.length && order[at] < cut && order[at] < i && entries[order[at]]?.parentUuid === e.parentUuid) at++;
+    order.splice(at, 0, i);
     inTail.add(e.uuid);
     movedIn++;
     grew = true;
@@ -361,6 +371,7 @@ function tailProblems(keptLines) {
   return problems;
 }
 const problems = tailProblems(kept);
+if (movedIn > MAX_MOVED_IN) problems.push(`${movedIn} rows written above the tail would move into it (more than ${MAX_MOVED_IN}; at most 4 seen on this hub): the transcript's shape may have changed`);
 if (problems.length) {
   console.error(`trim: OUTPUT CHECK FAILED, nothing written. ${problems.join('; ')}.`);
   process.exit(1);
