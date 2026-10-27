@@ -69,7 +69,7 @@ import { notifyBanner } from './platform.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { envWithConfig, loadConfig, loadConfigFrom } from './config.mjs';
+import { contextOfEntries, envWithConfig, loadConfig, loadConfigFrom, windowForLane } from './config.mjs';
 
 const CFG = loadConfig();
 const W = CFG.watch;
@@ -212,14 +212,7 @@ function errorCause(e) {
   return null;
 }
 
-function windowFor(lane, model) {
-  const own = CFG.lanes?.[lane]?.contextWindow;
-  if (own) return own;
-  if (!model) return null;
-  if (/haiku/.test(model)) return 200_000;
-  if (/^claude-(fable|mythos|opus|sonnet)-/.test(model)) return 1_000_000;
-  return null;
-}
+function windowFor(lane, model) { return windowForLane(CFG, lane, model); }
 
 // ── state ────────────────────────────────────────────────────────────────
 // active: `${sid}\u0000${cause}` → episode key; spiral: sid → last alert ms;
@@ -323,14 +316,7 @@ function cycleCovers(now, s, ratio) {
 }
 
 /** The newest real reply's input side against the lane's window, or null. */
-function contextOf(s, entries) {
-  const reply = [...entries].reverse().find((e) => e.type === 'assistant' && e.message?.usage && !e.isApiErrorMessage);
-  const u = reply?.message?.usage;
-  const window = windowFor(s.lane, reply?.message?.model);
-  if (!u || !window) return null;
-  const tokens = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-  return { ratio: tokens / window, tokens, window };
-}
+function contextOf(s, entries) { return contextOfEntries(CFG, s.lane, entries); }
 
 // ── the midday cycle's trigger (Ra, 10/12) ───────────────────────────────
 // For a lane whose config has middayCycle: a soft bell when the context

@@ -563,6 +563,8 @@ fn watch_pointer(app: AppHandle) {
 fn sleep(h: &Hub, lane: Option<&str>) -> Result<String, String> {
     let lane = h.check_lane(lane)?;
     match h.node("nightshift.mjs", &["--ring", &lane]) {
+        // A nearly full window gets no bell (nightwatch#56): the CLI says what happens instead.
+        Ok(out) if out.contains("too full for the bedtime ritual") => Ok(out),
         Ok(_) => Ok(format!("Rang {lane}'s bell. If the agent is listening, the rung gets written and the fold runs; if not, the nightshift folds the session after the grace period.")),
         Err(e) => Err(e.replace("--ring: ", "")),
     }
