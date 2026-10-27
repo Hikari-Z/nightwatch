@@ -229,7 +229,7 @@ for (let grew = true; grew;) {
     // Right after its parent, past any sibling moved there before it from
     // earlier in the file, so moved siblings keep their file order.
     let at = order.findIndex((j) => entries[j]?.uuid === e.parentUuid) + 1;
-    while (at < order.length && order[at] < cut && order[at] < i && entries[order[at]]?.parentUuid === e.parentUuid) at++;
+    while (at < order.length && order[at] < i && entries[order[at]]?.parentUuid === e.parentUuid) at++;
     order.splice(at, 0, i);
     inTail.add(e.uuid);
     movedIn++;

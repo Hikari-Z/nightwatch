@@ -320,6 +320,19 @@ try {
     };
     check('more than 20 rows to move in: refused, nothing written', refused(run(build({ order: 'late', mutate: many })), /rows written above the tail would move into it/), '');
   }
+  // The cap's boundary (nightwatch#57 review, Sonnet): exactly MAX_MOVED_IN (20) rows written above the tail are
+  // ACCEPTED; the 21-row case above is refused. Pins `>` against `>=` and the constant against 19/21.
+  {
+    const nAbove = (n) => (rows) => {
+      const end = rows.at(-1).uuid; const above = []; let prev = end;
+      for (let k = 1; k <= n; k++) { above.push({ type: 'attachment', attachment: { type: 'credential_org', content: `org${k}` }, parentUuid: prev, uuid: `c${k}`, sessionId: 'x', timestamp: '2026-10-21T11:00:00.000Z' }); prev = `c${k}`; }
+      rows.unshift(...above);
+      rows.push({ type: 'user', userType: 'external', message: { role: 'user', content: 'first prompt after the wake' }, parentUuid: prev, uuid: 'w1', sessionId: 'x', timestamp: '2026-10-21T11:01:00.000Z' });
+      rows.push({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'answered' }] }, parentUuid: 'w1', uuid: 'w2', sessionId: 'x', timestamp: '2026-10-21T11:02:00.000Z' });
+    };
+    const at20 = run(build({ order: 'late', mutate: nAbove(20) }));
+    check('exactly 20 rows above the tail: accepted, and counted', at20.r.status === 0 && at20.wrote === 1 && JSON.parse(at20.r.stdout).movedIn === 20, `${at20.r.status} ${at20.r.stderr.trim()}`);
+  }
   check('isMeta renamed, cut stays on the prompt: refused (wrapper rides in the tail unmarked)', refused(run(build({ order: 'late', metaKey: 'meta' })), /not marked isMeta/), '');
   check('isMeta renamed, cut lands ON the caveat: refused (the repro that moved the cut)', refused(run(build({ order: 'near', metaKey: 'meta' })), /not marked isMeta/), '');
 
