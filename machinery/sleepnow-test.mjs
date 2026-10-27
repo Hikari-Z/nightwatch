@@ -5,9 +5,12 @@
 // it records the bell as full, and the daemon's orphan floor folds the session
 // on its next tick (the rehearsal's sleep-now-full scenario). Checks:
 //   - the context measure shared with the watch (windowForLane, contextOfEntries);
-//   - --ring on a session at 96%: exit 0, says so, no spool note, the state
+//   - --ring with 30k tokens left: exit 0, says so, no spool note, the state
 //     carries fullBell equal to belledAt;
-//   - --ring on a session at 50%: the bell rings (a spool note), no fullBell.
+//   - --ring with half the window left: the bell rings (a spool note), no fullBell;
+//   - the boundary (35,000 left rings, 34,999 doesn't), a session with no usage
+//     reading yet, a reading 300 lines back, and a 200k window at 85%
+//     (Sonnet's read: the room is tokens, not a share).
 // The live session is a copy of node named claude, its status file and the
 // registry entry, as wake-cli-test.mjs builds one; HOME is scratch.
 import { spawn, spawnSync } from 'node:child_process';
@@ -36,7 +39,7 @@ function check(name, ok, detail = '') {
   const skip = contextOfEntries(cfg, 'plain', [reply(10, 500_000, 0), reply(0, 999_000, 0, { isApiErrorMessage: true })]);
   check('an API error\'s reply is skipped', skip?.tokens === 500_010, JSON.stringify(skip));
   check('no reply with usage: null', contextOfEntries(cfg, 'plain', [{ type: 'user' }]) === null);
-  check('the threshold defaults to 95%', DEFAULTS.schedule.sleepNowFoldPct === 0.95);
+  check('the room defaults to 35,000 tokens', DEFAULTS.schedule.sleepNowRoomTokens === 35_000);
 }
 
 // ── the CLI, against a scratch hub ───────────────────────────────────────
@@ -59,14 +62,15 @@ const state = () => { try { return JSON.parse(readFileSync(cfg.paths.stateFile, 
 const fakeClaude = join(hub, 'bin', 'claude');
 copyFileSync(process.execPath, fakeClaude);
 chmodSync(fakeClaude, 0o755);
-function session(sid, readTokens, run) {
+function session(sid, readTokens, run, opts = {}) {
   const up = spawn(fakeClaude, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore' });
   try {
     writeFileSync(join(home, '.claude', 'sessions', `${up.pid}.json`), JSON.stringify({ pid: up.pid, sessionId: sid, kind: 'interactive' }));
     writeFileSync(join(hub, 'wakecycle', `lane.${sid}`), JSON.stringify({ lane: 'main', at: new Date().toISOString() }));
     writeFileSync(join(hub, 'projects', `${sid}.jsonl`), [
       { type: 'user', uuid: 'a', parentUuid: null, message: { role: 'user', content: 'hello' } },
-      { type: 'assistant', uuid: 'b', parentUuid: 'a', message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'text', text: 'hi' }], usage: { input_tokens: 2, cache_read_input_tokens: readTokens, cache_creation_input_tokens: 0 } } },
+      { type: 'assistant', uuid: 'b', parentUuid: 'a', message: { role: 'assistant', model: opts.model ?? 'claude-opus-5-5', content: [{ type: 'text', text: 'hi' }], ...(opts.noUsage ? {} : { usage: { input_tokens: 2, cache_read_input_tokens: readTokens, cache_creation_input_tokens: 0 } }) } },
+      ...Array.from({ length: opts.pad ?? 0 }, (_, i) => ({ type: 'user', uuid: `p${i}`, parentUuid: i ? `p${i - 1}` : 'b', message: { role: 'user', content: `later ${i}` } })),
     ].map((r) => JSON.stringify(r)).join('\n') + '\n');
     return run();
   } finally {
@@ -77,11 +81,11 @@ function session(sid, readTokens, run) {
 }
 
 try {
-  session('sess-full', 960_000, () => {
+  session('sess-full', 970_000, () => {
     const before = spoolNotes();
     const r = ring('main');
     const st = state();
-    check('at 96%: exit 0, and it says the window is too full for the ritual', r.status === 0 && /too full for the bedtime ritual/.test(r.stdout), `status ${r.status}: ${r.stdout}${r.stderr}`);
+    check('30k tokens left: exit 0, and it says the window is too full for the ritual', r.status === 0 && /too full for the bedtime ritual/.test(r.stdout), `status ${r.status}: ${r.stdout}${r.stderr}`);
     check('…no bell: no spool note', spoolNotes() === before, `${before} → ${spoolNotes()}`);
     check('…the bell is recorded as full, for the daemon\'s floor', st.belledSession === 'sess-full' && typeof st.fullBell === 'number' && st.fullBell === st.belledAt, JSON.stringify(st));
   });
@@ -89,9 +93,30 @@ try {
     const before = spoolNotes();
     const r = ring('main');
     const st = state();
-    check('at 50%: the bell rings (a spool note)', r.status === 0 && /bell rung/.test(r.stdout) && spoolNotes() === before + 1, `status ${r.status}: ${r.stdout}${r.stderr}; notes ${before} → ${spoolNotes()}`);
+    check('half the window left: the bell rings (a spool note)', r.status === 0 && /bell rung/.test(r.stdout) && spoolNotes() === before + 1, `status ${r.status}: ${r.stdout}${r.stderr}; notes ${before} → ${spoolNotes()}`);
     check('…and no full mark, so the floor waits for its grace as before', st.belledSession === 'sess-room' && st.fullBell === undefined, JSON.stringify(st));
   });
+  // v4 review (Sonnet): the boundary, a session with no usage reading, and a reading further back than a few lines.
+  session('sess-edge-in', 964_998, () => { // 2 + 964,998 = 965,000: exactly 35,000 left
+    const before = spoolNotes(); const r = ring('main'); const st = state();
+    check('exactly 35,000 tokens left: room enough, the bell rings', r.status === 0 && /bell rung/.test(r.stdout) && spoolNotes() === before + 1 && st.fullBell === undefined, `status ${r.status}: ${r.stdout}${r.stderr}; ${JSON.stringify(st)}`);
+  });
+  session('sess-edge-out', 964_999, () => { // 34,999 left
+    const r = ring('main'); const st = state();
+    check('34,999 left: full', r.status === 0 && /too full for the bedtime ritual/.test(r.stdout) && st.fullBell === st.belledAt, `status ${r.status}: ${r.stdout}${r.stderr}; ${JSON.stringify(st)}`);
+  });
+  session('sess-small', 170_000, () => { // a 200k window at 85%: 30k left
+    const r = ring('main'); const st = state();
+    check('a 200k window at 85% (30k left): full, where a 95% share would have rung', r.status === 0 && /too full for the bedtime ritual/.test(r.stdout) && st.fullBell === st.belledAt, `status ${r.status}: ${r.stdout}${r.stderr}; ${JSON.stringify(st)}`);
+  }, { model: 'claude-haiku-4-5' });
+  session('sess-nousage', 0, () => {
+    const before = spoolNotes(); const r = ring('main'); const st = state();
+    check('a session with no usage reading yet: the bell rings, no crash, no full mark', r.status === 0 && /bell rung/.test(r.stdout) && !/TypeError|Error/.test(r.stderr) && spoolNotes() === before + 1 && st.fullBell === undefined, `status ${r.status}: ${r.stdout}${r.stderr}; ${JSON.stringify(st)}`);
+  }, { noUsage: true });
+  session('sess-far', 970_000, () => {
+    const r = ring('main'); const st = state();
+    check('the last reading 300 lines back is still read (the tail is not just a few lines)', r.status === 0 && /too full for the bedtime ritual/.test(r.stdout) && st.fullBell === st.belledAt, `status ${r.status}: ${r.stdout}${r.stderr}; ${JSON.stringify(st)}`);
+  }, { pad: 300 });
 } finally {
   if (!fail) rmSync(hub, { recursive: true, force: true });
 }

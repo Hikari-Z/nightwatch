@@ -1883,11 +1883,12 @@ if (process.argv.includes('--ring')) {
   // and the daemon's orphan floor folds the session on its next tick, closing
   // it and leaving the lane asleep for its next wake, as Sleep always does.
   const ctx = contextNow(live[0].sessionId, lane);
-  const foldPct = CFG.schedule.sleepNowFoldPct ?? 0.95;
-  const full = ctx !== null && ctx.ratio >= foldPct;
+  const room = CFG.schedule.sleepNowRoomTokens;
+  const left = ctx === null ? null : ctx.window - ctx.tokens;
+  const full = left !== null && left < room;
   if (full) {
-    log(`SLEEP NOW, FULL: ${lane} session ${live[0].sessionId.slice(0, 8)}… is at ${Math.round(ctx.ratio * 100)}% of its window (≥ ${Math.round(foldPct * 100)}%) — no bell; the nightshift folds it on its next tick and leaves the lane asleep`);
-    emitEvent('sleep-now-full', { lane, session: live[0].sessionId, pct: Math.round(ctx.ratio * 100) });
+    log(`SLEEP NOW, FULL: ${lane} session ${live[0].sessionId.slice(0, 8)}… has ${left} tokens left of its window (< ${room}) — no bell; the nightshift folds it on its next tick and leaves the lane asleep`);
+    emitEvent('sleep-now-full', { lane, session: live[0].sessionId, left, pct: Math.round(ctx.ratio * 100) });
   } else ringBell(lane, live[0].sessionId, 'nightwatch');
   // Record the bell in the daemon's state the way the scheduled bell does
   // (read-modify-write, the --fold-now pattern): without this, the close
@@ -1902,8 +1903,10 @@ if (process.argv.includes('--ring')) {
     delete st[lane].orphanDeferredEmitted;
     writeFileSync(STATE_FILE, JSON.stringify(st, null, 2));
   } catch (e) { console.error(`--ring: bell rung but state write failed (${e.message}) — the close/orphan floor won't see this bell`); }
+  // The floor never acts in the hour before the morning wake (the wake owns
+  // it), so a press then folds at the wake instead (Sonnet's read of #58).
   console.log(full
-    ? `${lane} is at ${Math.round(ctx.ratio * 100)}% of its window, too full for the bedtime ritual: no bell; the nightshift folds the session within a minute and leaves ${lane} asleep until its next wake`
+    ? `${lane} has about ${Math.round(left / 1000)}k tokens left of its window (${Math.round(ctx.ratio * 100)}%), too full for the bedtime ritual: no bell; the nightshift folds the session within a minute (at the morning wake, if pressed in the hour before it) and leaves ${lane} asleep until its next wake`
     : `bell rung for ${lane} (session ${live[0].sessionId.slice(0, 8)}…)`);
   process.exit(0);
 }

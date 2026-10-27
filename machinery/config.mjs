@@ -54,10 +54,13 @@ export const DEFAULTS = {
     orphanQuietMs: 20 * 60_000,
     orphanGraceMs: 45 * 60_000,
     windowGapMs: 16 * 3600_000,
-    // Sleep now at or past this share of the window folds without a bell:
-    // the ritual a bell asks for needs room, and at 98% the note itself
-    // pushed a session to 100%, where it could answer nothing (nightwatch#56).
-    sleepNowFoldPct: 0.95,
+    // Sleep now with less than this many tokens left in the window folds
+    // without a bell: the ritual a bell asks for needs room (at 98% the note
+    // pushed a session to 100%, where it could answer nothing, nightwatch#56).
+    // Tokens, not a share: the ritual's own growth, measured over 114 sleep
+    // bells (Sonnet's read of #58), is a median 8,475 and at most 23,405
+    // tokens, the same on any window; this is about 1.5x that maximum.
+    sleepNowRoomTokens: 35_000,
   },
   models: {
     bell: 'claude-haiku-4-5-20251001',
