@@ -1,7 +1,7 @@
 // sleepnow-test.mjs — Sleep now on a nearly full window (nightwatch#56).
 // On 10/26 a Sleep now at 98% sent the bell note into a window with no room
 // for the ritual it asks for; the session hit 100% and could answer nothing.
-// At or past schedule.sleepNowFoldPct of its window, --ring now rings no bell:
+// With less than schedule.sleepNowRoomTokens left, --ring now rings no bell:
 // it records the bell as full, and the daemon's orphan floor folds the session
 // on its next tick (the rehearsal's sleep-now-full scenario). Checks:
 //   - the context measure shared with the watch (windowForLane, contextOfEntries);
