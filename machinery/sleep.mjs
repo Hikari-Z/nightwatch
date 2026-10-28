@@ -289,9 +289,20 @@ try {
 let archived;
 try {
   const paths = { transcripts: CFG.paths.transcripts, archive: CFG.paths.transcriptArchive };
-  for (const c of catchUpArchive(paths)) if (c.sid !== sessionId) console.error(`archive: caught up ${c.sid.slice(0, 8)} (${c.bytes} bytes)`);
+  // Subagent problems are said, never thrown (archive.mjs): the session's
+  // own copy doesn't depend on them.
+  const subs = (sid, r) => {
+    for (const s of r.subagents ?? []) if (s.keptAside) console.error(`archive: subagent ${s.file} of ${sid.slice(0, 8)} is SMALLER than its archived copy; kept the old copy aside as ${s.keptAside}`);
+    for (const s of r.subagentErrors ?? []) console.error(`archive: COULD NOT COPY subagent ${s.file} of ${sid.slice(0, 8)}: ${s.error}`);
+  };
+  for (const c of catchUpArchive(paths)) {
+    if (c.error) console.error(`archive: COULD NOT CATCH UP ${c.sid.slice(0, 8)}: ${c.error}`);
+    if (c.sid !== sessionId && c.bytes) console.error(`archive: caught up ${c.sid.slice(0, 8)} (${c.bytes} bytes)`);
+    subs(c.sid, c);
+  }
   archived = archiveTranscript(sessionId, paths);
   if (archived.keptAside) console.error(`archive: the transcript of ${sessionId.slice(0, 8)} is SMALLER than its archived copy; kept the old copy aside as ${archived.keptAside}`);
+  subs(sessionId, archived);
 } catch (e) {
   archived = { error: e.message };
   console.error(`ARCHIVE FAILED for session ${sessionId.slice(0, 8)}: ${e.message} — the fold continues; its raw transcript is not in ${CFG.paths.transcriptArchive}.`);
@@ -350,6 +361,10 @@ appendFileSync(
     tail: trimOut.newSessionId,
     ...(deadWake.skipped.length ? { deadWakesSkipped: deadWake.skipped } : {}),
     ...(archived.error ? { archiveError: archived.error } : { archived: archived.path }),
+    // The agent transcripts the archive now holds for this session (unchanged
+    // ones included), and how many files couldn't be copied.
+    ...(archived.subagents ? { archivedSubagents: archived.subagents.filter((s) => s.file.endsWith('.jsonl')).length } : {}),
+    ...(archived.subagentErrors ? { subagentErrors: archived.subagentErrors.length } : {}),
   }) + '\n',
 );
 // Event-stream twin (GUI phase 1): the planned fold happens HERE, not in the
