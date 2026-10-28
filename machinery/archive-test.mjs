@@ -14,10 +14,12 @@
 //  11. subagents (#59) — a fork's transcript and meta under <sid>/subagents/
 //      are archived beside the session, caught up when only they grew, and
 //      kept aside when they shrank; a session with none gets no folder.
+//  12. a subagent that can't be copied (unreadable, a directory) is reported
+//      and never costs the session, or a later fold, its own archive;
 //   9. the trim's output check — a broken-format session is refused (event +
 //      stderr, no receipt), and torn lines are counted into the fold row.
 // Run: node machinery/archive-test.mjs   (exit 0 = all pass)
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, appendFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, appendFileSync, existsSync, readdirSync, rmSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -178,11 +180,14 @@ try {
     const dead = spawnSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' }).stdout;
     writeFileSync(join(h.archive, `${A}.jsonl.partial-${dead}`), 'half');
     writeFileSync(join(h.archive, `${A}.jsonl.partial-${process.pid}`), 'in flight');
+    mkdirSync(join(h.archive, A, 'subagents'), { recursive: true });
+    writeFileSync(join(h.archive, A, 'subagents', `agent-x.jsonl.partial-${dead}`), 'half');
     transcript(h, B, 4);
     const r = sleep(h, B);
     check('8 the next fold succeeds', r.code === 0, r.err);
     check('8 a dead process\'s staging file is swept', !existsSync(join(h.archive, `${A}.jsonl.partial-${dead}`)));
     check('8 a live process\'s staging file is left alone', existsSync(join(h.archive, `${A}.jsonl.partial-${process.pid}`)));
+    check('8 a dead staging file among a session\'s subagents is swept too', !existsSync(join(h.archive, A, 'subagents', `agent-x.jsonl.partial-${dead}`)));
   }
   // 9. The trim's output check (10/21): a session whose chain field was renamed
   //    is REFUSED, not folded wrong. sleep exits 1 before any receipt or archive,
@@ -252,6 +257,35 @@ try {
     check('11 a shrunk subagent re-fold succeeds', r3.code === 0, r3.err);
     check('11 its larger old copy is kept aside, intact', aside.length === 1 && before && readFileSync(join(out, aside[0])).equals(before), aside);
     check('11 and the shrink is said out loud', /subagent agent-ab1f9ff750e528133\.jsonl .* SMALLER/.test(r3.err), r3.err);
+  }
+  // 12. A subagent that can't be copied. One unreadable file and one directory
+  //     with an agent's name sit beside a good fork. The session's own
+  //     transcript and the good fork are archived regardless, the two are
+  //     reported, and later folds (of this session and of another) still
+  //     archive their own transcripts (opus's review of #60).
+  {
+    const h = hub();
+    transcript(h, A, 6);
+    const sub = join(h.transcripts, A, 'subagents');
+    mkdirSync(join(sub, 'agent-dir.jsonl'), { recursive: true });
+    writeFileSync(join(sub, 'agent-good.jsonl'), '{"good":1}\n');
+    writeFileSync(join(sub, 'agent-bad.jsonl'), '{"bad":1}\n');
+    chmodSync(join(sub, 'agent-bad.jsonl'), 0);
+    try {
+      const r = sleep(h, A);
+      check('12 a fold with an unreadable subagent succeeds', r.code === 0, r.err);
+      check('12 the session\'s own transcript is archived regardless', same(join(h.transcripts, `${A}.jsonl`), join(h.archive, `${A}.jsonl`)));
+      check('12 and so is the good fork', same(join(sub, 'agent-good.jsonl'), join(h.archive, A, 'subagents', 'agent-good.jsonl')));
+      check('12 the fold row has no archiveError, and counts 2 subagent errors', !('archiveError' in (lastFold(h) ?? {})) && lastFold(h)?.subagentErrors === 2, lastFold(h));
+      check('12 both are said on stderr', /COULD NOT COPY subagent agent-bad\.jsonl/.test(r.err) && /COULD NOT COPY subagent agent-dir\.jsonl/.test(r.err), r.err);
+      transcript(h, A, 9);
+      const r2 = sleep(h, A);
+      check('12 a refold of the grown session archives its new transcript', r2.code === 0 && same(join(h.transcripts, `${A}.jsonl`), join(h.archive, `${A}.jsonl`)), r2.err);
+      transcript(h, B, 4);
+      const r3 = sleep(h, B);
+      check('12 another session\'s fold archives its own, past the bad file', r3.code === 0 && same(join(h.transcripts, `${B}.jsonl`), join(h.archive, `${B}.jsonl`)) && !('archiveError' in (lastFold(h) ?? {})), r3.err);
+      check('12 and the catch-up still names the bad file', /COULD NOT COPY subagent agent-bad\.jsonl of aaaaaaaa/.test(r3.err), r3.err);
+    } finally { chmodSync(join(sub, 'agent-bad.jsonl'), 0o644); }
   }
 } finally {
   for (const r of roots) rmSync(r, { recursive: true, force: true });

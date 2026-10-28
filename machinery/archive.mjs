@@ -25,7 +25,11 @@
  * each with an agent-<id>.meta.json that says what kind of agent it was
  * ("agentType": "fork"). A fork that writes its own rung names that file as
  * its source, so those are archived too, to <archive>/<session>/subagents/,
- * the same layout Claude Code uses, by the same rules (#59).
+ * the same layout Claude Code uses, by the same rules (#59). The session's
+ * own transcript is copied first, and a subagent file that can't be copied
+ * (unreadable, gone, not a file) is reported in subagentErrors, never
+ * thrown: one bad file must not cost the session, or any later fold, its
+ * own archive.
  */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -35,8 +39,8 @@ export function archiveTranscript(sid, { transcripts, archive }) {
   const src = join(transcripts, `${sid}.jsonl`);
   if (!existsSync(src)) return { sid, skipped: 'no transcript' };
   mkdirSync(archive, { recursive: true });
-  const subagents = archiveSubagents(sid, { transcripts, archive });
-  return { sid, ...copyGrown(src, join(archive, `${sid}.jsonl`)), ...(subagents.length ? { subagents } : {}) };
+  const own = copyGrown(src, join(archive, `${sid}.jsonl`));
+  return { sid, ...own, ...archiveSubagents(sid, { transcripts, archive }) };
 }
 
 /**
@@ -60,15 +64,27 @@ function copyGrown(src, dest) {
   return { path: dest, bytes: statSync(dest).size, ...(keptAside ? { keptAside } : {}) };
 }
 
-/** The session's subagent transcripts and their meta files, copied by copyGrown. */
+/**
+ * The session's subagent transcripts and their meta files, each copied by
+ * copyGrown under its own try. Returns { subagents, subagentErrors }, each
+ * only when non-empty.
+ */
 function archiveSubagents(sid, { transcripts, archive }) {
   const from = join(transcripts, sid, 'subagents');
-  if (!existsSync(from)) return [];
-  const names = readdirSync(from).filter((f) => /^agent-[\w-]+\.(jsonl|meta\.json)$/.test(f));
-  if (!names.length) return [];
-  const to = join(archive, sid, 'subagents');
-  mkdirSync(to, { recursive: true });
-  return names.map((f) => ({ file: f, ...copyGrown(join(from, f), join(to, f)) }));
+  const subagents = [], subagentErrors = [];
+  try {
+    if (!existsSync(from)) return {};
+    const names = readdirSync(from).filter((f) => /^agent-[\w-]+\.(jsonl|meta\.json)$/.test(f));
+    const to = join(archive, sid, 'subagents');
+    for (const f of names) {
+      try {
+        if (!statSync(join(from, f)).isFile()) throw new Error('not a file');
+        mkdirSync(to, { recursive: true });
+        subagents.push({ file: f, ...copyGrown(join(from, f), join(to, f)) });
+      } catch (e) { subagentErrors.push({ file: f, error: e.message }); }
+    }
+  } catch (e) { subagentErrors.push({ file: 'subagents/', error: e.message }); }
+  return { ...(subagents.length ? { subagents } : {}), ...(subagentErrors.length ? { subagentErrors } : {}) };
 }
 
 /**
@@ -88,16 +104,19 @@ export function catchUpArchive({ transcripts, archive }) {
   for (const f of readdirSync(archive)) {
     const m = f.match(/^([0-9a-f-]{36})\.jsonl$/);
     if (!m) continue;
-    sweepPartials(join(archive, m[1], 'subagents'));
-    const src = join(transcripts, f);
-    if (!existsSync(src)) continue;
-    if (statSync(src).size > statSync(join(archive, f)).size) done.push(archiveTranscript(m[1], { transcripts, archive }));
-    // A background subagent can outlive its session's last turn, so its
-    // transcript may grow while the main one doesn't.
-    else {
-      const subagents = archiveSubagents(m[1], { transcripts, archive }).filter((x) => !x.unchanged);
-      if (subagents.length) done.push({ sid: m[1], subagents });
-    }
+    // Each session under its own try: one that can't be caught up is
+    // reported, and the rest (and the folding session's own copy) go on.
+    try {
+      sweepPartials(join(archive, m[1], 'subagents'));
+      const src = join(transcripts, f);
+      if (!existsSync(src)) continue;
+      if (statSync(src).size > statSync(join(archive, f)).size) { done.push(archiveTranscript(m[1], { transcripts, archive })); continue; }
+      // A background subagent can outlive its session's last turn, so its
+      // transcript may grow while the main one doesn't.
+      const { subagents = [], subagentErrors } = archiveSubagents(m[1], { transcripts, archive });
+      const changed = subagents.filter((x) => !x.unchanged);
+      if (changed.length || subagentErrors) done.push({ sid: m[1], ...(changed.length ? { subagents: changed } : {}), ...(subagentErrors ? { subagentErrors } : {}) });
+    } catch (e) { done.push({ sid: m[1], error: e.message }); }
   }
   return done;
 }
