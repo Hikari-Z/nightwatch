@@ -19,30 +19,56 @@
  *
  * Writes are stage-then-rename, so a crash mid-copy leaves the previous
  * archive whole and never a half file under the real name.
+ *
+ * A session's subagents (an Agent-tool fork, a reader, a scorer) write
+ * their own transcripts beside it, in <session>/subagents/agent-<id>.jsonl,
+ * each with an agent-<id>.meta.json that says what kind of agent it was
+ * ("agentType": "fork"). A fork that writes its own rung names that file as
+ * its source, so those are archived too, to <archive>/<session>/subagents/,
+ * the same layout Claude Code uses, by the same rules (#59).
  */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** Copy one session's transcript into the archive. Returns what it did. */
+/** Copy one session's transcript, and its subagents', into the archive. Returns what it did. */
 export function archiveTranscript(sid, { transcripts, archive }) {
   const src = join(transcripts, `${sid}.jsonl`);
   if (!existsSync(src)) return { sid, skipped: 'no transcript' };
   mkdirSync(archive, { recursive: true });
-  const dest = join(archive, `${sid}.jsonl`);
+  const subagents = archiveSubagents(sid, { transcripts, archive });
+  return { sid, ...copyGrown(src, join(archive, `${sid}.jsonl`)), ...(subagents.length ? { subagents } : {}) };
+}
+
+/**
+ * Copy src over dest unless they're already the same size. A dest LARGER
+ * than src is renamed aside (<name>.<time>.<ext>) first, never overwritten.
+ */
+function copyGrown(src, dest) {
   const srcSize = statSync(src).size;
   let keptAside = null;
   if (existsSync(dest)) {
     const destSize = statSync(dest).size;
-    if (destSize === srcSize) return { sid, path: dest, bytes: srcSize, unchanged: true };
+    if (destSize === srcSize) return { path: dest, bytes: srcSize, unchanged: true };
     if (destSize > srcSize) {
-      keptAside = join(archive, `${sid}.${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`);
+      keptAside = dest.replace(/(\.[a-z]+)$/, `.${new Date().toISOString().replace(/[:.]/g, '-')}$1`);
       renameSync(dest, keptAside);
     }
   }
   const tmp = `${dest}.partial-${process.pid}`;
   copyFileSync(src, tmp);
   renameSync(tmp, dest);
-  return { sid, path: dest, bytes: statSync(dest).size, ...(keptAside ? { keptAside } : {}) };
+  return { path: dest, bytes: statSync(dest).size, ...(keptAside ? { keptAside } : {}) };
+}
+
+/** The session's subagent transcripts and their meta files, copied by copyGrown. */
+function archiveSubagents(sid, { transcripts, archive }) {
+  const from = join(transcripts, sid, 'subagents');
+  if (!existsSync(from)) return [];
+  const names = readdirSync(from).filter((f) => /^agent-[\w-]+\.(jsonl|meta\.json)$/.test(f));
+  if (!names.length) return [];
+  const to = join(archive, sid, 'subagents');
+  mkdirSync(to, { recursive: true });
+  return names.map((f) => ({ file: f, ...copyGrown(join(from, f), join(to, f)) }));
 }
 
 /**
@@ -57,19 +83,31 @@ export function catchUpArchive({ transcripts, archive }) {
   // A copy that crashed mid-way leaves <sid>.jsonl.partial-<pid>. Remove
   // those whose process is gone, and only those: both lanes fold at the same
   // bell, so another fold's copy may be in flight right now.
-  for (const f of readdirSync(archive)) {
-    const m = f.match(/\.partial-(\d+)$/);
-    if (m && !alive(Number(m[1]))) rmSync(join(archive, f), { force: true });
-  }
+  sweepPartials(archive);
   const done = [];
   for (const f of readdirSync(archive)) {
     const m = f.match(/^([0-9a-f-]{36})\.jsonl$/);
     if (!m) continue;
+    sweepPartials(join(archive, m[1], 'subagents'));
     const src = join(transcripts, f);
     if (!existsSync(src)) continue;
     if (statSync(src).size > statSync(join(archive, f)).size) done.push(archiveTranscript(m[1], { transcripts, archive }));
+    // A background subagent can outlive its session's last turn, so its
+    // transcript may grow while the main one doesn't.
+    else {
+      const subagents = archiveSubagents(m[1], { transcripts, archive }).filter((x) => !x.unchanged);
+      if (subagents.length) done.push({ sid: m[1], subagents });
+    }
   }
   return done;
+}
+
+function sweepPartials(dir) {
+  if (!existsSync(dir)) return;
+  for (const f of readdirSync(dir)) {
+    const m = f.match(/\.partial-(\d+)$/);
+    if (m && !alive(Number(m[1]))) rmSync(join(dir, f), { force: true });
+  }
 }
 
 function alive(pid) {

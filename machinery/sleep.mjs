@@ -289,9 +289,14 @@ try {
 let archived;
 try {
   const paths = { transcripts: CFG.paths.transcripts, archive: CFG.paths.transcriptArchive };
-  for (const c of catchUpArchive(paths)) if (c.sid !== sessionId) console.error(`archive: caught up ${c.sid.slice(0, 8)} (${c.bytes} bytes)`);
+  const asideSub = (sid, s) => s.keptAside && console.error(`archive: subagent ${s.file} of ${sid.slice(0, 8)} is SMALLER than its archived copy; kept the old copy aside as ${s.keptAside}`);
+  for (const c of catchUpArchive(paths)) {
+    if (c.sid !== sessionId && c.bytes) console.error(`archive: caught up ${c.sid.slice(0, 8)} (${c.bytes} bytes)`);
+    for (const s of c.subagents ?? []) asideSub(c.sid, s);
+  }
   archived = archiveTranscript(sessionId, paths);
   if (archived.keptAside) console.error(`archive: the transcript of ${sessionId.slice(0, 8)} is SMALLER than its archived copy; kept the old copy aside as ${archived.keptAside}`);
+  for (const s of archived.subagents ?? []) asideSub(sessionId, s);
 } catch (e) {
   archived = { error: e.message };
   console.error(`ARCHIVE FAILED for session ${sessionId.slice(0, 8)}: ${e.message} — the fold continues; its raw transcript is not in ${CFG.paths.transcriptArchive}.`);
@@ -350,6 +355,7 @@ appendFileSync(
     tail: trimOut.newSessionId,
     ...(deadWake.skipped.length ? { deadWakesSkipped: deadWake.skipped } : {}),
     ...(archived.error ? { archiveError: archived.error } : { archived: archived.path }),
+    ...(archived.subagents ? { archivedSubagents: archived.subagents.filter((s) => s.file.endsWith('.jsonl')).length } : {}),
   }) + '\n',
 );
 // Event-stream twin (GUI phase 1): the planned fold happens HERE, not in the

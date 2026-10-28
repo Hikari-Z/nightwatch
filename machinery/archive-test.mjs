@@ -10,6 +10,10 @@
 //   6. a re-fold of a SHRUNK session — the larger old copy is kept aside;
 //   7. catch-up — a session that kept writing after its fold is brought up to
 //      date at the next fold.
+//   8. a crashed copy's staging file is swept, a live one's left alone;
+//  11. subagents (#59) — a fork's transcript and meta under <sid>/subagents/
+//      are archived beside the session, caught up when only they grew, and
+//      kept aside when they shrank; a session with none gets no folder.
 //   9. the trim's output check — a broken-format session is refused (event +
 //      stderr, no receipt), and torn lines are counted into the fold row.
 // Run: node machinery/archive-test.mjs   (exit 0 = all pass)
@@ -213,6 +217,41 @@ try {
     const r = sleep(h, A);
     check('10 a stamped session folds', r.code === 0, r.err);
     check('10 and its fold row carries claudeVersion', lastFold(h)?.claudeVersion === '2.1.310', lastFold(h));
+  }
+  // 11. Subagents (#59). A fork's transcript and meta live in <sid>/subagents/.
+  {
+    const h = hub();
+    transcript(h, A, 6);
+    const sub = join(h.transcripts, A, 'subagents');
+    mkdirSync(sub, { recursive: true });
+    const fork = 'agent-ab1f9ff750e528133';
+    writeFileSync(join(sub, `${fork}.jsonl`), '{"type":"user","message":{"content":"the hint"}}\n');
+    writeFileSync(join(sub, `${fork}.meta.json`), '{"agentType":"fork","isFork":true}\n');
+    writeFileSync(join(sub, 'notes.txt'), 'not an agent file');
+    const r = sleep(h, A);
+    const out = join(h.archive, A, 'subagents');
+    check('11 a fold with a fork succeeds', r.code === 0, r.err);
+    check('11 the fork\'s transcript is archived beside the session, byte-identical', same(join(sub, `${fork}.jsonl`), join(out, `${fork}.jsonl`)));
+    check('11 and its meta (which says it was a fork)', same(join(sub, `${fork}.meta.json`), join(out, `${fork}.meta.json`)));
+    check('11 only agent files are taken', existsSync(out) && !readdirSync(out).includes('notes.txt'), existsSync(out) ? readdirSync(out) : 'no dir');
+    check('11 the fold row counts the subagent transcripts', lastFold(h)?.archivedSubagents === 1, lastFold(h));
+    // The fork keeps writing after the session's archive is current (a
+    // background agent can outlive the last turn). The next fold, of B,
+    // catches the fork up although A's own transcript didn't change.
+    appendFileSync(join(sub, `${fork}.jsonl`), '{"type":"assistant","message":{"content":"the rung"}}\n');
+    transcript(h, B, 4);
+    const r2 = sleep(h, B);
+    check('11 the next fold succeeds', r2.code === 0, r2.err);
+    check('11 a fork that grew after its session\'s fold is caught up', same(join(sub, `${fork}.jsonl`), join(out, `${fork}.jsonl`)));
+    check('11 B, which had no subagents, gets no folder and no count', !existsSync(join(h.archive, B)) && !('archivedSubagents' in (lastFold(h) ?? {})), lastFold(h));
+    // A shrunk subagent transcript: the larger archived copy is kept aside.
+    const before = existsSync(join(out, `${fork}.jsonl`)) ? readFileSync(join(out, `${fork}.jsonl`)) : null;
+    writeFileSync(join(sub, `${fork}.jsonl`), '{}\n');
+    const r3 = sleep(h, A);
+    const aside = (existsSync(out) ? readdirSync(out) : []).filter((f) => f.startsWith(fork) && f.endsWith('.jsonl') && f !== `${fork}.jsonl`);
+    check('11 a shrunk subagent re-fold succeeds', r3.code === 0, r3.err);
+    check('11 its larger old copy is kept aside, intact', aside.length === 1 && before && readFileSync(join(out, aside[0])).equals(before), aside);
+    check('11 and the shrink is said out loud', /subagent agent-ab1f9ff750e528133\.jsonl .* SMALLER/.test(r3.err), r3.err);
   }
 } finally {
   for (const r of roots) rmSync(r, { recursive: true, force: true });
